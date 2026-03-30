@@ -239,3 +239,23 @@ python3 bin/coordinator.py --id 2037365525542797367  # 单条测试
 
 - **去重**：SimHash/MinHash 对高度相似报告合并
 - **自动归类**：sentence-transformers + HDBSCAN 按主题聚类
+
+---
+
+## 十一、工作流规范
+
+详细规范请见以下文件：
+
+| 文件 | 职责 |
+|------|------|
+| `WORKFLOW.md` | 工作流详细规范 |
+| `BUGS.md` | Bug 跟踪（必读） |
+| `TASK_SUMMARY.md` | Subagent 输出模板 |
+| `.cursor/rules/workflow.mdc` | Cursor IDE 规则 |
+
+### 快速指南
+
+1. **代码审查** → 在 `BUGS.md` 记录发现
+2. **Bug 修复** → 更新 `BUGS.md` 状态
+3. **Subagent 调用** → 使用 `TASK_SUMMARY.md` 模板
+4. **验证** → 必须运行验证脚本
