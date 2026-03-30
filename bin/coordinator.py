@@ -102,7 +102,7 @@ Examples:
     )
 
     if args.id:
-        from lib.config import DEFAULT_BOOKMARKS_PATH
+        from lib.coordinator import DEFAULT_BOOKMARKS_PATH
         import json
 
         bookmarks = coordinator.load_bookmarks()
