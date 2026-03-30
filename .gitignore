@@ -1,0 +1,17 @@
+# 敏感配置（工作区根的 .env.twitter）
+../.env.twitter
+
+# 缓存目录
+cache/
+
+# 输出目录
+output/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# macOS
+.DS_Store
