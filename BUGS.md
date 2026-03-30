@@ -9,7 +9,7 @@
 
 | ID | 文件 | 问题描述 | 严重性 | 发现日期 | 状态 |
 |----|------|----------|--------|----------|------|
-| - | - | 无待修复问题 | - | - | - |
+| B007 | bin/coordinator.py:105 | `from lib.config import DEFAULT_BOOKMARKS_PATH` 错误导入，`DEFAULT_BOOKMARKS_PATH` 定义在 `lib/coordinator.py` 而非 `lib/config.py` | HIGH | 2026-03-31 | 待修复 |
 
 ---
 
@@ -72,4 +72,5 @@
 
 ## 更新日志
 
+- **2026-03-31**: 添加 B007 - bin/coordinator.py 导入路径错误
 - **2026-03-30**: 初始创建，记录 github_client.py 和 coordinator.py 修复项

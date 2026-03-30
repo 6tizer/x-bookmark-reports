@@ -89,29 +89,45 @@
 
 ## 4. Subagent 调用规范
 
-### 4.1 任务描述要求
+### 4.1 职责划分（重要）
+
+| 谁来做 | 职责 |
+|--------|------|
+| **Subagent** | 执行任务、报告发现、更新摘要 |
+| **主 agent** | 汇总发现、更新 BUGS.md、决策是否记录 |
+
+**核心原则**：Subagent 只报告，主 agent 决策并执行文件更新。
+
+### 4.2 任务描述要求
 
 调用 subagent 时，必须提供：
 
 1. **任务目标**：明确要做什么
 2. **上下文文件**：相关文件路径列表
-3. **验证方法**：如何验证成功
-4. **输出格式**：使用 TASK_SUMMARY.md 模板
+3. **预期情况**：明确文件存在/不存在等边界情况
+4. **BUGS.md 问题**：引用待修复的 BUG 编号（如有）
+5. **验证方法**：如何验证成功
+6. **输出格式**：使用 TASK_SUMMARY.md 模板
 
 ### 4.2 示例：调用修复任务
 
 ```markdown
 ## 任务：修复 github_client.py 的 fallback 逻辑
 
-### 上下文
+### 上下文文件
 - lib/github_client.py（待修复文件）
 - BUGS.md（当前问题列表）
 
 ### 问题
 BUGS.md 中的 B001: `GitHubNotFound` 未被 fallback 捕获
 
+### 预期情况
+- lib/github_client.py：已存在，需修改
+- BUGS.md：已存在，需更新状态
+
 ### 验证
 ```bash
+cd "/Users/tizer_mac_studio/work/Cursor/Twitter Bookmark/x-bookmark-reports"
 python3 -c "from lib.github_client import GitHubClient; ..."
 ```
 
@@ -124,6 +140,14 @@ python3 -c "from lib.github_client import GitHubClient; ..."
 ```markdown
 ## 任务：审查 coordinator.py
 
+### 上下文文件
+- lib/coordinator.py
+- BUGS.md
+
+### 预期情况
+- lib/coordinator.py：已存在，需审查
+- BUGS.md：已存在，需检查相关条目
+
 ### 审查清单
 - [ ] URL 提取是否正确处理 dict 类型？
 - [ ] Tweet ID 提取是否覆盖所有 URL 格式？
@@ -131,7 +155,24 @@ python3 -c "from lib.github_client import GitHubClient; ..."
 
 ### 输出
 按 TASK_SUMMARY.md 格式输出审查报告。
-发现的问题添加到 BUGS.md 的"待修复"表格。
+如有新发现，在"发现的新问题"中列出。
+```
+
+### 4.4 示例：调用文档任务
+
+```markdown
+## 任务：更新 README.md
+
+### 上下文文件
+- README.md
+- lib/config.py
+
+### 预期情况
+- README.md：**当前不存在，需创建**
+- 如存在则更新，不存在则创建
+
+### 输出
+按 TASK_SUMMARY.md 格式输出摘要。
 ```
 
 ---
@@ -195,6 +236,12 @@ print('验证通过!')
 
 ### Q3: 多个 subagent 并行执行？
 **A**: 主 agent 负责汇总各自的摘要，确保无遗漏。
+
+### Q4: 任务描述的文件状态与实际不符？
+**A**: 在任务描述中添加"预期情况"字段，明确文件存在/不存在状态。Subagent 执行时在摘要中记录实际状态。
+
+### Q5: Subagent 报告"无需更新 BUGS.md"但实际有新问题？
+**A**: 主 agent 收到摘要后，主动检查代码变更是否涉及 BUGS.md 中的待修复项，不依赖 subagent 的判断。
 
 ---
 

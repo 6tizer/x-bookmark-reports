@@ -26,13 +26,23 @@ alwaysApply: true
 
 ## Subagent 调用规范
 
+### 职责划分（重要）
+
+| 谁来做 | 职责 |
+|--------|------|
+| **Subagent** | 执行任务、报告发现、输出摘要 |
+| **主 agent** | 汇总发现、更新 BUGS.md、决策是否记录 |
+
+**核心原则**：Subagent 只报告，主 agent 决策并执行文件更新。
+
 ### 任务描述必须包含
 
 1. **任务目标**：明确要做什么
 2. **上下文文件**：相关文件路径列表
-3. **BUGS.md 问题**：引用待修复的 BUG 编号
-4. **验证方法**：如何验证成功
-5. **输出格式**：使用 TASK_SUMMARY.md 模板
+3. **预期情况**：明确文件存在/不存在等边界情况
+4. **BUGS.md 问题**：引用待修复的 BUG 编号（如有）
+5. **验证方法**：如何验证成功
+6. **输出格式**：使用 TASK_SUMMARY.md 模板
 
 ### 示例
 
@@ -65,6 +75,10 @@ python3 -c "from lib.github_client import GitHubClient; ..."
 ```markdown
 ## 任务：审查 coordinator.py
 
+### 预期情况
+- lib/coordinator.py：已存在，需审查
+- BUGS.md：已存在，需检查相关条目
+
 ### 审查清单
 - [ ] URL 提取是否正确处理 dict 类型？
 - [ ] Tweet ID 提取是否覆盖所有 URL 格式？
@@ -72,15 +86,17 @@ python3 -c "from lib.github_client import GitHubClient; ..."
 
 ### 输出
 按 TASK_SUMMARY.md 格式输出审查报告。
-发现的问题添加到 BUGS.md 的"待修复"表格。
+如有新发现，在"发现的新问题"中列出。
 ```
 
 ### 2. 汇总审查结果
 
-审查完成后，主 Agent 必须：
+审查完成后，**主 Agent 必须**：
 1. 读取 subagent 输出的审查报告
 2. 将发现的问题添加到 `BUGS.md` 的"待修复"表格
 3. 更新问题状态为 `待修复`
+
+**Subagent 不负责更新 BUGS.md，只报告发现。**
 
 ### 3. 修复并更新 BUGS.md
 
