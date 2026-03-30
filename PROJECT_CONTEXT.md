@@ -167,9 +167,9 @@ Article ID：从 /i/article/{article_id} URL 提取的独立 ID
 | 项目 | 当前状态 |
 |------|---------|
 | Python | 3.9.6（Mac 系统自带） |
-| gh CLI | **未安装**，需要 `brew install gh && gh auth login` |
-| xfetch | **未安装**，需要 `brew install xfetch`（若有的话） |
-| 代理 | `http://127.0.0.1:7897`（在 `.env.twitter` 中） |
+| gh CLI | ✅ 已安装 v2.89.0，**已认证**（account: 6tizer） |
+| xfetch | ❌ 不存在，跳过（PROJECT_CONTEXT 中标注可能有误） |
+| 代理 | `http://127.0.0.1:7897`（在 `.env` 中） |
 | Node.js | v24.14.0（书签同步脚本用，与报告系统无关） |
 
 **Python 版本注意**：代码必须兼容 Python 3.9，禁止使用：
@@ -221,17 +221,17 @@ python3 bin/coordinator.py --id 2037365525542797367  # 单条测试
 ## 九、当前计划执行清单
 
 1. ✅ 计划已制定（见 `.cursor/plans/` 目录）
-2. ⬜ 初始化 git 仓库和目录骨架
-3. ⬜ 安装系统工具（gh CLI, xfetch）
-4. ⬜ 实现 config.py
-5. ⬜ 实现 article_client.py
-6. ⬜ 实现 quoted_client.py
-7. ⬜ 实现 github_client.py
-8. ⬜ 实现 external_client.py
-9. ⬜ 实现 report_builder.py
-10. ⬜ 实现 coordinator.py
+2. ✅ 初始化 git 仓库和目录骨架
+3. ✅ 安装系统工具（gh CLI v2.89.0 已安装并认证，xfetch 不存在跳过）
+4. ✅ 实现 config.py
+5. ✅ 实现 article_client.py
+6. ✅ 实现 quoted_client.py
+7. ✅ 实现 github_client.py
+8. ✅ 实现 external_client.py
+9. ✅ 实现 report_builder.py
+10. ✅ 实现 coordinator.py
 11. ⬜ 端到端测试 + 生成第一份报告
-12. ⬜ 更新 README.md
+12. ✅ 更新 README.md
 
 ---
 
