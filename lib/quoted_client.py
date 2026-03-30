@@ -210,22 +210,31 @@ class QuotedClient:
 
         tweet = data.get("tweet", {})
 
-        tweet_id = tweet.get("id_str", tweet.get("rest_id", ""))
+        tweet_id = str(tweet.get("id", "") or tweet.get("rest_id", "") or "")
 
-        full_text = tweet.get("raw_text", "")
+        full_text_raw = tweet.get("raw_text", "")
+        if isinstance(full_text_raw, dict):
+            full_text = full_text_raw.get("text", "")
+        elif isinstance(full_text_raw, str):
+            full_text = full_text_raw
+        else:
+            full_text = ""
 
-        author_results = tweet.get("author", {}).get("results", {})
-        author_data = next(iter(author_results.values()), {}).get("legacy", {})
-        author_name = author_data.get("name", "Unknown")
-        author_username = author_data.get("screen_name", "unknown")
+        author_data = tweet.get("author", {})
+        if isinstance(author_data, dict):
+            author_name = author_data.get("name") or "Unknown"
+            author_username = author_data.get("screen_name") or "unknown"
+        else:
+            author_name = "Unknown"
+            author_username = "unknown"
 
         created_at = tweet.get("created_at", "")
 
-        like_count = tweet.get("favorite_count", 0)
-        retweet_count = tweet.get("retweet_count", 0)
-        reply_count = tweet.get("reply_count", 0)
-        quote_count = tweet.get("quote_count", 0)
-        view_count = tweet.get("views_count", 0)
+        like_count = tweet.get("likes", 0) or tweet.get("favorite_count", 0) or 0
+        retweet_count = tweet.get("retweets", 0) or tweet.get("retweet_count", 0) or 0
+        reply_count = tweet.get("replies", 0) or tweet.get("reply_count", 0) or 0
+        quote_count = tweet.get("quotes", 0) or tweet.get("quote_count", 0) or 0
+        view_count = tweet.get("views", 0) or tweet.get("viewCount", 0) or 0
 
         url = f"https://x.com/{author_username}/status/{tweet_id}"
 

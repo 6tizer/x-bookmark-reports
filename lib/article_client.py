@@ -158,7 +158,11 @@ class ArticleClient:
     def _fetch(self, article_id: str) -> Article:
         """Fetch article from TwitterAPI.io with retry."""
         url = f"{self.base_url}/twitter/article?tweet_id={article_id}"
-        headers = {"X-API-Key": self.api_key}
+        headers = {
+            "X-API-Key": self.api_key,
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+        }
         last_err: Exception | None = None
 
         for attempt in range(self._max_retries):
@@ -171,7 +175,18 @@ class ArticleClient:
                     opener = urllib.request.build_opener()
                 with opener.open(req, timeout=self._timeout) as resp:
                     data = json.loads(resp.read().decode())
-                    return self._parse_article(data["result"])
+                    # TwitterAPI.io returns either {"result": {...}} or {"article": {...}}
+                    if "result" in data:
+                        return self._parse_article(data["result"])
+                    elif "article" in data and data["article"]:
+                        return self._parse_article(data["article"])
+                    elif data.get("status") == "failed":
+                        msg = data.get("msg", "unknown error")
+                        if "not found" in msg.lower():
+                            raise ArticleNotFound(f"Article not found: {article_id}")
+                        raise ArticleAPIError(f"API error: {msg}")
+                    else:
+                        raise ArticleAPIError(f"Unexpected response: {data}")
             except urllib.error.HTTPError as e:
                 last_err = e
                 if e.code == 429:
