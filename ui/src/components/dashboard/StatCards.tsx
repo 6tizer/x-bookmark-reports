@@ -1,8 +1,19 @@
 "use client";
 
 /**
- * StatCards — 5 stat cards in grid on Dashboard
+ * StatCards — 5 stat cards: Drafts, Hermes, Notion, Pending Rewrite, Last Sync
  */
+
+import {
+  Clock,
+  Bookmark,
+  FileStack,
+  CloudUpload,
+  AlertCircle,
+  Terminal,
+} from "lucide-react";
+import type { DashboardStats, RettiwtStatus } from "@/types/api";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 function formatDistanceToNowSimple(dateStr: string): string {
   const date = new Date(dateStr);
@@ -19,19 +30,11 @@ function formatDistanceToNowSimple(dateStr: string): string {
   if (diffMin > 0) return `${diffMin}m ago`;
   return "Just now";
 }
-import {
-  Clock,
-  Bookmark,
-  TrendingUp,
-  AlertCircle,
-  FileText,
-} from "lucide-react";
-import type { DashboardStats } from "@/types/api";
-import { Skeleton } from "@/components/ui/Skeleton";
 
 interface StatCardsProps {
   stats: DashboardStats | null;
   isLoading: boolean;
+  rettiwt?: RettiwtStatus | null;
 }
 
 function StatCard({
@@ -51,8 +54,8 @@ function StatCard({
     trend === "up"
       ? "text-green-600"
       : trend === "down"
-      ? "text-red-500"
-      : "text-muted-foreground";
+        ? "text-red-500"
+        : "text-muted-foreground";
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 hover:shadow-sm transition-shadow">
@@ -77,7 +80,7 @@ function StatCard({
   );
 }
 
-export function StatCards({ stats, isLoading }: StatCardsProps) {
+export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
   if (isLoading || !stats) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -99,39 +102,81 @@ export function StatCards({ stats, isLoading }: StatCardsProps) {
     ? formatDistanceToNowSimple(stats.lastSyncAt)
     : "Never";
 
+  const showRettiwtAlert =
+    rettiwt?.updateAvailable &&
+    !rettiwt.error &&
+    rettiwt.latestVersion &&
+    rettiwt.localVersion;
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-      <StatCard
-        icon={<Clock size={16} className="text-twitter-blue" />}
-        label="Last Sync"
-        value={lastSyncText}
-        subtext={stats.lastSyncAt ? new Date(stats.lastSyncAt).toLocaleDateString() : undefined}
-        trend="neutral"
-      />
-      <StatCard
-        icon={<Bookmark size={16} className="text-green-600" />}
-        label="Total Bookmarks"
-        value={stats.totalBookmarks}
-        trend="up"
-      />
-      <StatCard
-        icon={<TrendingUp size={16} className="text-purple-500" />}
-        label="New This Week"
-        value={stats.newThisWeek}
-        trend="up"
-      />
-      <StatCard
-        icon={<AlertCircle size={16} className="text-orange-500" />}
-        label="Pending"
-        value={stats.pendingCount}
-        trend={stats.pendingCount > 0 ? "down" : "neutral"}
-      />
-      <StatCard
-        icon={<FileText size={16} className="text-blue-500" />}
-        label="Reports"
-        value={stats.reportCount}
-        trend="up"
-      />
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard
+          icon={<Bookmark size={16} className="text-green-600" />}
+          label="Total Drafts"
+          value={stats.totalDrafts}
+          trend="neutral"
+        />
+        <StatCard
+          icon={<FileStack size={16} className="text-blue-500" />}
+          label="Articles (Hermes)"
+          value={stats.articlesHermes}
+          trend="neutral"
+        />
+        <StatCard
+          icon={<CloudUpload size={16} className="text-violet-500" />}
+          label="Notion Uploaded"
+          value={stats.notionUploaded}
+          trend="neutral"
+        />
+        <StatCard
+          icon={<AlertCircle size={16} className="text-orange-500" />}
+          label="Pending Rewrite"
+          value={stats.pendingRewrite}
+          trend={stats.pendingRewrite > 0 ? "down" : "neutral"}
+        />
+        <StatCard
+          icon={<Clock size={16} className="text-twitter-blue" />}
+          label="Last Sync"
+          value={lastSyncText}
+          subtext={
+            stats.lastSyncAt
+              ? new Date(stats.lastSyncAt).toLocaleString()
+              : undefined
+          }
+          trend="neutral"
+        />
+      </div>
+
+      {showRettiwtAlert && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30 px-4 py-3 text-sm">
+          <div className="flex items-start gap-2">
+            <Terminal
+              size={16}
+              className="text-amber-700 dark:text-amber-400 shrink-0 mt-0.5"
+            />
+            <div className="min-w-0">
+              <p className="font-medium text-amber-900 dark:text-amber-100">
+                Rettiwt update available
+              </p>
+              <p className="text-xs text-amber-800/90 dark:text-amber-200/90 mt-1">
+                Local CLI <code className="text-[11px]">{rettiwt!.localVersion}</code> →
+                latest npm{" "}
+                <code className="text-[11px]">{rettiwt!.latestVersion}</code>
+              </p>
+              <p className="text-[11px] text-amber-900/80 dark:text-amber-200/80 mt-2 font-mono break-all">
+                npm install -g rettiwt-api
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rettiwt?.error && (
+        <p className="text-[11px] text-muted-foreground">
+          Rettiwt check: {rettiwt.error}
+        </p>
+      )}
     </div>
   );
 }

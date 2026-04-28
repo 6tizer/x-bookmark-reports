@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useUIStore } from "@/store/useUIStore";
 import { useTheme } from "@/hooks/useTheme";
-import { Search, Sun, Moon, Monitor, ChevronRight, User } from "lucide-react";
+import { Search, Sun, Moon, ChevronRight, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function getBreadcrumb(pathname: string): { label: string; href?: string }[] {

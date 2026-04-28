@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { isDbEmpty, getArticleById, updateArticle, createArticleVersion } from "@/lib/db";
+import { getArticleById as getFsArticleById } from "@/lib/fs-data";
 import { getArticleById as getMockArticle, mockArticles } from "@/db/mock";
 import { getLogger } from "@/lib/logger";
 import type { ApiResponse, Article, UpdateArticleRequest } from "@/types/api";
@@ -15,6 +16,20 @@ interface RouteParams {
 
 const logger = getLogger("agent");
 
+function fsArticleToApi(a: NonNullable<ReturnType<typeof getFsArticleById>>): Article {
+  return {
+    id: a.id,
+    title: a.title,
+    content: a.content,
+    status: a.status,
+    createdAt: a.publishedAt,
+    updatedAt: a.publishedAt,
+    publishedAt: a.status === "published" ? a.publishedAt : undefined,
+    tags: [],
+    wordCount: a.wordCount,
+  };
+}
+
 // ── GET ─────────────────────────────────────
 export async function GET(
   _request: Request,
@@ -24,13 +39,15 @@ export async function GET(
     const { id } = params;
 
     if (isDbEmpty()) {
+      const fsArt = getFsArticleById(id);
+      if (fsArt) return NextResponse.json({ success: true, data: fsArticleToApi(fsArt) });
       const mock = getMockArticle(id);
       if (mock) return NextResponse.json({ success: true, data: mock });
       return NextResponse.json(
         {
           success: false,
           data: mockArticles[0],
-          error: { code: "ARTICLE_NOT_FOUND", message: "Article not found in mock data" },
+          error: { code: "ARTICLE_NOT_FOUND", message: "Article not found" },
         },
         { status: 404 }
       );
@@ -72,6 +89,25 @@ export async function PUT(
     const body = (await request.json()) as UpdateArticleRequest;
 
     if (isDbEmpty()) {
+      const fsArt = getFsArticleById(id);
+      if (fsArt) {
+        const content = body.content ?? fsArt.content;
+        const nextStatus =
+          body.status === "draft" || body.status === "published"
+            ? body.status
+            : fsArt.status;
+        const merged: typeof fsArt = {
+          ...fsArt,
+          title: body.title ?? fsArt.title,
+          content,
+          status: nextStatus,
+          wordCount: content.split(/\s+/).filter(Boolean).length,
+        };
+        return NextResponse.json({
+          success: true,
+          data: fsArticleToApi(merged),
+        });
+      }
       const mock = getMockArticle(id);
       return NextResponse.json({
         success: true,
@@ -98,7 +134,6 @@ export async function PUT(
       );
     }
 
-    // Save version if content changed
     if (body.content && body.content !== existing.content) {
       createArticleVersion(id, body.title ?? existing.title, existing.content, "user");
     }

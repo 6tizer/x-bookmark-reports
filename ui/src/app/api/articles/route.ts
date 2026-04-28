@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { isDbEmpty, listArticles, createArticle } from "@/lib/db";
 import { listArticles as listFsArticles } from "@/lib/fs-data";
 import { getLogger } from "@/lib/logger";
-import type { ApiResponse, Article, CreateArticleRequest, PaginatedResponse } from "@/types/api";
+import type { ApiResponse, Article, ArticleStatus, CreateArticleRequest, PaginatedResponse } from "@/types/api";
 
 const logger = getLogger("agent");
 
@@ -19,37 +19,30 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const page = Math.max(parseInt(searchParams.get("page") ?? "1", 10), 1);
     const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "20", 10), 1), 100);
-    const status = (searchParams.get("status") as Article["status"]) ?? undefined;
+    const status = (searchParams.get("status") as ArticleStatus) ?? undefined;
     const search = searchParams.get("search") ?? undefined;
 
     if (isDbEmpty()) {
       const fsResult = listFsArticles(page, limit, status);
 
-      const items: Article[] = fsResult.items.map((a) => {
-        const firstLine = a.content.split("\n").find((l) => l.startsWith("# "));
-        const title = firstLine
-          ? firstLine.replace(/^#+\s*/, "")
-          : a.title;
+      const items: Article[] = fsResult.items.map((a) => ({
+        id: a.id,
+        title: a.title,
+        content: a.content,
+        status: a.status,
+        createdAt: a.publishedAt,
+        updatedAt: a.publishedAt,
+        publishedAt: a.status === "published" ? a.publishedAt : undefined,
+        tags: [],
+        wordCount: a.wordCount,
+      }));
 
-        return {
-          id: a.id,
-          title,
-          content: a.content,
-          status: "published" as const,
-          createdAt: a.publishedAt,
-          updatedAt: a.publishedAt,
-          publishedAt: a.publishedAt,
-          tags: [],
-          wordCount: a.wordCount,
-        };
-      });
-
-      // Search filter
       let filtered = items;
       if (search) {
         const s = search.toLowerCase();
         filtered = filtered.filter(
-          (a) => a.title.toLowerCase().includes(s) || a.content.toLowerCase().includes(s)
+          (x) =>
+            x.title.toLowerCase().includes(s) || x.content.toLowerCase().includes(s)
         );
       }
 
@@ -99,7 +92,6 @@ export async function POST(
     }
 
     if (isDbEmpty()) {
-      // Read-only mode from filesystem — just echo back
       return NextResponse.json({
         success: true,
         data: {

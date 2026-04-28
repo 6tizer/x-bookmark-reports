@@ -4,17 +4,15 @@
  * ReportPreview — Split screen: Markdown editor + react-markdown preview
  */
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
-import { Edit3, Eye, Save, Download, History, ChevronLeft } from "lucide-react";
+import { Edit3, Eye, Save, Download, History } from "lucide-react";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import type { Report, ReportVersion } from "@/types/api";
-import { useReportStore } from "@/store/useReportStore";
 import { Skeleton } from "@/components/ui/Skeleton";
 
-// Dynamically import react-markdown to avoid SSR issues
 const ReactMarkdown = dynamic(() => import("react-markdown"), { ssr: false });
-const RemarkGfm = dynamic(() => import("remark-gfm"), { ssr: false });
-const RehypeHighlight = dynamic(() => import("rehype-highlight"), { ssr: false });
 
 interface ReportPreviewProps {
   report: Report | null;
@@ -164,8 +162,8 @@ export function ReportPreview({
             </div>
             <div className="flex-1 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none">
               <ReactMarkdown
-                remarkPlugins={[RemarkGfm]}
-                rehypePlugins={[RehypeHighlight]}
+                remarkPlugins={[remarkGfm as never]}
+                rehypePlugins={[rehypeHighlight as never]}
                 components={{
                   h1: ({ children }) => <h1 className="text-xl font-bold mt-4 mb-2">{children}</h1>,
                   h2: ({ children }) => <h2 className="text-lg font-semibold mt-3 mb-2">{children}</h2>,

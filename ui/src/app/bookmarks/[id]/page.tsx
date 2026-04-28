@@ -7,7 +7,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { ClientLayout } from "@/components/layout/ClientLayout";
 import { getBookmarkByIdAPI, startRead } from "@/lib/api";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -22,11 +21,7 @@ import {
   BookOpen,
   Sparkles,
   FileText,
-  ChevronRight,
 } from "lucide-react";
-
-const ReactMarkdown = dynamic(() => import("react-markdown"), { ssr: false });
-const RemarkGfm = dynamic(() => import("remark-gfm"), { ssr: false });
 
 export default function BookmarkDetailPage() {
   const params = useParams();

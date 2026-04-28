@@ -32,6 +32,7 @@ import type {
   LogEntry,
   LogQuery,
   SSEEvent,
+  RettiwtStatus,
 } from "@/types/api";
 
 import {
@@ -117,6 +118,10 @@ async function fetcher<T>(
     );
   }
 
+  if (body.data === null) {
+    throw new ApiError("Empty response data", "EMPTY_DATA", res.status);
+  }
+
   return body.data;
 }
 
@@ -187,6 +192,19 @@ export async function getDashboardActivity(limit = 20): Promise<{ items: Activit
     return { items: mockActivities.slice(0, limit), total: mockActivities.length };
   }
   return api.get<{ items: ActivityItem[]; total: number }>("/dashboard/activity", { limit });
+}
+
+export async function getRettiwtStatus(): Promise<RettiwtStatus> {
+  if (USE_MOCK) {
+    await mockDelay(100);
+    return {
+      localVersion: "4.0.0",
+      latestVersion: "4.0.0",
+      updateAvailable: false,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+  return api.get<RettiwtStatus>("/system/rettiwt");
 }
 
 // ─────────────────────────────────────────────
@@ -380,18 +398,24 @@ export function connectSyncSSE(jobId: string, onEvent: (event: SSEEvent) => void
   }
 
   const es = new EventSource(`${BASE_URL}/sync/${jobId}/stream`);
-  es.addEventListener("progress", (e) => {
-    const data = JSON.parse(e.data) as SSEEvent;
+  es.addEventListener("progress", (e: MessageEvent) => {
+    const data = JSON.parse(String(e.data)) as SSEEvent;
     onEvent(data);
   });
-  es.addEventListener("complete", (e) => {
-    const data = JSON.parse(e.data) as SSEEvent;
+  es.addEventListener("complete", (e: MessageEvent) => {
+    const data = JSON.parse(String(e.data)) as SSEEvent;
     onEvent(data);
     es.close();
   });
-  es.addEventListener("error", (e) => {
-    const data = JSON.parse(e.data) as SSEEvent;
-    onEvent(data);
+  es.addEventListener("error", (e: MessageEvent) => {
+    if (e.data) {
+      try {
+        const data = JSON.parse(String(e.data)) as SSEEvent;
+        onEvent(data);
+      } catch {
+        /* non-JSON error event */
+      }
+    }
     es.close();
   });
   return () => es.close();

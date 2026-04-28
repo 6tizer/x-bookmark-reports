@@ -663,15 +663,18 @@ AGI 的实现需要新的架构范式，而非简单地扩大现有模型规模�
 
 export const mockDashboardStats: DashboardStats = {
   lastSyncAt: "2026-04-28T08:30:00.000Z",
+  totalDrafts: 201,
   totalBookmarks: 201,
   newThisWeek: 23,
+  articlesHermes: 67,
+  notionUploaded: 48,
+  pendingRewrite: 134,
   pendingCount: 45,
   reportCount: 67,
   pipeline: {
-    sync: { status: "completed", lastRun: "2026-04-28T08:30:00.000Z" },
-    read: { status: "completed", lastRun: "2026-04-28T08:35:00.000Z" },
-    report: { status: "running", progress: 67 },
-    article: { status: "pending" },
+    twitterSync: { status: "completed", lastRun: "2026-04-28T08:30:00.000Z" },
+    deepReports: { status: "running", progress: 67 },
+    notionUpload: { status: "pending" },
   },
 };
 
@@ -719,6 +722,7 @@ export const mockSettings: Settings = {
   apiKey: "abc****xyz",
   proxy: "http://127.0.0.1:7897",
   dataPath: "./data",
+  articlesDir: "~/Library/Mobile Documents/com~apple~CloudDocs/Hermes/bookmark-articles",
   autoSync: false,
   cronExpression: "0 */6 * * *",
 };

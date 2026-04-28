@@ -10,7 +10,7 @@
 
 export interface ApiResponse<T> {
   success: boolean;
-  data: T;
+  data: T | null;
   error?: {
     code: string;
     message: string;
@@ -46,20 +46,35 @@ export interface PipelineNode {
   error?: { code: string; message: string };
 }
 
-export interface DashboardPipeline {
-  sync: PipelineNode;
-  read: PipelineNode;
-  report: PipelineNode;
-  article: PipelineNode;
+/** Dashboard pipeline: Twitter Sync → Deep Reports → Notion Upload */
+export interface DashboardPipelineThree {
+  twitterSync: PipelineNode;
+  deepReports: PipelineNode;
+  notionUpload: PipelineNode;
 }
 
 export interface DashboardStats {
   lastSyncAt: string | null;
+  totalDrafts: number;
   totalBookmarks: number;
   newThisWeek: number;
+  articlesHermes: number;
+  notionUploaded: number;
+  pendingRewrite: number;
+  /** @deprecated Use pendingRewrite */
   pendingCount: number;
+  /** @deprecated Use articlesHermes */
   reportCount: number;
-  pipeline: DashboardPipeline;
+  pipeline: DashboardPipelineThree;
+  rettiwt?: RettiwtStatus | null;
+}
+
+export interface RettiwtStatus {
+  localVersion: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  error?: string;
+  checkedAt: string;
 }
 
 export type ActivityType = "sync" | "read" | "report" | "article" | "setting";
@@ -79,7 +94,7 @@ export interface ActivityItem {
 // ─────────────────────────────────────────────
 
 export type BookmarkStatus = "synced" | "read" | "reported" | "articled";
-export type UrlCategory = "article" | "code" | "social" | "media" | "other";
+export type UrlCategory = "article" | "code" | "social" | "media" | "other" | "tweet";
 
 export interface Author {
   name: string;
@@ -341,15 +356,17 @@ export interface Settings {
   apiKey: string;        // 脱敏: abc****xyz
   proxy: string | null;
   dataPath: string;
+  articlesDir: string;
   autoSync: boolean;
   cronExpression: string | null;
 }
 
 export interface UpdateSettingsRequest {
-  proxy?: string;
+  proxy?: string | null;
   dataPath?: string;
+  articlesDir?: string;
   autoSync?: boolean;
-  cronExpression?: string;
+  cronExpression?: string | null;
 }
 
 export interface UpdateApiKeyRequest {
@@ -394,3 +411,4 @@ export interface UIState {
   theme: Theme;
   commandPaletteOpen: boolean;
 }
+

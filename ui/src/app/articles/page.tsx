@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Articles page — Article drafts list
+ * Articles page — Hermes articles list
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -12,8 +12,11 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Newspaper, Clock, Search, RefreshCw, PenLine } from "lucide-react";
 import type { Article, ArticleStatus, PaginatedResponse } from "@/types/api";
 
+const FS_STATUSES: ArticleStatus[] = ["draft", "published"];
+
 export default function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([]);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ArticleStatus | undefined>(undefined);
@@ -23,6 +26,7 @@ export default function ArticlesPage() {
     try {
       const res: PaginatedResponse<Article> = await getArticles(status, s);
       setArticles(res.items);
+      setTotal(res.total);
     } finally {
       setIsLoading(false);
     }
@@ -45,7 +49,9 @@ export default function ArticlesPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-foreground">Articles</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">{articles.length} drafts</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {`${total} article${total === 1 ? "" : "s"}`}
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -59,6 +65,7 @@ export default function ArticlesPage() {
                 className="h-8 rounded-md border border-border bg-muted px-2.5 text-sm outline-none focus:ring-1 focus:ring-ring w-44"
               />
               <button
+                type="button"
                 onClick={() => fetchData(statusFilter, search)}
                 className="flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted transition-colors"
               >
@@ -76,13 +83,15 @@ export default function ArticlesPage() {
               className="h-8 rounded-md border border-border bg-muted px-2 text-sm outline-none"
             >
               <option value="">All Status</option>
-              <option value="draft">Draft</option>
-              <option value="editing">Editing</option>
-              <option value="reviewing">Reviewing</option>
-              <option value="published">Published</option>
+              {FS_STATUSES.map((st) => (
+                <option key={st} value={st}>
+                  {st.charAt(0).toUpperCase() + st.slice(1)}
+                </option>
+              ))}
             </select>
 
             <button
+              type="button"
               onClick={() => fetchData(statusFilter, search)}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted transition-colors"
             >
@@ -94,7 +103,10 @@ export default function ArticlesPage() {
         {isLoading ? (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="rounded-lg border border-border bg-card p-4 flex items-center gap-4">
+              <div
+                key={i}
+                className="rounded-lg border border-border bg-card p-4 flex items-center gap-4"
+              >
                 <Skeleton className="h-10 w-10 rounded-lg" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-4 w-1/3" />
@@ -124,7 +136,9 @@ export default function ArticlesPage() {
                     <h3 className="text-sm font-medium text-foreground truncate group-hover:text-twitter-blue transition-colors">
                       {article.title}
                     </h3>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${statusColors[article.status]}`}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${statusColors[article.status]}`}
+                    >
                       {article.status}
                     </span>
                   </div>

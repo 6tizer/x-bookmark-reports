@@ -6,6 +6,7 @@
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
+import type { ReportType, UrlCategory } from "@/types/api";
 import {
   createReport,
   updateBookmarkStatus,
@@ -13,8 +14,6 @@ import {
   createLog,
   logActivity,
   getBookmarkById,
-  type ReportType,
-  type UrlCategory,
 } from "./db";
 
 const UI_ROOT = path.resolve(process.cwd());
@@ -153,7 +152,7 @@ function simulateRead(
   bookmarkId: string,
   url: string,
   type: ReportType,
-  jobId: string
+  _jobId: string
 ): void {
   const bookmark = getBookmarkById(bookmarkId);
   if (!bookmark) return;
@@ -200,7 +199,7 @@ function simulateRead(
 
 function saveReportOutput(
   bookmarkId: string,
-  url: string,
+  _url: string,
   type: ReportType,
   markdown: string,
   _jobId: string

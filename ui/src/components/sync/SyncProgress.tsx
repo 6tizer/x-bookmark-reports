@@ -45,7 +45,6 @@ export function SyncProgress({ status, progress, stage }: SyncProgressProps) {
         {stageOrder.map((s, i) => {
           const isDone = i < currentStageIndex;
           const isCurrent = i === currentStageIndex;
-          const isPending = i > currentStageIndex;
 
           return (
             <div key={s} className="flex flex-col items-center gap-1 flex-1">
