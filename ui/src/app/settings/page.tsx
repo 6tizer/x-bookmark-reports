@@ -25,7 +25,7 @@ const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("general");
-  const { settings, isLoading, isSaving, update, updateKey, test } = useSettings();
+  const { settings, isLoading, isSaving, update } = useSettings();
   const {
     logs,
     isLoading: logsLoading,

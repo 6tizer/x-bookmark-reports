@@ -5,16 +5,8 @@
 
 import { spawn, ChildProcess } from "child_process";
 import path from "path";
-import {
-  createSyncJob,
-  updateSyncJob,
-  getSyncJobById,
-  createLog,
-  logActivity,
-  type SyncMode,
-  type SyncStatus,
-  type PipelineStage,
-} from "./db";
+import type { SyncMode, SyncStatus, PipelineStage } from "@/types/api";
+import { createSyncJob, updateSyncJob, createLog, logActivity } from "./db";
 
 type SyncProgressCallback = (event: {
   type: "progress" | "complete" | "error";
@@ -229,7 +221,7 @@ export async function startSync(mode: SyncMode): Promise<{
   };
 }
 
-function simulateSync(jobId: string, mode: SyncMode): void {
+function simulateSync(jobId: string, _mode: SyncMode): void {
   // Simulate a sync job for development without real scripts
   let progress = 0;
   const stages: PipelineStage[] = ["auth", "fetching", "parsing", "storing", "done"];
@@ -317,13 +309,13 @@ export function getSyncJobLogs(jobId: string): string[] {
 function emit(jobId: string, event: { type: "progress" | "complete" | "error"; payload: Record<string, unknown> }): void {
   const state = activeJobs.get(jobId);
   if (!state) return;
-  for (const cb of state.callbacks) {
+  Array.from(state.callbacks).forEach((cb) => {
     try {
       cb(event);
     } catch {
       // ignore callback errors
     }
-  }
+  });
 }
 
 async function fileExists(p: string): Promise<boolean> {

@@ -9,24 +9,27 @@ import { ClientLayout } from "@/components/layout/ClientLayout";
 import { StatCards } from "@/components/dashboard/StatCards";
 import { Pipeline } from "@/components/dashboard/Pipeline";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
-import { getDashboardStats, getDashboardActivity } from "@/lib/api";
-import type { DashboardStats, ActivityItem } from "@/types/api";
+import { getDashboardStats, getDashboardActivity, getRettiwtStatus } from "@/lib/api";
+import type { DashboardStats, ActivityItem, RettiwtStatus } from "@/types/api";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [rettiwtStatus, setRettiwtStatus] = useState<RettiwtStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const [statsData, activityData] = await Promise.all([
+        const [statsData, activityData, rw] = await Promise.all([
           getDashboardStats(),
           getDashboardActivity(10),
+          getRettiwtStatus().catch(() => null),
         ]);
         setStats(statsData);
         setActivities(activityData.items);
+        if (rw) setRettiwtStatus(rw);
       } finally {
         setIsLoading(false);
       }
@@ -39,7 +42,7 @@ export default function DashboardPage() {
       <div className="space-y-6 max-w-6xl">
         <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
 
-        <StatCards stats={stats} isLoading={isLoading} />
+        <StatCards stats={stats} isLoading={isLoading} rettiwt={rettiwtStatus} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">

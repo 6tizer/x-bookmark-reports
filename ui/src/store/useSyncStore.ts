@@ -5,7 +5,7 @@
  */
 
 import { create } from "zustand";
-import type { SyncJob, SyncMode } from "@/types/api";
+import type { SyncJob } from "@/types/api";
 
 interface SyncStore {
   syncJobs: SyncJob[];

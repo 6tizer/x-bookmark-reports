@@ -6,14 +6,14 @@
 import { NextResponse } from "next/server";
 import { isDbEmpty, getBookmarkDetailById } from "@/lib/db";
 import { listDraftBookmarks } from "@/lib/fs-data";
-import type { ApiResponse, BookmarkDetail } from "@/types/api";
+import type { ApiResponse, BookmarkDetail, ExternalLink } from "@/types/api";
 
 interface RouteParams {
   params: { id: string };
 }
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: RouteParams
 ): Promise<NextResponse<ApiResponse<BookmarkDetail>>> {
   try {
@@ -35,6 +35,14 @@ export async function GET(
         );
       }
 
+      const rawLinks = draft.externalLinks || [];
+      const externalLinks: ExternalLink[] = rawLinks.map((l) => ({
+        url: l.url,
+        title: l.title,
+        description: l.description,
+        category: "other",
+      }));
+
       const detail: BookmarkDetail = {
         id: draft.id,
         url: draft.url,
@@ -48,7 +56,7 @@ export async function GET(
         stats: draft.stats,
         fullText: draft.fullText || draft.body || draft.text,
         replies: [],
-        externalLinks: draft.externalLinks || [],
+        externalLinks,
         reports: {},
       };
 

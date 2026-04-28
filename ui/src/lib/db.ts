@@ -28,6 +28,7 @@ import type {
   PaginatedResponse,
   PipelineStage,
 } from "@/types/api";
+import { getArticlesDir } from "@/lib/fs-data";
 
 // ─────────────────────────────────────────────
 // Paths
@@ -614,7 +615,7 @@ export function listReports(
   page: number,
   limit: number,
   bookmarkId?: string,
-  author?: string,
+  _author?: string,
   type?: ReportType,
   search?: string
 ): PaginatedResponse<Report> {
@@ -776,7 +777,7 @@ export function updateArticle(
   return result.changes > 0;
 }
 
-export function publishArticle(id: string, format: string): Article | null {
+export function publishArticle(id: string, _format: string): Article | null {
   const db = getDb();
   const now = nowIso();
   const result = db
@@ -993,6 +994,7 @@ export function getSettings(): Settings {
       apiKey: "****",
       proxy: null,
       dataPath: "./data",
+      articlesDir: getArticlesDir(),
       autoSync: false,
       cronExpression: "0 */6 * * *",
     };
@@ -1002,6 +1004,7 @@ export function getSettings(): Settings {
     apiKey: maskApiKey(row.api_key ? String(row.api_key) : null),
     proxy: row.proxy ? String(row.proxy) : null,
     dataPath: String(row.data_path ?? "./data"),
+    articlesDir: getArticlesDir(),
     autoSync: Boolean(row.auto_sync),
     cronExpression: row.cron_expression ? String(row.cron_expression) : null,
   };
@@ -1009,10 +1012,10 @@ export function getSettings(): Settings {
 
 export function updateSettings(
   updates: Partial<{
-    proxy: string;
+    proxy: string | null;
     dataPath: string;
     autoSync: boolean;
-    cronExpression: string;
+    cronExpression: string | null;
   }>
 ): boolean {
   const db = getDb();

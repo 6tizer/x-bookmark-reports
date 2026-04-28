@@ -8,7 +8,7 @@ import { useState } from "react";
 import { ClientLayout } from "@/components/layout/ClientLayout";
 import { ReportList } from "@/components/reports/ReportList";
 import { useReports } from "@/hooks/useReports";
-import { Search, RefreshCw, Filter } from "lucide-react";
+import { Search, RefreshCw } from "lucide-react";
 import type { ReportType } from "@/types/api";
 
 export default function ReportsPage() {

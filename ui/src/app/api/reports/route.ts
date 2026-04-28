@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import { isDbEmpty, listReports } from "@/lib/db";
 import { listArticles as listFsArticles } from "@/lib/fs-data";
-import type { ApiResponse, Report, PaginatedResponse } from "@/types/api";
+import type { ApiResponse, Report, PaginatedResponse, ReportType } from "@/types/api";
 
 export async function GET(
   request: Request
@@ -15,7 +15,9 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const page = Math.max(parseInt(searchParams.get("page") ?? "1", 10), 1);
     const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "20", 10), 1), 100);
-    const type = searchParams.get("type") ?? undefined;
+    const typeRaw = searchParams.get("type");
+    const type: ReportType | undefined =
+      typeRaw === "basic" || typeRaw === "enhanced" ? typeRaw : undefined;
     const search = searchParams.get("search") ?? undefined;
 
     if (isDbEmpty()) {

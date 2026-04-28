@@ -11,7 +11,7 @@ import { BookmarkCard } from "@/components/bookmarks/BookmarkCard";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { useBookmarkStore } from "@/store/useBookmarkStore";
 import { startRead } from "@/lib/api";
-import { LayoutGrid, Table2, Search, Filter, RefreshCw } from "lucide-react";
+import { LayoutGrid, Table2, Search, RefreshCw } from "lucide-react";
 import type { BookmarkStatus } from "@/types/api";
 
 export default function BookmarksPage() {

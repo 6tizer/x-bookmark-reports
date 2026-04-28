@@ -6,12 +6,12 @@
 
 import { useState } from "react";
 import { Eye, EyeOff, Save, TestTube } from "lucide-react";
-import type { Settings } from "@/types/api";
+import type { Settings, UpdateSettingsRequest } from "@/types/api";
 
 interface EnvConfigProps {
   settings: Settings | null;
   isSaving: boolean;
-  onSave: (settings: Partial<Settings>) => void;
+  onSave: (request: UpdateSettingsRequest) => void;
   onTest: () => Promise<{ reachable: boolean; latency: number }>;
 }
 
@@ -24,8 +24,8 @@ export function EnvConfig({ settings, isSaving, onSave, onTest }: EnvConfigProps
   const [testing, setTesting] = useState(false);
 
   const handleSave = () => {
-    const updates: Partial<Settings> = {};
-    if (proxy !== settings?.proxy) updates.proxy = proxy || null;
+    const updates: UpdateSettingsRequest = {};
+    if (proxy !== (settings?.proxy ?? "")) updates.proxy = proxy || null;
     if (dataPath !== settings?.dataPath) updates.dataPath = dataPath;
     onSave(updates);
   };

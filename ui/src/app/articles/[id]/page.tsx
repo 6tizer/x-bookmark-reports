@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import remarkGfm from "remark-gfm";
 import { ClientLayout } from "@/components/layout/ClientLayout";
 import { getArticleByIdAPI, updateArticle, getArticleVersions, publishArticle } from "@/lib/api";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -22,7 +23,6 @@ import {
 import type { Article, ArticleVersion } from "@/types/api";
 
 const ReactMarkdown = dynamic(() => import("react-markdown"), { ssr: false });
-const RemarkGfm = dynamic(() => import("remark-gfm"), { ssr: false });
 
 export default function ArticleDetailPage() {
   const params = useParams();
@@ -200,7 +200,7 @@ export default function ArticleDetailPage() {
           {(viewMode === "preview" || viewMode === "split") && (
             <div className="flex flex-col h-full rounded-lg border border-border bg-card overflow-hidden">
               <div className="flex-1 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown remarkPlugins={[RemarkGfm]}>
+                <ReactMarkdown remarkPlugins={[remarkGfm as never]}>
                   {content}
                 </ReactMarkdown>
               </div>

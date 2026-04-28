@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { Save, RotateCcw } from "lucide-react";
+import { Save } from "lucide-react";
 import type { Settings, UpdateSettingsRequest } from "@/types/api";
 
 interface GeneralSettingsProps {
@@ -18,12 +18,14 @@ interface GeneralSettingsProps {
 export function GeneralSettings({ settings, isLoading, isSaving, onSave }: GeneralSettingsProps) {
   const [proxy, setProxy] = useState("");
   const [dataPath, setDataPath] = useState("");
+  const [articlesDir, setArticlesDir] = useState("");
   const [autoSync, setAutoSync] = useState(false);
 
   useEffect(() => {
     if (settings) {
       setProxy(settings.proxy || "");
       setDataPath(settings.dataPath || "./data");
+      setArticlesDir(settings.articlesDir || "");
       setAutoSync(settings.autoSync);
     }
   }, [settings]);
@@ -32,6 +34,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave }: Gener
     onSave({
       proxy: proxy || null,
       dataPath,
+      articlesDir: articlesDir.trim() || undefined,
       autoSync,
     });
   };
@@ -71,6 +74,21 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave }: Gener
             value={dataPath}
             onChange={(e) => setDataPath(e.target.value)}
             placeholder="./data"
+            className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">Articles Directory</label>
+          <p className="text-[10px] text-muted-foreground">
+            Hermes bookmark-articles folder (saved to repo <code className="text-[10px]">.env</code> as{" "}
+            <code className="text-[10px]">ARTICLES_DIR</code>)
+          </p>
+          <input
+            type="text"
+            value={articlesDir}
+            onChange={(e) => setArticlesDir(e.target.value)}
+            placeholder="Path to bookmark-articles"
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>

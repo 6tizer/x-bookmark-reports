@@ -4,7 +4,7 @@
  * useBookmarks — Bookmark list fetching, pagination, filters
  */
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback } from "react";
 import { useBookmarkStore } from "@/store/useBookmarkStore";
 import { getBookmarks, updateBookmarkTags, updateBookmarkStatus } from "@/lib/api";
 import type { BookmarkListQuery, Bookmark, PaginatedResponse } from "@/types/api";

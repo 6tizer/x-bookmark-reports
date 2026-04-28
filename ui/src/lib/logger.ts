@@ -5,7 +5,8 @@
 
 import fs from "fs";
 import path from "path";
-import { createLog, listLogs, type LogComponent, type LogLevel } from "./db";
+import type { LogComponent, LogLevel } from "@/types/api";
+import { createLog, listLogs } from "./db";
 
 const UI_ROOT = path.resolve(process.cwd());
 const LOG_DIR = path.join(UI_ROOT, "data", "logs");
@@ -43,13 +44,6 @@ class Logger {
 
   private log(level: LogLevel, message: string, detail?: string): void {
     const timestamp = new Date().toISOString();
-    const entry: LogMessage = {
-      timestamp,
-      component: this.component,
-      level,
-      message,
-      detail,
-    };
 
     // Write to file
     const date = timestamp.slice(0, 10);

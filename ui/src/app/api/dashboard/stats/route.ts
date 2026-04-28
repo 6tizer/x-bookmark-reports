@@ -5,30 +5,37 @@
 
 import { NextResponse } from "next/server";
 import { getDb, isDbEmpty } from "@/lib/db";
-import { getDashboardStats as getFsDashboardStats } from "@/lib/fs-data";
-import type { ApiResponse, DashboardStats } from "@/types/api";
+import {
+  getDashboardStats as getFsDashboardStats,
+  getPipelineStatus,
+} from "@/lib/fs-data";
+import type { ApiResponse, DashboardStats, DashboardPipelineThree } from "@/types/api";
+
+function emptyPipeline(): DashboardPipelineThree {
+  return {
+    twitterSync: { status: "pending" },
+    deepReports: { status: "pending" },
+    notionUpload: { status: "pending" },
+  };
+}
 
 export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> {
   try {
     if (isDbEmpty()) {
-      // Read from filesystem
       const fsStats = getFsDashboardStats();
-
-      // Count articles from bookmark-articles dir
-      const articles = fsStats.totalArticles;
+      const pipeline = getPipelineStatus();
 
       const stats: DashboardStats = {
-        lastSyncAt: new Date().toISOString(),
+        lastSyncAt: fsStats.lastSync,
+        totalDrafts: fsStats.totalDrafts,
         totalBookmarks: fsStats.totalDrafts,
-        newThisWeek: fsStats.totalDrafts, // All drafts are "new" from filesystem perspective
-        pendingCount: Math.max(0, fsStats.totalDrafts - articles),
-        reportCount: articles,
-        pipeline: {
-          sync: { status: "completed", lastRun: new Date().toISOString() },
-          read: { status: "completed", lastRun: new Date().toISOString() },
-          report: { status: "completed", lastRun: new Date().toISOString() },
-          article: { status: "completed", lastRun: new Date().toISOString() },
-        },
+        newThisWeek: fsStats.newThisWeek,
+        articlesHermes: fsStats.totalArticles,
+        notionUploaded: fsStats.notionUploaded,
+        pendingRewrite: fsStats.pendingRewrite,
+        pendingCount: fsStats.pendingRewrite,
+        reportCount: fsStats.totalArticles,
+        pipeline,
       };
 
       return NextResponse.json({ success: true, data: stats });
@@ -38,6 +45,10 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
 
     const totalBookmarks = Number(
       (db.prepare("SELECT COUNT(*) as c FROM bookmarks").get() as { c: number }).c
+    );
+
+    const totalArticles = Number(
+      (db.prepare("SELECT COUNT(*) as c FROM articles").get() as { c: number }).c
     );
 
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -62,16 +73,14 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
     );
 
     const lastSyncRow = db
-      .prepare("SELECT completed_at FROM sync_jobs WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1")
+      .prepare(
+        "SELECT completed_at FROM sync_jobs WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1"
+      )
       .get() as { completed_at: string } | undefined;
     const lastSyncAt = lastSyncRow?.completed_at ?? null;
 
     const lastSyncJob = db
       .prepare("SELECT * FROM sync_jobs ORDER BY started_at DESC LIMIT 1")
-      .get() as Record<string, unknown> | undefined;
-
-    const lastReadJob = db
-      .prepare("SELECT * FROM activities WHERE type = 'read' ORDER BY timestamp DESC LIMIT 1")
       .get() as Record<string, unknown> | undefined;
 
     const lastReportJob = db
@@ -82,36 +91,46 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
       .prepare("SELECT * FROM activities WHERE type = 'article' ORDER BY timestamp DESC LIMIT 1")
       .get() as Record<string, unknown> | undefined;
 
-    const pipeline: DashboardStats["pipeline"] = {
-      sync: {
-        status: lastSyncJob
-          ? (String(lastSyncJob.status) as DashboardStats["pipeline"]["sync"]["status"])
-          : "pending",
-        lastRun: lastSyncJob ? String(lastSyncJob.started_at) : undefined,
-      },
-      read: {
-        status: lastReadJob ? "completed" : "pending",
-        lastRun: lastReadJob ? String(lastReadJob.timestamp) : undefined,
-      },
-      report: {
-        status: lastReportJob ? "completed" : "pending",
-        lastRun: lastReportJob ? String(lastReportJob.timestamp) : undefined,
-      },
-      article: {
-        status: lastArticleJob ? "completed" : "pending",
-        lastRun: lastArticleJob ? String(lastArticleJob.timestamp) : undefined,
-      },
+    const syncSt = lastSyncJob ? String(lastSyncJob.status) : "";
+    const pipeline: DashboardPipelineThree = {
+      twitterSync: !lastSyncJob
+        ? { status: "pending" }
+        : syncSt === "running"
+          ? {
+              status: "running",
+              lastRun: String(lastSyncJob.started_at),
+              progress: Number(lastSyncJob.progress) || undefined,
+            }
+          : syncSt === "failed"
+            ? {
+                status: "failed",
+                lastRun: String(lastSyncJob.started_at),
+                error: {
+                  code: "SYNC_FAILED",
+                  message: String(
+                    (lastSyncJob.error as { message?: string })?.message ?? "Sync failed"
+                  ),
+                },
+              }
+            : { status: "completed", lastRun: String(lastSyncJob.started_at) },
+      deepReports: lastReportJob
+        ? { status: "completed", lastRun: String(lastReportJob.timestamp) }
+        : { status: "pending" },
+      notionUpload: lastArticleJob
+        ? { status: "completed", lastRun: String(lastArticleJob.timestamp) }
+        : { status: "pending" },
     };
 
-    if (lastSyncJob && String(lastSyncJob.status) === "running") {
-      pipeline.sync.status = "running";
-      pipeline.sync.progress = Number(lastSyncJob.progress);
-    }
+    const pendingRewrite = Math.max(0, totalBookmarks - totalArticles);
 
     const stats: DashboardStats = {
       lastSyncAt,
+      totalDrafts: totalBookmarks,
       totalBookmarks,
       newThisWeek,
+      articlesHermes: totalArticles,
+      notionUploaded: 0,
+      pendingRewrite,
       pendingCount,
       reportCount,
       pipeline,
@@ -125,16 +144,15 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
         success: false,
         data: {
           lastSyncAt: null,
+          totalDrafts: 0,
           totalBookmarks: 0,
           newThisWeek: 0,
+          articlesHermes: 0,
+          notionUploaded: 0,
+          pendingRewrite: 0,
           pendingCount: 0,
           reportCount: 0,
-          pipeline: {
-            sync: { status: "pending" },
-            read: { status: "pending" },
-            report: { status: "pending" },
-            article: { status: "pending" },
-          },
+          pipeline: emptyPipeline(),
         },
         error: { code: "INTERNAL_ERROR", message, detail: String(err) },
       },
