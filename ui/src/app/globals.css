@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 45 9% 21%;
+    --card: 0 0% 100%;
+    --card-foreground: 45 9% 21%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 45 9% 21%;
+    --primary: 203 89% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 40 11% 96%;
+    --secondary-foreground: 45 9% 21%;
+    --muted: 40 11% 96%;
+    --muted-foreground: 0 0% 64%;
+    --accent: 40 11% 96%;
+    --accent-foreground: 45 9% 21%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 40 11% 90%;
+    --input: 40 11% 90%;
+    --ring: 203 89% 53%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 10%;
+    --foreground: 40 8% 88%;
+    --card: 0 0% 12%;
+    --card-foreground: 40 8% 88%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 40 8% 88%;
+    --primary: 203 89% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 40 8% 88%;
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 0 0% 18%;
+    --accent-foreground: 40 8% 88%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 203 89% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Notion-style scrollbar */
+@layer base {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #d1d1d1;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #b1b1b1;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: #444;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
+}
+
+/* Terminal-style log output */
+@layer components {
+  .terminal-log {
+    @apply font-mono text-xs leading-relaxed;
+  }
+  .terminal-log .timestamp {
+    @apply text-gray-400;
+  }
+  .terminal-log .level-info {
+    @apply text-green-600;
+  }
+  .terminal-log .level-warn {
+    @apply text-yellow-600;
+  }
+  .terminal-log .level-error {
+    @apply text-red-600;
+  }
+}
+
+/* Skeleton animation */
+@layer components {
+  .skeleton {
+    @apply animate-pulse bg-gray-200 dark:bg-gray-800 rounded;
+  }
+}
+
+/* Pipeline animation */
+@layer components {
+  .pipeline-line-active {
+    @apply animate-pulse-flow;
+  }
+}
