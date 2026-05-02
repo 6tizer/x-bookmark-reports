@@ -21,7 +21,7 @@ cd ui && npm install && npm run dev
 # 或从 monorepo 根目录：在含 ui/package.json 的目录下执行 npm run dev --prefix ui
 ```
 
-浏览器打开 `http://localhost:3000`，6 个页面：
+浏览器打开 `http://localhost:3001`（与本机 3000 上其他服务错开），6 个页面：
 
 
 | 页面        | 内容                                            |

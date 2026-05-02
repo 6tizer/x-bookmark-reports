@@ -4,9 +4,9 @@
  * useReports — Report fetching
  */
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useReportStore } from "@/store/useReportStore";
-import { getReports, getReportByIdAPI, saveReport, getReportVersions } from "@/lib/api";
+import { getReports, getReportByIdAPI, saveReport, getReportVersions, ApiError } from "@/lib/api";
 import type { ReportListQuery, Report, PaginatedResponse, UpdateReportRequest } from "@/types/api";
 
 interface UseReportsReturn {
@@ -22,10 +22,13 @@ interface UseReportsReturn {
   selectReport: (id: string) => Promise<void>;
   saveSelectedReport: () => Promise<void>;
   fetchVersions: (id: string) => Promise<void>;
+  reportError: string | null;
+  clearReportError: () => void;
 }
 
 export function useReports(): UseReportsReturn {
   const store = useReportStore();
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const fetchReports = useCallback(
     async (query?: ReportListQuery) => {
@@ -47,10 +50,16 @@ export function useReports(): UseReportsReturn {
 
   const selectReport = useCallback(
     async (id: string) => {
+      setReportError(null);
       store.setIsLoading(true);
       try {
         const report = await getReportByIdAPI(id);
         store.selectReport(report);
+      } catch (e) {
+        store.selectReport(null);
+        const msg =
+          e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Cannot load report";
+        setReportError(msg);
       } finally {
         store.setIsLoading(false);
       }
@@ -78,12 +87,18 @@ export function useReports(): UseReportsReturn {
 
   const fetchVersions = useCallback(
     async (id: string) => {
-      const versions = await getReportVersions(id);
-      store.setVersions(versions);
+      try {
+        const versions = await getReportVersions(id);
+        store.setVersions(versions);
+      } catch {
+        store.setVersions([]);
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [store]
   );
+
+  const clearReportError = useCallback(() => setReportError(null), []);
 
   return {
     reports: store.reports,
@@ -97,5 +112,7 @@ export function useReports(): UseReportsReturn {
     selectReport,
     saveSelectedReport,
     fetchVersions,
+    reportError,
+    clearReportError,
   };
 }

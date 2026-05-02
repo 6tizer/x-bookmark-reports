@@ -5,6 +5,7 @@
  */
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ClientLayout } from "@/components/layout/ClientLayout";
 import { ReportPreview } from "@/components/reports/ReportPreview";
@@ -25,10 +26,13 @@ export default function ReportDetailPage() {
     selectReport,
     saveSelectedReport,
     fetchVersions,
+    reportError,
+    clearReportError,
   } = useReports();
 
   useEffect(() => {
     if (id) {
+      clearReportError();
       selectReport(id);
       fetchVersions(id);
     }
@@ -44,6 +48,25 @@ export default function ReportDetailPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  if (reportError) {
+    return (
+      <ClientLayout>
+        <div className="max-w-2xl space-y-4 rounded-lg border border-destructive/30 bg-card p-6">
+          <p className="text-sm font-medium text-destructive">{reportError}</p>
+          <p className="text-xs text-muted-foreground">
+            Reports 列表与详情在本地模式下共用 Hermes 文章文件；若仍失败，请检查 Articles 目录与文件名是否与列表一致。
+          </p>
+          <Link
+            href="/reports"
+            className="inline-flex text-sm font-medium text-twitter-blue hover:underline"
+          >
+            返回报告列表
+          </Link>
+        </div>
+      </ClientLayout>
+    );
+  }
 
   if (isLoading || !selectedReport) {
     return (
