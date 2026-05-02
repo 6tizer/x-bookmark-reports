@@ -29,16 +29,17 @@ import type {
   PipelineStage,
 } from "@/types/api";
 import { getArticlesDir } from "@/lib/fs-data";
+import { getRepoRoot, getUiPackageRoot } from "@/lib/repo-root";
 
 // ─────────────────────────────────────────────
 // Paths
 // ─────────────────────────────────────────────
 
-const UI_ROOT = path.resolve(process.cwd());
+const UI_ROOT = getUiPackageRoot();
 const DATA_DIR = path.join(UI_ROOT, "data");
 const DB_PATH = path.join(DATA_DIR, "x_bookmarks.db");
 const SCHEMA_PATH = path.join(UI_ROOT, "src", "db", "schema.sql");
-const PARENT_DIR = path.resolve(UI_ROOT, "..");
+const PARENT_DIR = getRepoRoot();
 
 // Ensure data dir exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -1071,6 +1072,15 @@ export function getRawApiKey(): string | null {
 // ─────────────────────────────────────────────
 
 export function isDbEmpty(): boolean {
+  const outDir = path.join(PARENT_DIR, "output");
+  try {
+    if (fs.existsSync(outDir)) {
+      const hasMd = fs.readdirSync(outDir).some((f) => f.endsWith(".md"));
+      if (hasMd) return true;
+    }
+  } catch {
+    /* ignore */
+  }
   const db = getDb();
   const count = Number(
     (db.prepare("SELECT COUNT(*) as c FROM bookmarks").get() as { c: number }).c

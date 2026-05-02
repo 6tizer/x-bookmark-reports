@@ -8,20 +8,20 @@ import * as fs from "fs";
 import * as path from "path";
 import dotenv from "dotenv";
 import type { DashboardPipelineThree, PipelineNode } from "@/types/api";
+import { getRepoRoot } from "@/lib/repo-root";
 
 // ─────────────────────────────────────────────
-// Paths — relative to parent of ui/
+// Paths — repo root (works when cwd is `ui/` or repo root)
 // ─────────────────────────────────────────────
 
-const UI_ROOT = process.cwd();
-const PARENT_DIR = path.resolve(UI_ROOT, "..");
-const OUTPUT_DIR = path.join(PARENT_DIR, "output");
+const REPO_ROOT = getRepoRoot();
+const OUTPUT_DIR = path.join(REPO_ROOT, "output");
 
 const DEFAULT_ARTICLES_DIR =
   "/Users/tizer_mac_studio/Library/Mobile Documents/com~apple~CloudDocs/Hermes/bookmark-articles";
 
 function readArticlesDirFromParentEnv(): string | null {
-  const envPath = path.join(PARENT_DIR, ".env");
+  const envPath = path.join(REPO_ROOT, ".env");
   if (!fs.existsSync(envPath)) return null;
   try {
     const parsed = dotenv.parse(fs.readFileSync(envPath, "utf-8"));

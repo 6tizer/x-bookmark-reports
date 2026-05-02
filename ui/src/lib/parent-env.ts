@@ -4,9 +4,9 @@
 
 import fs from "fs";
 import path from "path";
+import { getRepoRoot } from "@/lib/repo-root";
 
-const UI_ROOT = path.resolve(process.cwd());
-const PARENT_ENV = path.join(UI_ROOT, "..", ".env");
+const PARENT_ENV = path.join(getRepoRoot(), ".env");
 
 export function readParentEnvArticlesDir(): string | null {
   if (!fs.existsSync(PARENT_ENV)) return null;

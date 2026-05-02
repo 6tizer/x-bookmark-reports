@@ -14,16 +14,25 @@ npm install
 npm run dev
 ```
 
+也可在仓库根目录执行（Next 的当前工作目录为 `x-bookmark-reports/` 时同样有效）：
+
+```bash
+cd ui && npm install && npm run dev
+# 或从 monorepo 根目录：在含 ui/package.json 的目录下执行 npm run dev --prefix ui
+```
+
 浏览器打开 `http://localhost:3000`，6 个页面：
 
-| 页面 | 内容 |
-|------|------|
+
+| 页面        | 内容                                            |
+| --------- | --------------------------------------------- |
 | Dashboard | 总量统计 (485 书签 / 74 报告 / 411 待处理) + Pipeline 状态 |
-| Bookmarks | 书签列表 (作者、推文标题、互动数据) |
-| Sync | 同步控制中心 (增量/全量同步、日志、环境配置) |
-| Reports | 深度报告草稿列表 (从 `output/` 读取) |
-| Articles | 成品文章列表 (从 `bookmark-articles/` 读取) |
-| Settings | 代理/数据目录/Auto Sync 开关 |
+| Bookmarks | 书签列表 (作者、推文标题、互动数据)                           |
+| Sync      | 同步控制中心 (增量/全量同步、日志、环境配置)                      |
+| Reports   | 深度报告草稿列表 (从 `output/` 读取)                     |
+| Articles  | 成品文章列表 (从 `bookmark-articles/` 读取)            |
+| Settings  | 代理/数据目录/Auto Sync 开关                          |
+
 
 Dashboard 从本地文件系统直接读取 `output/` (草稿) 和 `bookmark-articles/` (成品文章)，无需数据库。
 
@@ -65,24 +74,28 @@ x-bookmark-reports/
 
 ### 功能介绍
 
-| 类型 | 描述 | 数据来源 |
-|------|------|----------|
-| **Article** | Twitter 长篇文章原文 | TwitterAPI.io API |
-| **Quoted Tweet** | 引用的推文和纯文字推文 | FxTwitter API / 本地数据 |
-| **GitHub** | GitHub 仓库的 README | GitHub REST API |
-| **External** | 其他外部链接内容 | 直接抓取 |
+
+| 类型               | 描述                | 数据来源                 |
+| ---------------- | ----------------- | -------------------- |
+| **Article**      | Twitter 长篇文章原文    | TwitterAPI.io API    |
+| **Quoted Tweet** | 引用的推文和纯文字推文       | FxTwitter API / 本地数据 |
+| **GitHub**       | GitHub 仓库的 README | GitHub REST API      |
+| **External**     | 其他外部链接内容          | 直接抓取                 |
+
 
 **核心功能**：自动分类书签类型、多级缓存、增量/全量运行、t.co 短链解析、HTML 内容清理、回复抓取。
 
 ### 运行命令
 
-| 命令 | 说明 |
-|------|------|
-| `python3 bin/coordinator.py` | 增量运行 |
-| `python3 bin/coordinator.py --full` | 全量运行（忽略缓存） |
-| `python3 bin/coordinator.py --limit 10` | 仅处理前 10 条 |
-| `python3 bin/coordinator.py --deep-batch` | 批量深度报告，每条单独文件 |
-| `bash auto_run.sh` | 手动执行全流程（同步 + 生成 + 上传） |
+
+| 命令                                        | 说明                    |
+| ----------------------------------------- | --------------------- |
+| `python3 bin/coordinator.py`              | 增量运行                  |
+| `python3 bin/coordinator.py --full`       | 全量运行（忽略缓存）            |
+| `python3 bin/coordinator.py --limit 10`   | 仅处理前 10 条             |
+| `python3 bin/coordinator.py --deep-batch` | 批量深度报告，每条单独文件         |
+| `bash auto_run.sh`                        | 手动执行全流程（同步 + 生成 + 上传） |
+
 
 ---
 
@@ -102,3 +115,4 @@ BOOKMARKS_PATH=../twitter_data/bookmarks.json  # 书签文件路径
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) — 项目详细上下文
 - [WORKFLOW.md](./WORKFLOW.md) — 工作流规范
 - [BUGS.md](./BUGS.md) — Bug 跟踪
+
