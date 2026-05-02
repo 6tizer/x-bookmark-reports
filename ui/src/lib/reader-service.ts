@@ -15,9 +15,10 @@ import {
   logActivity,
   getBookmarkById,
 } from "./db";
+import { getRepoRoot, getUiPackageRoot } from "@/lib/repo-root";
 
-const UI_ROOT = path.resolve(process.cwd());
-const PARENT_DIR = path.resolve(UI_ROOT, "..");
+const PARENT_DIR = getRepoRoot();
+const UI_PKG = getUiPackageRoot();
 const REPORTS_DIR = path.join(PARENT_DIR, "reports");
 
 async function ensureReportsDir(): Promise<void> {
@@ -62,7 +63,7 @@ export async function readBookmark(
   }
 
   const child = spawn("python3", [scriptName, url], {
-    cwd: UI_ROOT,
+    cwd: UI_PKG,
     env: { ...process.env },
   });
 

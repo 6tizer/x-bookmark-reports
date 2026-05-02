@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { isDbEmpty, getReportById, updateReportContent } from "@/lib/db";
+import { getArticleById as getFsArticleById } from "@/lib/fs-data";
 import { getReportById as getMockReport, mockReports } from "@/db/mock";
 import { getLogger } from "@/lib/logger";
 import type { ApiResponse, Report, UpdateReportRequest } from "@/types/api";
@@ -15,22 +16,43 @@ interface RouteParams {
 
 const logger = getLogger("system");
 
+function fsArticleToReport(a: NonNullable<ReturnType<typeof getFsArticleById>>): Report {
+  return {
+    id: a.id,
+    bookmarkId: a.id,
+    type: "basic",
+    title: a.title,
+    content: a.content,
+    generatedAt: a.publishedAt,
+    wordCount: a.wordCount,
+    urlSummary: [],
+  };
+}
+
 // ── GET ─────────────────────────────────────
 export async function GET(
   _request: Request,
   { params }: RouteParams
 ): Promise<NextResponse<ApiResponse<Report>>> {
   try {
-    const { id } = params;
+    const rawId = params.id;
+    let id = rawId;
+    try {
+      id = decodeURIComponent(rawId);
+    } catch {
+      id = rawId;
+    }
 
     if (isDbEmpty()) {
+      const fsArt = getFsArticleById(id);
+      if (fsArt) return NextResponse.json({ success: true, data: fsArticleToReport(fsArt) });
       const mock = getMockReport(id);
       if (mock) return NextResponse.json({ success: true, data: mock });
       return NextResponse.json(
         {
           success: false,
           data: mockReports[0],
-          error: { code: "REPORT_NOT_FOUND", message: "Report not found in mock data" },
+          error: { code: "REPORT_NOT_FOUND", message: "Report not found" },
         },
         { status: 404 }
       );

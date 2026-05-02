@@ -7,9 +7,9 @@ import fs from "fs";
 import path from "path";
 import type { LogComponent, LogLevel } from "@/types/api";
 import { createLog, listLogs } from "./db";
+import { getUiPackageRoot } from "@/lib/repo-root";
 
-const UI_ROOT = path.resolve(process.cwd());
-const LOG_DIR = path.join(UI_ROOT, "data", "logs");
+const LOG_DIR = path.join(getUiPackageRoot(), "data", "logs");
 
 if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });

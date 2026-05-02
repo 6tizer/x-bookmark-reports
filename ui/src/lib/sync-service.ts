@@ -7,14 +7,15 @@ import { spawn, ChildProcess } from "child_process";
 import path from "path";
 import type { SyncMode, SyncStatus, PipelineStage } from "@/types/api";
 import { createSyncJob, updateSyncJob, createLog, logActivity } from "./db";
+import { getRepoRoot, getUiPackageRoot } from "@/lib/repo-root";
 
 type SyncProgressCallback = (event: {
   type: "progress" | "complete" | "error";
   payload: Record<string, unknown>;
 }) => void;
 
-const UI_ROOT = path.resolve(process.cwd());
-const PARENT_DIR = path.resolve(UI_ROOT, "..");
+const PARENT_DIR = getRepoRoot();
+const UI_PKG = getUiPackageRoot();
 
 // Active sync jobs in memory for SSE streaming
 const activeJobs = new Map<
@@ -57,7 +58,7 @@ export async function startSync(mode: SyncMode): Promise<{
 
   const args = mode === "full" ? ["--full"] : [];
   const child = spawn("bash", ["../sync_bookmarks.sh", ...args], {
-    cwd: UI_ROOT,
+    cwd: UI_PKG,
     env: { ...process.env },
   });
 

@@ -6,9 +6,9 @@
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
+import { getRepoRoot } from "@/lib/repo-root";
 
-const UI_ROOT = path.resolve(process.cwd());
-const ENV_PATH = path.join(UI_ROOT, "..", ".env.twitter");
+const ENV_PATH = path.join(getRepoRoot(), ".env.twitter");
 
 export interface RawEnvConfig {
   API_KEY?: string;
