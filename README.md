@@ -23,6 +23,8 @@ cd ui && npm install && npm run dev
 
 浏览器打开 `http://localhost:3001`（与本机 3000 上其他服务错开），6 个页面：
 
+若 Cursor 内置浏览器 **502 / 白屏**：`Cmd+Shift+P` → **Developer: Reload Window**；仍不行见 `ui/TROUBLESHOOTING.txt`，并在 `ui/` 执行 **`npm run dev:clean`**。
+
 
 | 页面        | 内容                                            |
 | --------- | --------------------------------------------- |
@@ -56,15 +58,25 @@ x-bookmark-reports/
 │   └── tailwind.config.ts
 ├── bin/
 │   ├── coordinator.py          # 主入口脚本（报告生成）
-│   └── upload_to_notion.py     # Notion 批量上传脚本
+│   ├── upload_to_notion.py     # Notion 批量上传脚本（草稿 + 成品）
+│   └── article_pipeline.py     # 成文管线 CLI（研究 + 改写）
 ├── lib/
 │   ├── article_client.py       # TwitterAPI.io Article API 客户端
 │   ├── quoted_client.py        # FxTwitter API 客户端
 │   ├── github_client.py        # GitHub API 客户端
 │   ├── external_client.py      # 外部链接抓取客户端
-│   └── report_builder.py       # Markdown 报告生成器
+│   ├── report_builder.py       # Markdown 报告生成器
+│   ├── config.py               # 配置（含 Article Pipeline LLM 配置）
+│   └── article_pipeline/       # 成文管线模块
+│       ├── state.py            # 管线状态管理
+│       ├── metadata.py         # 深度报告元数据解析
+│       ├── research.py         # x.ai + Exa 双路检索
+│       ├── rewrite.py          # DeepSeek 成文
+│       └── prompts/            # System prompt 模板
 ├── cache/                      # API 响应缓存
 ├── output/                     # 深度报告草稿 (.md)
+│   ├── article-final/          # 成品文章 (.md)
+│   └── article-research/       # 研究结果 (.json)
 └── .env                        # 环境配置（不提交）
 ```
 
@@ -95,6 +107,71 @@ x-bookmark-reports/
 | `python3 bin/coordinator.py --limit 10`   | 仅处理前 10 条             |
 | `python3 bin/coordinator.py --deep-batch` | 批量深度报告，每条单独文件         |
 | `bash auto_run.sh`                        | 手动执行全流程（同步 + 生成 + 上传） |
+
+
+---
+
+## Article Pipeline — 本地成文管线
+
+深度报告草稿经过 **研究搜索 + DeepSeek 成文** 转为成品文章，上传 Notion 时状态直接为「已发布」。
+
+### 前置条件
+
+在 `.env` 中配置以下 API Key：
+
+```bash
+DEEPSEEK_API_KEY=your_key     # 文章改写（DeepSeek，OpenAI 兼容）
+XAI_API_KEY=your_key          # 研究搜索（x.ai grok）
+# EXA_API_KEY=your_key        # 可选：Exa 补充搜索
+```
+
+### 运行命令
+
+```bash
+# 查看管线状态
+python3 bin/article_pipeline.py status
+
+# 处理单篇文章（完整流程：元数据 → 研究 → 成文）
+python3 bin/article_pipeline.py run-one --id <tweet_id>
+
+# 批量处理（跳过已完成）
+python3 bin/article_pipeline.py run-batch --resume
+
+# 只跑研究步骤
+python3 bin/article_pipeline.py research-only --id <tweet_id>
+
+# 只跑成文步骤（需要已有研究结果）
+python3 bin/article_pipeline.py write-only --id <tweet_id>
+```
+
+### 成品上传到 Notion
+
+```bash
+# 预览（dry-run）
+python3 bin/upload_to_notion.py --mode finished
+
+# 真实上传
+python3 bin/upload_to_notion.py --mode finished --live
+
+# 上传单篇
+python3 bin/upload_to_notion.py --mode finished --file output/article-final/<tweet_id>.md
+```
+
+### 产出目录
+
+| 目录 | 内容 |
+|------|------|
+| `output/article-final/` | 成品 Markdown 文件 |
+| `output/article-research/` | 研究搜索结果 JSON |
+| `output/.article-pipeline-state.json` | 管线状态（幂等、可续跑） |
+
+### 搜索供应商
+
+| 供应商 | 用途 | 模型 |
+|--------|------|------|
+| x.ai | Web + X 搜索（Responses API，server-side agentic） | `grok-4.3` |
+| Exa | 补充深度研究（可选） | `exa-research` |
+| DeepSeek | 文章改写 | `deepseek-chat` |
 
 
 ---
