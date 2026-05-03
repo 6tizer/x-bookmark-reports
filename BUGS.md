@@ -52,7 +52,7 @@
 | B031 | lib/report_builder.py              | `_clean_html_content` 与 external 重复                                                                    | LOW    | 2026-04-28 | 2026-04-28 | 使用公共 `html_to_text`，删除重复方法                              |
 | B032 | lib/external_client.py             | `_fetch` 内 3xx 分支死代码                                                                                   | LOW    | 2026-04-28 | 2026-04-28 | 移除成功响应路径上的 3xx 分支                                       |
 | B033 | lib/coordinator.py                 | 调用 `_unshorten` 私有方法                                                                                   | LOW    | 2026-04-28 | 2026-04-28 | `ExternalClient.unshorten()` 公开封装                       |
-| B034 | bin/upload_to_notion.py            | `.env` 解析不剥离引号                                                                                         | LOW    | 2026-04-28 | 2026-04-28 | strip 后去除成对引号                                           |
+| B035 | ui (Next dev) + Cursor | 系统 HTTP 代理导致 127.0.0.1:3001 走代理→502；损坏的 `.next` 导致 `Cannot find module './NNN.js'`→500 白屏 | MEDIUM | 2026-05-02 | 2026-05-02 | 工作区 `http.noProxy` + `NO_PROXY`；`npm run dev:clean`；`ui/TROUBLESHOOTING.txt` |
 
 
 ---

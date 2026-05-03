@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Optional
 
 import urllib.error
+import urllib.parse
 import urllib.request
+
+from html.parser import HTMLParser
 
 from lib.config import (
     CACHE_DIR,
@@ -37,13 +40,93 @@ class ExternalParseError(Exception):
     """Failed to parse external content."""
 
 
-def _html_to_text(html: str) -> str:
-    """Convert HTML string to plain text."""
-    text = re.sub(r'<br\s*/?>', '\n', html)
-    text = re.sub(r'</p>', '\n\n', text)
-    text = re.sub(r'<[^>]+>', '', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    return text.strip()
+def html_to_text(html: str) -> str:
+    """Convert HTML to plain text, stripping CSS/JS/script/style comments."""
+
+    if not html:
+        return ""
+
+    # 1. Strip all <style>...</style> blocks first (including inline).
+    #    This handles CSS that appears anywhere in the document tree.
+    #    Must handle multi-line and nested cases by stripping outermost first.
+    text = html
+    for _ in range(3):  # repeat to handle nested style tags
+        stripped, count = re.subn(
+            r'<style[^>]*>.*?</style>',
+            '',
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if count == 0:
+            break
+        text = stripped
+
+    # 2. Strip <script>...</script> blocks.
+    for _ in range(3):
+        stripped, count = re.subn(
+            r'<script[^>]*>.*?</script>',
+            '',
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if count == 0:
+            break
+        text = stripped
+
+    # 3. Strip HTML comments.
+    text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
+
+    # 4. Parse structural HTML for block-level elements.
+    class TextExtractor(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.text_parts: list[str] = []
+            self.skip_tags = {'script', 'style', 'head', 'noscript', 'iframe', 'textarea', 'select'}
+            self.skip_depth = 0
+            self._inline_skip = False  # true when inside a skipped tag
+
+        def handle_starttag(self, tag: str, attrs) -> None:
+            if tag in self.skip_tags:
+                self.skip_depth += 1
+                self._inline_skip = True
+            elif tag == 'br':
+                self.text_parts.append('\n')
+            elif tag == 'p':
+                self.text_parts.append('\n\n')
+
+        def handle_endtag(self, tag: str) -> None:
+            if tag in self.skip_tags:
+                self.skip_depth = max(0, self.skip_depth - 1)
+                if self.skip_depth == 0:
+                    self._inline_skip = False
+
+        def handle_data(self, data: str) -> None:
+            if not self._inline_skip:
+                text = data.strip()
+                if text:
+                    self.text_parts.append(text + ' ')
+
+        def get_text(self) -> str:
+            return ''.join(self.text_parts)
+
+    try:
+        parser = TextExtractor()
+        parser.feed(text)
+        result = parser.get_text()
+        result = re.sub(r' +', ' ', result)
+        result = re.sub(r'\n{3,}', '\n\n', result)
+        return result.strip()
+    except Exception:
+        # 5. Fallback regex path (still strip known CSS patterns first).
+        fallback = re.sub(r'<style[^>]*>.*?</style>', '', text,
+                          flags=re.IGNORECASE | re.DOTALL)
+        fallback = re.sub(r'<script[^>]*>.*?</script>', '', fallback,
+                          flags=re.IGNORECASE | re.DOTALL)
+        fallback = re.sub(r'<br\s*/?>', '\n', fallback)
+        fallback = re.sub(r'</p>', '\n\n', fallback)
+        fallback = re.sub(r'<[^>]+>', '', fallback)
+        fallback = re.sub(r'\n{3,}', '\n\n', fallback)
+        return fallback.strip()
 
 
 def _extract_title_and_description(html: str) -> tuple[str, str]:
@@ -80,6 +163,11 @@ def _extract_title_and_description(html: str) -> tuple[str, str]:
             description = desc_match.group(1).strip()
 
     return title, description
+
+
+MAX_REDIRECTS = 10
+# Cap HTML/binary read size to avoid OOM on huge responses
+MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 
 
 def _is_html_content(content_type: str) -> bool:
@@ -177,9 +265,9 @@ class ExternalClient:
         """
         Unshorten t.co shortlink to final URL.
 
-        Uses GET request with browser-like headers to follow redirects.
-        urllib automatically follows redirects, and resp.geturl() returns
-        the final URL after all redirects are resolved.
+        Tries HEAD first (no body download). If the server rejects HEAD
+        (403/405/501), retries once with GET for that attempt; urllib follows
+        redirects and ``geturl()`` returns the final URL.
 
         Args:
             url: Short URL (e.g., https://t.co/xxx).
@@ -190,29 +278,49 @@ class ExternalClient:
         if not url.startswith("https://t.co") and not url.startswith("http://t.co"):
             return url
 
+        def _open_follow(method: str) -> str:
+            req = urllib.request.Request(url, method=method)
+            req.add_header(
+                "User-Agent",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
+            opener = self._build_opener()
+            with opener.open(req, timeout=self._timeout) as resp:
+                return resp.geturl()
+
         last_err: Exception | None = None
         for attempt in range(self._max_retries):
             try:
-                req = urllib.request.Request(url)
-                req.add_header(
-                    "User-Agent",
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                )
-                opener = self._build_opener()
-                with opener.open(req, timeout=self._timeout) as resp:
-                    final_url = resp.geturl()
-                    if final_url and final_url != url:
-                        logger.debug(f"Unshortened {url} -> {final_url}")
-                        return final_url
-                    return url
+                final_url = _open_follow("HEAD")
+                if final_url and final_url != url:
+                    logger.debug("Unshortened %s -> %s", url, final_url)
+                    return final_url
+                return url
             except urllib.error.HTTPError as e:
                 last_err = e
+                if e.code in (403, 405, 501):
+                    try:
+                        final_url = _open_follow("GET")
+                        if final_url and final_url != url:
+                            logger.debug("Unshortened (GET) %s -> %s", url, final_url)
+                            return final_url
+                        return url
+                    except urllib.error.HTTPError as e2:
+                        last_err = e2
                 wait = (2**attempt) * self._backoff_factor
+                code = (
+                    last_err.code
+                    if isinstance(last_err, urllib.error.HTTPError)
+                    else 0
+                )
                 logger.warning(
                     "HTTP error %d unshortening %s, attempt %d, waiting %.1fs",
-                    e.code, url, attempt + 1, wait,
+                    code,
+                    url,
+                    attempt + 1,
+                    wait,
                 )
                 if attempt < self._max_retries - 1:
                     time.sleep(wait)
@@ -228,6 +336,10 @@ class ExternalClient:
 
         logger.warning(f"Failed to unshorten {url}, using as-is: {last_err}")
         return url
+
+    def unshorten(self, url: str) -> str:
+        """Unshorten a t.co shortlink to its final URL."""
+        return self._unshorten(url)
 
     def _fetch(self, url: str) -> dict:
         """
@@ -255,84 +367,114 @@ class ExternalClient:
             "Accept-Language": "en-US,en;q=0.5",
         }
 
+        current_url = url
+        redirect_hops = 0
         last_err: Exception | None = None
-        for attempt in range(self._max_retries):
-            try:
-                req = urllib.request.Request(url, headers=headers)
-                opener = self._build_opener()
 
-                with opener.open(req, timeout=self._timeout) as resp:
-                    content_type = resp.headers.get("Content-Type", "application/octet-stream")
-                    raw_content = resp.read()
+        while redirect_hops < MAX_REDIRECTS:
+            for attempt in range(self._max_retries):
+                try:
+                    req = urllib.request.Request(current_url, headers=headers)
+                    opener = self._build_opener()
 
-                    content_type_lower = content_type.lower().split(";")[0].strip()
+                    with opener.open(req, timeout=self._timeout) as resp:
+                        content_type = resp.headers.get(
+                            "Content-Type", "application/octet-stream"
+                        )
+                        raw_content = resp.read(MAX_RESPONSE_BYTES)
 
-                    if not _is_html_content(content_type):
+                        content_type_lower = content_type.lower().split(";")[0].strip()
+
+                        if not _is_html_content(content_type):
+                            return {
+                                "original_url": url,
+                                "final_url": current_url,
+                                "content": "",
+                                "content_type": content_type_lower,
+                                "title": "",
+                                "description": "",
+                                "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            }
+
+                        try:
+                            html = raw_content.decode("utf-8", errors="replace")
+                        except UnicodeDecodeError:
+                            try:
+                                html = raw_content.decode("latin-1", errors="replace")
+                            except Exception as e:
+                                raise ExternalParseError(
+                                    f"Failed to decode content: {e}"
+                                ) from e
+
+                        title, description = _extract_title_and_description(html)
+
+                        body_text = html_to_text(html)
+
                         return {
                             "original_url": url,
-                            "final_url": url,
-                            "content": "",
+                            "final_url": current_url,
+                            "content": body_text,
                             "content_type": content_type_lower,
-                            "title": "",
-                            "description": "",
+                            "title": title,
+                            "description": description,
                             "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
                         }
 
-                    try:
-                        html = raw_content.decode("utf-8", errors="replace")
-                    except UnicodeDecodeError:
-                        try:
-                            html = raw_content.decode("latin-1", errors="replace")
-                        except Exception as e:
-                            raise ExternalParseError(f"Failed to decode content: {e}") from e
+                except urllib.error.HTTPError as e:
+                    if 300 <= e.code < 400:
+                        location = e.headers.get("Location")
+                        if location:
+                            current_url = urllib.parse.urljoin(
+                                current_url, location
+                            )
+                            redirect_hops += 1
+                            break
+                        raise ExternalURLError(
+                            f"HTTP {e.code} redirect without Location header"
+                        ) from e
 
-                    title, description = _extract_title_and_description(html)
+                    last_err = e
+                    if 400 <= e.code < 500 and e.code != 429:
+                        raise ExternalURLError(
+                            f"HTTP {e.code}: {e.reason}"
+                        ) from e
+                    wait = (2**attempt) * self._backoff_factor
+                    logger.warning(
+                        "HTTP error %d for %s, attempt %d, waiting %.1fs",
+                        e.code,
+                        current_url,
+                        attempt + 1,
+                        wait,
+                    )
+                    if attempt < self._max_retries - 1:
+                        time.sleep(wait)
+                    else:
+                        raise ExternalURLError(
+                            f"HTTP {e.code} after {self._max_retries} attempts"
+                        ) from e
 
-                    body_text = _html_to_text(html)
-                    body_text = body_text[:500] if len(body_text) > 500 else body_text
-
-                    return {
-                        "original_url": url,
-                        "final_url": url,
-                        "content": body_text,
-                        "content_type": content_type_lower,
-                        "title": title,
-                        "description": description,
-                        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    }
-
-            except urllib.error.HTTPError as e:
-                last_err = e
-                if 400 <= e.code < 500 and e.code != 429:
-                    raise ExternalURLError(f"HTTP {e.code}: {e.reason}") from e
-                wait = (2**attempt) * self._backoff_factor
-                logger.warning(
-                    "HTTP error %d for %s, attempt %d, waiting %.1fs",
-                    e.code,
-                    url,
-                    attempt + 1,
-                    wait,
-                )
-                if attempt < self._max_retries - 1:
-                    time.sleep(wait)
-            except (urllib.error.URLError, TimeoutError) as e:
-                last_err = e
-                wait = (2**attempt) * self._backoff_factor
-                logger.warning(
-                    "Request failed for %s, attempt %d, waiting %.1fs: %s",
-                    url,
-                    attempt + 1,
-                    wait,
-                    e,
-                )
-                if attempt < self._max_retries - 1:
-                    time.sleep(wait)
+                except (urllib.error.URLError, TimeoutError) as e:
+                    last_err = e
+                    wait = (2**attempt) * self._backoff_factor
+                    logger.warning(
+                        "Request failed for %s, attempt %d, waiting %.1fs: %s",
+                        current_url,
+                        attempt + 1,
+                        wait,
+                        e,
+                    )
+                    if attempt < self._max_retries - 1:
+                        time.sleep(wait)
+                    else:
+                        raise ExternalURLError(
+                            f"Failed after {self._max_retries} attempts"
+                        ) from e
 
         raise ExternalURLError(
-            f"Failed after {self._max_retries} attempts: {last_err}"
+            f"Too many redirects (> {MAX_REDIRECTS}) for {url}"
         ) from last_err
 
-    def get_content(self, url: str) -> dict:
+    def get_content(self, url: str, *, skip_cache: bool = False) -> dict:
         """
         Get external content for a URL.
 
@@ -340,12 +482,13 @@ class ExternalClient:
 
         Args:
             url: The original URL (may be a t.co shortlink).
+            skip_cache: If True, bypass cache read/write for this request.
 
         Returns:
             Dict with keys:
                 - original_url: The original URL provided
                 - final_url: The resolved URL (after unshortening)
-                - content: Extracted text content (first 500 chars)
+                - content: Extracted plain text from HTML (full; report may truncate)
                 - content_type: MIME type (e.g., "text/html")
                 - title: Page title (if HTML)
                 - description: Meta description (if HTML)
@@ -355,10 +498,11 @@ class ExternalClient:
             ExternalURLError: If fetch fails.
             ExternalParseError: If parsing fails.
         """
-        cached = self._get_cached(url)
-        if cached is not None:
-            logger.info(f"External URL cache hit: {url}")
-            return cached
+        if not skip_cache:
+            cached = self._get_cached(url)
+            if cached is not None:
+                logger.info(f"External URL cache hit: {url}")
+                return cached
 
         final_url = self._unshorten(url)
         data = self._fetch(final_url)
@@ -366,5 +510,6 @@ class ExternalClient:
         if url != final_url:
             data["original_url"] = url
 
-        self._set_cached(url, data)
+        if not skip_cache:
+            self._set_cached(url, data)
         return data

@@ -149,6 +149,7 @@ class ArticleClient:
     def _set_cached(self, article: Article) -> None:
         """Save article to cache."""
         cache_path = self._cache_path(article.id)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump(article.to_dict(), f, ensure_ascii=False, indent=2)
@@ -174,19 +175,22 @@ class ArticleClient:
                 else:
                     opener = urllib.request.build_opener()
                 with opener.open(req, timeout=self._timeout) as resp:
-                    data = json.loads(resp.read().decode())
-                    # TwitterAPI.io returns either {"result": {...}} or {"article": {...}}
-                    if "result" in data:
-                        return self._parse_article(data["result"])
-                    elif "article" in data and data["article"]:
-                        return self._parse_article(data["article"])
-                    elif data.get("status") == "failed":
-                        msg = data.get("msg", "unknown error")
+                    raw = resp.read().decode()
+                    data = json.loads(raw)
+                    # TwitterAPI.io returns {"status": "success"/"failed", "article": {...}} per OpenAPI spec.
+                    # Check "failed" status first (covers article=null case too).
+                    if data.get("status") == "failed":
+                        msg = data.get("msg") or data.get("message", "unknown error")
                         if "not found" in msg.lower():
                             raise ArticleNotFound(f"Article not found: {article_id}")
                         raise ArticleAPIError(f"API error: {msg}")
-                    else:
-                        raise ArticleAPIError(f"Unexpected response: {data}")
+                    # Success path: article object must be present and non-null.
+                    if data.get("article"):
+                        return self._parse_article(data["article"], article_id)
+                    # Legacy compatibility: old APIs may still use "result".
+                    if "result" in data:
+                        return self._parse_article(data["result"], article_id)
+                    raise ArticleAPIError(f"Unexpected response: {data}")
             except urllib.error.HTTPError as e:
                 last_err = e
                 if e.code == 429:
@@ -222,27 +226,138 @@ class ArticleClient:
                 )
                 if attempt < self._max_retries - 1:
                     time.sleep(wait)
+            except json.JSONDecodeError as e:
+                last_err = e
+                wait = (2**attempt) * self._backoff_factor
+                logger.warning(
+                    "JSON decode error, attempt %d, waiting %.1fs: %s",
+                    attempt + 1,
+                    wait,
+                    e,
+                )
+                if attempt < self._max_retries - 1:
+                    time.sleep(wait)
 
         raise RuntimeError(
             f"Failed after {self._max_retries} attempts"
         ) from last_err
 
-    def _parse_article(self, data: dict) -> Article:
-        """Parse article data from API response."""
-        try:
-            article_id = data["id"]
-        except KeyError:
-            raise ArticleParseError("Missing 'id' field in article response")
+    def _parse_article(self, data: dict, tweet_id: str) -> Article:
+        """Parse article data from API response.
+
+        Args:
+            data: Article object from the API response.
+            tweet_id: Tweet ID used for the API call (fallback for missing id).
+        """
+        article_id = data.get("id") or tweet_id
 
         title = data.get("title", "")
 
-        content_html = data.get("content", "")
-        content_text = _html_to_text(content_html)
+        # Build plain text from contents array (OpenAPI spec).
+        # Each block has a type (unstyled/header-one/markdown/image/gif/divider)
+        # and may have text/url fields.
+        contents = data.get("contents", [])
+        content_parts: list[str] = []
+        ordered_list_counter: int = 0
+        for block in contents:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type", "")
+            # Reset ordered list counter on non-list blocks
+            if block_type != "ordered-list-item":
+                ordered_list_counter = 0
 
+            if block_type in ("unstyled", "paragraph"):
+                text = block.get("text", "").strip()
+                if text:
+                    content_parts.append(text)
+            elif block_type == "header-one":
+                heading = block.get("text", "").strip()
+                if heading:
+                    content_parts.append(f"# {heading}")
+            elif block_type == "header-two":
+                heading = block.get("text", "").strip()
+                if heading:
+                    content_parts.append(f"## {heading}")
+            elif block_type == "header-three":
+                heading = block.get("text", "").strip()
+                if heading:
+                    content_parts.append(f"### {heading}")
+            elif block_type == "header-four":
+                heading = block.get("text", "").strip()
+                if heading:
+                    content_parts.append(f"#### {heading}")
+            elif block_type == "header-five":
+                heading = block.get("text", "").strip()
+                if heading:
+                    content_parts.append(f"##### {heading}")
+            elif block_type == "header-six":
+                heading = block.get("text", "").strip()
+                if heading:
+                    content_parts.append(f"###### {heading}")
+            elif block_type in ("markdown",):
+                text = block.get("text", "").strip()
+                if text:
+                    content_parts.append(text)
+            elif block_type == "unordered-list-item":
+                text = block.get("text", "").strip()
+                if text:
+                    depth = int(block.get("depth") or 0)
+                    indent = "  " * depth
+                    content_parts.append(f"{indent}- {text}")
+            elif block_type == "ordered-list-item":
+                text = block.get("text", "").strip()
+                if text:
+                    ordered_list_counter += 1
+                    depth = int(block.get("depth") or 0)
+                    indent = "  " * depth
+                    content_parts.append(f"{indent}{ordered_list_counter}. {text}")
+            elif block_type == "blockquote":
+                text = block.get("text", "").strip()
+                if text:
+                    content_parts.append(f"> {text}")
+            elif block_type == "code-block":
+                text = block.get("text", "").strip()
+                if text:
+                    content_parts.append(f"```\n{text}\n```")
+            elif block_type == "image":
+                url = block.get("url", "")
+                if url:
+                    content_parts.append(f"[Image: {url}]")
+            elif block_type == "gif":
+                url = block.get("url", "")
+                if url:
+                    content_parts.append(f"[GIF: {url}]")
+            elif block_type == "video":
+                url = block.get("url", "")
+                if url:
+                    content_parts.append(f"[Video: {url}]")
+            elif block_type == "divider":
+                content_parts.append("---")
+            else:
+                # Unknown block type — capture any text to prevent silent data loss
+                text = block.get("text", "").strip()
+                if text:
+                    logger.debug("Unknown article block type %r, capturing text", block_type)
+                    content_parts.append(text)
+                elif block.get("url"):
+                    content_parts.append(f"[{block_type}: {block['url']}]")
+        content_text = "\n\n".join(content_parts)
+        if not content_text:
+            # Fallback: legacy HTML content field (old API format)
+            content_html = data.get("content", "")
+            content_text = _html_to_text(content_html)
+
+        # OpenAPI author fields: userName, name, profilePicture, id, url
         author_data = data.get("author", {})
-        author_username = author_data.get("userName", "unknown")
-        author_name = author_data.get("displayName", "Unknown")
-        author_avatar = author_data.get("avatarUrl", "")
+        if isinstance(author_data, dict):
+            author_username = author_data.get("userName", "unknown")
+            author_name = author_data.get("name", author_data.get("displayName", "Unknown"))
+            author_avatar = author_data.get("profilePicture", author_data.get("avatarUrl", ""))
+        else:
+            author_username = "unknown"
+            author_name = "Unknown"
+            author_avatar = ""
 
         url = data.get("url", "")
 
@@ -252,15 +367,16 @@ class ArticleClient:
             if source not in ("twitter", "x"):
                 source = "twitter"
 
-        cover_image = data.get("coverImageUrl")
-        cover_width = data.get("coverImageWidth")
-        cover_height = data.get("coverImageHeight")
+        # OpenAPI: cover_media_img_url
+        cover_image = data.get("cover_media_img_url") or data.get("coverImageUrl")
+        # Width/height not in OpenAPI spec; preserve None per spec.
+        cover_width: Optional[int] = None
+        cover_height: Optional[int] = None
 
         lang = data.get("lang", "en")
 
-        published_at = data.get("publishedAt")
-        if not published_at:
-            published_at = data.get("bookmarkedAt")
+        # OpenAPI: createdAt
+        published_at = data.get("createdAt") or data.get("publishedAt") or data.get("bookmarkedAt")
         if not published_at:
             published_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -283,12 +399,13 @@ class ArticleClient:
             source=source,
         )
 
-    def get(self, url_or_id: str) -> Article:
+    def get(self, url_or_id: str, *, skip_cache: bool = False) -> Article:
         """
         Get article from URL or article ID.
 
         Args:
             url_or_id: URL like https://x.com/i/articles/{id} or just the article ID.
+            skip_cache: If True, bypass cache read/write for this request.
 
         Returns:
             Article object.
@@ -299,17 +416,19 @@ class ArticleClient:
             ValueError: If article ID cannot be extracted.
         """
         article_id = self._extract_article_id(url_or_id)
-        cached = self._get_cached(article_id)
-        if cached is not None:
-            logger.info(f"Article {article_id} cache hit")
-            return cached
+        if not skip_cache:
+            cached = self._get_cached(article_id)
+            if cached is not None:
+                logger.info(f"Article {article_id} cache hit")
+                return cached
         article = self._fetch(article_id)
-        self._set_cached(article)
+        if not skip_cache:
+            self._set_cached(article)
         return article
 
     def _extract_article_id(self, url_or_id: str) -> str:
         """Extract article ID from URL or return as-is if already an ID."""
-        m = re.search(r'/i/articles/([^/?#]+)', url_or_id)
+        m = re.search(r'/i/articles?/([^/?#]+)', url_or_id)
         if m:
             return m.group(1)
         # Assume it's a bare article ID (may contain letters, numbers, hyphens)

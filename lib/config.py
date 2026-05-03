@@ -51,8 +51,19 @@ def _optional_env(key: str, default: str) -> str:
     return value
 
 
-# Twitter Auth API (original from .env.twitter)
-API_KEY = _require_env("API_KEY")
+_gh_username_cache: str | None = None
+
+
+def get_gh_username() -> str:
+    """Get GitHub username with lazy evaluation and caching."""
+    global _gh_username_cache
+    if _gh_username_cache is None:
+        _gh_username_cache = _get_gh_username()
+    return _gh_username_cache
+
+
+# Twitter Auth API (original from .env.twitter; optional for Python reports)
+API_KEY = _optional_env("API_KEY", "")
 PROXY = _optional_env("PROXY", "")
 
 # TwitterAPI.io API Configuration
@@ -62,9 +73,9 @@ TWITTER_API_BASE_URL = _optional_env(
     "https://api.twitterapi.io"
 )
 
-# GitHub Configuration
-GITHUB_OWNER = _require_env("GITHUB_OWNER")
-GITHUB_REPO = _require_env("GITHUB_REPO")
+# GitHub Configuration (optional metadata; GitHubClient resolves owner/repo from URLs)
+GITHUB_OWNER = _optional_env("GITHUB_OWNER", "")
+GITHUB_REPO = _optional_env("GITHUB_REPO", "")
 GITHUB_BRANCH = _optional_env("GITHUB_BRANCH", "main")
 
 # URL Type Routing Rules
@@ -87,7 +98,7 @@ CACHE_DIR = PROJECT_ROOT / "cache"
 # Report Configuration
 REPORT: dict[str, str] = {
     "title": "Twitter Bookmark Report",
-    "author": _get_gh_username(),
+    "author": "",
     "date_format": "%Y-%m-%d",
 }
 
@@ -107,7 +118,7 @@ FXTWITTER_FIELDS = [
 # Request Retry Configuration
 REQUEST_MAX_RETRIES = 3
 REQUEST_BACKOFF_FACTOR = 1.5
-REQUEST_TIMEOUT = 15
+REQUEST_TIMEOUT = 30
 
 # Logging Configuration
 LOG_LEVEL = "INFO"
@@ -171,7 +182,10 @@ def get_config() -> dict[str, dict[str, str | int]]:
             "ttl": CACHE_TTL,
             "dir": str(CACHE_DIR),
         },
-        "report": REPORT,
+        "report": {
+            **REPORT,
+            "author": get_gh_username(),
+        },
         "fxtwitter": {
             "base_url": FXTWITTER_BASE_URL,
             "fields": FXTWITTER_FIELDS,
@@ -190,3 +204,27 @@ def get_config() -> dict[str, dict[str, str | int]]:
             "patterns": URL_PATTERNS,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Article Pipeline Configuration (LLM / Search / Output dirs)
+# ---------------------------------------------------------------------------
+
+# DeepSeek — article rewrite (OpenAI-compatible)
+DEEPSEEK_API_KEY = _optional_env("DEEPSEEK_API_KEY", "")
+DEEPSEEK_BASE_URL = _optional_env("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+DEEPSEEK_MODEL = _optional_env("DEEPSEEK_MODEL", "deepseek-chat")
+
+# x.ai — research search (OpenAI Responses API + web_search / x_search)
+XAI_API_KEY = _optional_env("XAI_API_KEY", "")
+XAI_BASE_URL = _optional_env("XAI_BASE_URL", "https://api.x.ai/v1")
+XAI_MODEL = _optional_env("XAI_MODEL", "grok-4.3")
+
+# Exa — supplementary research (OpenAI-compatible)
+EXA_API_KEY = _optional_env("EXA_API_KEY", "")
+EXA_BASE_URL = _optional_env("EXA_BASE_URL", "https://api.exa.ai")
+
+# Article pipeline output directories
+ARTICLE_FINAL_DIR = PROJECT_ROOT / _optional_env("ARTICLE_FINAL_DIR", "output/article-final")
+ARTICLE_RESEARCH_DIR = PROJECT_ROOT / "output/article-research"
+ARTICLE_PIPELINE_STATE = PROJECT_ROOT / "output" / ".article-pipeline-state.json"

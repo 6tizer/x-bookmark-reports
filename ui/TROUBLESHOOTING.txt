@@ -1,0 +1,16 @@
+x-bookmark-reports UI — quick fixes
+====================================
+
+1) Cursor Simple Browser: 502 Bad Gateway
+   - Cause: HTTP proxy sends 127.0.0.1 through the proxy.
+   - Fix: Reload Cursor after opening this repo (uses .vscode/settings.json http.noProxy).
+   - Or open http://<your-LAN-IP>:3001 instead of 127.0.0.1 (printed when you start the server).
+   - Or add 127.0.0.1/localhost to your proxy app bypass list (Clash / system proxy).
+
+2) White screen / 500 / "Cannot find module './123.js'"
+   - Cause: corrupted Next.js dev cache (.next).
+   - Fix: cd ui && npm run dev:clean
+   - In Cursor: Run Task → "Start Next.js Dashboard (clean .next + dev)".
+
+3) Port
+   - Default is 3001 (not 3000).

@@ -16,6 +16,7 @@ from lib.config import (
     CACHE_DIR,
     CACHE_TTL,
     FXTWITTER_BASE_URL,
+    PROXY,
     REQUEST_BACKOFF_FACTOR,
     REQUEST_MAX_RETRIES,
     REQUEST_TIMEOUT,
@@ -75,7 +76,7 @@ class QuotedTweet:
         """Create QuotedTweet from dict."""
         return cls(
             id=data["id"],
-            full_text=data["full_text"],
+            full_text=data.get("full_text") or "",
             author_name=data["author_name"],
             author_username=data["author_username"],
             created_at=data["created_at"],
@@ -100,6 +101,7 @@ class QuotedClient:
         self._max_retries = REQUEST_MAX_RETRIES
         self._backoff_factor = REQUEST_BACKOFF_FACTOR
         self._timeout = REQUEST_TIMEOUT
+        self.proxy = PROXY
         self._ensure_cache_dir()
 
     def _ensure_cache_dir(self) -> None:
@@ -147,7 +149,11 @@ class QuotedClient:
         for attempt in range(self._max_retries):
             try:
                 req = urllib.request.Request(url)
-                opener = urllib.request.build_opener()
+                if self.proxy:
+                    proxy_handler = urllib.request.ProxyHandler({"http": self.proxy, "https": self.proxy})
+                    opener = urllib.request.build_opener(proxy_handler)
+                else:
+                    opener = urllib.request.build_opener()
                 with opener.open(req, timeout=self._timeout) as resp:
                     data = json.loads(resp.read().decode())
                     return self._parse_tweet(data)
@@ -258,12 +264,13 @@ class QuotedClient:
             lang=lang,
         )
 
-    def get(self, tweet_id: str) -> QuotedTweet:
+    def get(self, tweet_id: str, *, skip_cache: bool = False) -> QuotedTweet:
         """
         Get tweet by ID.
 
         Args:
             tweet_id: The tweet ID.
+            skip_cache: If True, bypass cache read/write for this request.
 
         Returns:
             QuotedTweet object.
@@ -272,10 +279,12 @@ class QuotedClient:
             TweetNotFound: If tweet does not exist.
             TweetAPIError: If API returns an error.
         """
-        cached = self._get_cached(tweet_id)
-        if cached is not None:
-            logger.info(f"Tweet {tweet_id} cache hit")
-            return cached
+        if not skip_cache:
+            cached = self._get_cached(tweet_id)
+            if cached is not None:
+                logger.info(f"Tweet {tweet_id} cache hit")
+                return cached
         tweet = self._fetch(tweet_id)
-        self._set_cached(tweet)
+        if not skip_cache:
+            self._set_cached(tweet)
         return tweet
