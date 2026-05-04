@@ -5,7 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { isDbEmpty, getArticleById, updateArticle, createArticleVersion } from "@/lib/db";
-import { getArticleById as getFsArticleById } from "@/lib/fs-data";
+import { getArticleById as getFsArticleById, saveArticleFinalMarkdown } from "@/lib/fs-data";
 import { getArticleById as getMockArticle, mockArticles } from "@/db/mock";
 import { getLogger } from "@/lib/logger";
 import type { ApiResponse, Article, UpdateArticleRequest } from "@/types/api";
@@ -24,9 +24,15 @@ function fsArticleToApi(a: NonNullable<ReturnType<typeof getFsArticleById>>): Ar
     status: a.status,
     createdAt: a.publishedAt,
     updatedAt: a.publishedAt,
-    publishedAt: a.status === "published" ? a.publishedAt : undefined,
-    tags: [],
+    publishedAt:
+      a.status === "written" || a.status === "uploaded" ? a.publishedAt : undefined,
+    tags: a.tags,
     wordCount: a.wordCount,
+    author: a.author,
+    sourceUrl: a.sourceUrl,
+    notionIcon: a.notionIcon,
+    generatedAt: a.generatedAt,
+    lastError: a.lastError,
   };
 }
 
@@ -91,21 +97,32 @@ export async function PUT(
     if (isDbEmpty()) {
       const fsArt = getFsArticleById(id);
       if (fsArt) {
-        const content = body.content ?? fsArt.content;
-        const nextStatus =
-          body.status === "draft" || body.status === "published"
-            ? body.status
-            : fsArt.status;
+        const content = body.content !== undefined ? body.content : fsArt.content;
+        const nextStatus = body.status ?? fsArt.status;
+        const title = body.title ?? fsArt.title;
+        const tags = body.tags ?? fsArt.tags;
+
+        if (body.content !== undefined) {
+          saveArticleFinalMarkdown(id, content);
+        }
+
+        const refreshed = getFsArticleById(id) ?? fsArt;
         const merged: typeof fsArt = {
-          ...fsArt,
-          title: body.title ?? fsArt.title,
+          ...refreshed,
+          title,
           content,
-          status: nextStatus,
+          status: nextStatus as typeof fsArt.status,
+          tags,
           wordCount: content.split(/\s+/).filter(Boolean).length,
         };
+
+        const api = fsArticleToApi(merged);
         return NextResponse.json({
           success: true,
-          data: fsArticleToApi(merged),
+          data: {
+            ...api,
+            updatedAt: new Date().toISOString(),
+          },
         });
       }
       const mock = getMockArticle(id);

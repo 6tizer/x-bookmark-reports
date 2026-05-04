@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** `articles` is wired to `DashboardStats.articlesWritten` (output/article-final count). */
 export interface SidebarCounts {
   bookmarks?: number;
   articles?: number;

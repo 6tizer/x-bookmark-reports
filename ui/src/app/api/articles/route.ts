@@ -23,7 +23,7 @@ export async function GET(
     const search = searchParams.get("search") ?? undefined;
 
     if (isDbEmpty()) {
-      const fsResult = listFsArticles(page, limit, status);
+      const fsResult = listFsArticles(page, limit, status, search);
 
       const items: Article[] = fsResult.items.map((a) => ({
         id: a.id,
@@ -32,24 +32,21 @@ export async function GET(
         status: a.status,
         createdAt: a.publishedAt,
         updatedAt: a.publishedAt,
-        publishedAt: a.status === "published" ? a.publishedAt : undefined,
-        tags: [],
+        publishedAt:
+          a.status === "written" || a.status === "uploaded" ? a.publishedAt : undefined,
+        tags: a.tags,
         wordCount: a.wordCount,
+        author: a.author,
+        sourceUrl: a.sourceUrl,
+        notionIcon: a.notionIcon,
+        generatedAt: a.generatedAt,
+        lastError: a.lastError,
       }));
-
-      let filtered = items;
-      if (search) {
-        const s = search.toLowerCase();
-        filtered = filtered.filter(
-          (x) =>
-            x.title.toLowerCase().includes(s) || x.content.toLowerCase().includes(s)
-        );
-      }
 
       return NextResponse.json({
         success: true,
         data: {
-          items: filtered,
+          items,
           total: fsResult.total,
           page,
           limit,

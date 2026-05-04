@@ -1,18 +1,49 @@
 "use client";
 
 /**
- * Articles page — Hermes articles list
+ * Articles — deep drafts + article pipeline state (output/article-final)
  */
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ClientLayout } from "@/components/layout/ClientLayout";
-import { getArticles } from "@/lib/api";
+import { getArticles, triggerPipelineRun, triggerPipelineBatch } from "@/lib/api";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Newspaper, Clock, Search, RefreshCw, PenLine } from "lucide-react";
+import { Newspaper, Clock, Search, RefreshCw, PenLine, Play, Layers } from "lucide-react";
 import type { Article, ArticleStatus, PaginatedResponse } from "@/types/api";
 
-const FS_STATUSES: ArticleStatus[] = ["draft", "published"];
+const PIPELINE_FILTER_STATUSES: ArticleStatus[] = [
+  "draft",
+  "metadata_done",
+  "researched",
+  "written",
+  "uploaded",
+  "failed",
+];
+
+const MODEL_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Default (env)" },
+  { value: "deepseek-chat", label: "DeepSeek Chat" },
+  { value: "deepseek-reasoner", label: "DeepSeek Reasoner" },
+  { value: "grok-2-latest", label: "xAI Grok" },
+];
+
+const PIPELINE_MODEL_STORAGE = "articlePipelineModel";
+
+function statusLabel(s: ArticleStatus): string {
+  const map: Partial<Record<ArticleStatus, string>> = {
+    draft: "Draft",
+    metadata_done: "Metadata",
+    researched: "Researched",
+    written: "Written",
+    uploaded: "Uploaded",
+    failed: "Failed",
+    editing: "Editing",
+    reviewing: "Reviewing",
+    published: "Published",
+  };
+  return map[s] ?? s.replace(/_/g, " ");
+}
 
 export default function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -20,6 +51,28 @@ export default function ArticlesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ArticleStatus | undefined>(undefined);
+  const [pipelineModel, setPipelineModel] = useState("");
+  const [runBusyId, setRunBusyId] = useState<string | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(PIPELINE_MODEL_STORAGE);
+      if (v !== null) setPipelineModel(v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const persistModel = (v: string) => {
+    setPipelineModel(v);
+    try {
+      localStorage.setItem(PIPELINE_MODEL_STORAGE, v);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const fetchData = useCallback(async (status?: ArticleStatus, s?: string) => {
     setIsLoading(true);
@@ -38,9 +91,48 @@ export default function ArticlesPage() {
 
   const statusColors: Record<ArticleStatus, string> = {
     draft: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+    metadata_done: "bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300",
+    researched: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
+    written: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+    uploaded: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
+    failed: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
     editing: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
     reviewing: "bg-yellow-50 text-yellow-600 dark:bg-yellow-950 dark:text-yellow-400",
     published: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400",
+  };
+
+  const onRunOne = async (e: React.MouseEvent, article: Article) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRunBusyId(article.id);
+    setToast(null);
+    try {
+      await triggerPipelineRun({
+        tweetId: article.id,
+        model: pipelineModel || undefined,
+      });
+      setToast(`Pipeline started for ${article.id.slice(0, 12)}…`);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Failed to start pipeline");
+    } finally {
+      setRunBusyId(null);
+    }
+  };
+
+  const onRunBatch = async () => {
+    setBatchBusy(true);
+    setToast(null);
+    try {
+      await triggerPipelineBatch({
+        model: pipelineModel || undefined,
+        resume: true,
+      });
+      setToast("Batch pipeline started");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Failed to start batch");
+    } finally {
+      setBatchBusy(false);
+    }
   };
 
   return (
@@ -50,11 +142,11 @@ export default function ArticlesPage() {
           <div>
             <h1 className="text-xl font-bold text-foreground">Articles</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {`${total} article${total === 1 ? "" : "s"}`}
+              {`${total} article${total === 1 ? "" : "s"} (deep drafts + pipeline)`}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1">
               <input
                 type="text"
@@ -82,13 +174,36 @@ export default function ArticlesPage() {
               }}
               className="h-8 rounded-md border border-border bg-muted px-2 text-sm outline-none"
             >
-              <option value="">All Status</option>
-              {FS_STATUSES.map((st) => (
+              <option value="">All pipeline status</option>
+              {PIPELINE_FILTER_STATUSES.map((st) => (
                 <option key={st} value={st}>
-                  {st.charAt(0).toUpperCase() + st.slice(1)}
+                  {statusLabel(st)}
                 </option>
               ))}
             </select>
+
+            <select
+              value={pipelineModel}
+              onChange={(e) => persistModel(e.target.value)}
+              title="Rewrite model for article_pipeline.py"
+              className="h-8 rounded-md border border-border bg-muted px-2 text-xs outline-none max-w-[140px]"
+            >
+              {MODEL_OPTIONS.map((o) => (
+                <option key={o.value || "default"} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              disabled={batchBusy}
+              onClick={() => void onRunBatch()}
+              className="flex h-8 items-center gap-1 rounded-md border border-border bg-muted px-2 text-xs font-medium hover:bg-muted/80 disabled:opacity-50"
+            >
+              <Layers size={14} />
+              {batchBusy ? "Starting…" : "Batch run"}
+            </button>
 
             <button
               type="button"
@@ -99,6 +214,12 @@ export default function ArticlesPage() {
             </button>
           </div>
         </div>
+
+        {toast && (
+          <p className="text-xs text-muted-foreground rounded-md border border-border bg-card px-3 py-2">
+            {toast}
+          </p>
+        )}
 
         {isLoading ? (
           <div className="space-y-3">
@@ -123,34 +244,51 @@ export default function ArticlesPage() {
         ) : (
           <div className="space-y-3">
             {articles.map((article) => (
-              <Link
+              <div
                 key={article.id}
-                href={`/articles/${article.id}`}
-                className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:shadow-sm hover:border-twitter-blue/30 transition-all"
+                className="group flex items-center gap-3 rounded-lg border border-border bg-card p-4 hover:shadow-sm hover:border-twitter-blue/30 transition-all"
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                  <PenLine size={18} className="text-twitter-blue" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-medium text-foreground truncate group-hover:text-twitter-blue transition-colors">
-                      {article.title}
-                    </h3>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${statusColors[article.status]}`}
-                    >
-                      {article.status}
-                    </span>
+                <Link
+                  href={`/articles/${article.id}`}
+                  className="flex flex-1 min-w-0 items-center gap-3"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                    <PenLine size={18} className="text-twitter-blue" />
                   </div>
-                  <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-                    <span className="flex items-center gap-0.5">
-                      <Clock size={11} />
-                      {new Date(article.updatedAt).toLocaleDateString()}
-                    </span>
-                    <span>{article.wordCount.toLocaleString()} words</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-medium text-foreground truncate group-hover:text-twitter-blue transition-colors">
+                        {article.title}
+                      </h3>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap ${statusColors[article.status]}`}
+                      >
+                        {statusLabel(article.status)}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-0.5">
+                        <Clock size={11} />
+                        {new Date(article.updatedAt).toLocaleDateString()}
+                      </span>
+                      <span>{article.wordCount.toLocaleString()} words</span>
+                      <span className="font-mono text-[10px] opacity-70 truncate max-w-[120px]">
+                        {article.id}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </Link>
+                </Link>
+                <button
+                  type="button"
+                  title="Run article pipeline for this tweet"
+                  disabled={runBusyId === article.id}
+                  onClick={(e) => void onRunOne(e, article)}
+                  className="shrink-0 flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted disabled:opacity-50"
+                >
+                  <Play size={12} />
+                  {runBusyId === article.id ? "…" : "Run"}
+                </button>
+              </div>
             ))}
           </div>
         )}

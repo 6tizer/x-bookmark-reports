@@ -7,6 +7,8 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import type { ApiResponse, RettiwtStatus } from "@/types/api";
 
+export const dynamic = "force-dynamic";
+
 const execFileAsync = promisify(execFile);
 
 const CACHE_MS = 6 * 60 * 60 * 1000;
