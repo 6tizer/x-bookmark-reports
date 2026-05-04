@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * StatCards — 5 stat cards: Drafts, Hermes, Notion, Pending Rewrite, Last Sync
+ * StatCards — 5 cards: Deep Drafts, Articles Written, Finished in Notion, Pending Rewrite, Last Sync
  */
 
 import {
@@ -83,7 +83,7 @@ function StatCard({
 export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
   if (isLoading || !stats) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {Array.from({ length: 5 }).map((_, i) => (
           <div
             key={i}
@@ -110,23 +110,23 @@ export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard
           icon={<Bookmark size={16} className="text-green-600" />}
-          label="Total Drafts"
+          label="Deep Drafts"
           value={stats.totalDrafts}
           trend="neutral"
         />
         <StatCard
           icon={<FileStack size={16} className="text-blue-500" />}
-          label="Articles (Hermes)"
-          value={stats.articlesHermes}
+          label="Articles Written"
+          value={stats.articlesWritten}
           trend="neutral"
         />
         <StatCard
           icon={<CloudUpload size={16} className="text-violet-500" />}
-          label="Notion Uploaded"
-          value={stats.notionUploaded}
+          label="Finished in Notion"
+          value={stats.notionTotalUploaded}
           trend="neutral"
         />
         <StatCard

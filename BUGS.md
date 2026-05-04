@@ -53,6 +53,7 @@
 | B032 | lib/external_client.py             | `_fetch` 内 3xx 分支死代码                                                                                   | LOW    | 2026-04-28 | 2026-04-28 | 移除成功响应路径上的 3xx 分支                                       |
 | B033 | lib/coordinator.py                 | 调用 `_unshorten` 私有方法                                                                                   | LOW    | 2026-04-28 | 2026-04-28 | `ExternalClient.unshorten()` 公开封装                       |
 | B035 | ui (Next dev) + Cursor | 系统 HTTP 代理导致 127.0.0.1:3001 走代理→502；损坏的 `.next` 导致 `Cannot find module './NNN.js'`→500 白屏 | MEDIUM | 2026-05-02 | 2026-05-02 | 工作区 `http.noProxy` + `NO_PROXY`；`npm run dev:clean`；`ui/TROUBLESHOOTING.txt` |
+| B036 | ui/src/lib/fs-data.ts | `next build` 失败：未使用 `articleBasenameNoExt` / `meta`；`for..of` 遍历 `Set` 在未开 `downlevelIteration` 的 TS 目标下报错 | LOW | 2026-05-04 | 2026-05-04 | 删除死代码；`const { body }`；`Array.from(tweetIds)` 再遍历 |
 
 
 ---

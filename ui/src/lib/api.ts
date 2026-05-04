@@ -33,6 +33,10 @@ import type {
   LogQuery,
   SSEEvent,
   RettiwtStatus,
+  BatchProgress,
+  PipelineRunRequest,
+  PipelineBatchRequest,
+  PipelineRunResult,
 } from "@/types/api";
 
 import {
@@ -506,6 +510,62 @@ export async function getArticleByIdAPI(id: string): Promise<Article> {
     return article;
   }
   return api.get<Article>(`/articles/${id}`);
+}
+
+const EMPTY_BATCH_PROGRESS: BatchProgress = {
+  isRunning: false,
+  totalInBatch: 0,
+  completed: 0,
+  failed: 0,
+  pending: 0,
+  researching: 0,
+  items: [],
+};
+
+/** Current article pipeline batch progress (filesystem-backed). */
+export async function getBatchProgress(): Promise<BatchProgress> {
+  if (USE_MOCK) {
+    await mockDelay(100);
+    return { ...EMPTY_BATCH_PROGRESS };
+  }
+  return api.get<BatchProgress>("/article-pipeline/progress");
+}
+
+/** Spawn `bin/article_pipeline.py run-one` (detached). */
+export async function triggerPipelineRun(request: PipelineRunRequest): Promise<PipelineRunResult> {
+  if (USE_MOCK) {
+    await mockDelay(200);
+    return {
+      pid: undefined,
+      startedAt: new Date().toISOString(),
+      command: ["mock", "article_pipeline.py", "run-one", "--id", request.tweetId],
+    };
+  }
+  return api.post<PipelineRunResult>("/article-pipeline/run", {
+    mode: "one",
+    tweetId: request.tweetId,
+    model: request.model || undefined,
+    noResearch: request.noResearch,
+    noWrite: request.noWrite,
+  });
+}
+
+/** Spawn `bin/article_pipeline.py run-batch` (detached). */
+export async function triggerPipelineBatch(request: PipelineBatchRequest): Promise<PipelineRunResult> {
+  if (USE_MOCK) {
+    await mockDelay(200);
+    return {
+      pid: undefined,
+      startedAt: new Date().toISOString(),
+      command: ["mock", "article_pipeline.py", "run-batch"],
+    };
+  }
+  return api.post<PipelineRunResult>("/article-pipeline/run", {
+    mode: "batch",
+    limit: request.limit,
+    resume: request.resume,
+    model: request.model || undefined,
+  });
 }
 
 export async function createArticle(request: CreateArticleRequest): Promise<Article> {

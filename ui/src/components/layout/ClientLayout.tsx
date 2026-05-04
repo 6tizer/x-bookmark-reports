@@ -24,7 +24,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
         if (!cancelled && json.success && json.data) {
           setCounts({
             bookmarks: json.data.totalBookmarks,
-            articles: json.data.articlesHermes ?? json.data.reportCount,
+            articles: json.data.articlesWritten,
           });
         }
       } catch {

@@ -46,7 +46,25 @@ export interface PipelineNode {
   error?: { code: string; message: string };
 }
 
-/** Dashboard pipeline: Twitter Sync → Deep Reports → Notion Upload */
+/** Dashboard pipeline — four steps (Twitter → Deep → Rewrite → Notion) */
+export interface DashboardPipelineFour {
+  twitterSync: PipelineNode;
+  deepReports: PipelineNode;
+  rewrite: PipelineNode;
+  notionUpload: PipelineNode;
+}
+
+/** @deprecated Use DashboardPipelineFour */
+export interface DashboardPipelineSix {
+  twitterSync: PipelineNode;
+  deepReports: PipelineNode;
+  metadata: PipelineNode;
+  research: PipelineNode;
+  rewrite: PipelineNode;
+  notionUpload: PipelineNode;
+}
+
+/** @deprecated Use DashboardPipelineFour */
 export interface DashboardPipelineThree {
   twitterSync: PipelineNode;
   deepReports: PipelineNode;
@@ -58,14 +76,10 @@ export interface DashboardStats {
   totalDrafts: number;
   totalBookmarks: number;
   newThisWeek: number;
-  articlesHermes: number;
-  notionUploaded: number;
+  articlesWritten: number;
+  notionTotalUploaded: number;
   pendingRewrite: number;
-  /** @deprecated Use pendingRewrite */
-  pendingCount: number;
-  /** @deprecated Use articlesHermes */
-  reportCount: number;
-  pipeline: DashboardPipelineThree;
+  pipeline: DashboardPipelineFour;
   rettiwt?: RettiwtStatus | null;
 }
 
@@ -306,7 +320,17 @@ export interface DiffResult {
 // Articles
 // ─────────────────────────────────────────────
 
-export type ArticleStatus = "draft" | "editing" | "reviewing" | "published";
+/** Article pipeline statuses + DB/editor legacy (editing/reviewing/published) */
+export type ArticleStatus =
+  | "draft"
+  | "metadata_done"
+  | "researched"
+  | "written"
+  | "uploaded"
+  | "failed"
+  | "editing"
+  | "reviewing"
+  | "published";
 export type ExportFormat = "markdown" | "html" | "wechat";
 
 export interface Article {
@@ -320,6 +344,11 @@ export interface Article {
   publishedAt?: string;
   tags: string[];
   wordCount: number;
+  author?: string;
+  sourceUrl?: string;
+  notionIcon?: string;
+  generatedAt?: string;
+  lastError?: string;
 }
 
 export interface ArticleVersion {
@@ -346,6 +375,52 @@ export interface UpdateArticleRequest {
 
 export interface PublishRequest {
   format: ExportFormat;
+}
+
+// ─────────────────────────────────────────────
+// Article pipeline (trigger + progress)
+// ─────────────────────────────────────────────
+
+export interface PipelineRunRequest {
+  tweetId: string;
+  model?: string;
+  noResearch?: boolean;
+  noWrite?: boolean;
+}
+
+export interface PipelineBatchRequest {
+  limit?: number;
+  resume?: boolean;
+  model?: string;
+}
+
+export interface BatchProgressItem {
+  tweetId: string;
+  title?: string;
+  status: string;
+  updatedAt: string;
+  error?: string;
+}
+
+export interface BatchProgress {
+  isRunning: boolean;
+  currentTweetId?: string;
+  currentStep?: "metadata" | "research" | "rewrite";
+  totalInBatch: number;
+  completed: number;
+  failed: number;
+  pending: number;
+  researching: number;
+  startedAt?: string;
+  estimatedEnd?: string;
+  items: BatchProgressItem[];
+}
+
+/** Response from POST /api/article-pipeline/run */
+export interface PipelineRunResult {
+  pid: number | undefined;
+  startedAt: string;
+  command: string[];
 }
 
 // ─────────────────────────────────────────────

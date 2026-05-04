@@ -11,6 +11,8 @@ import { writeParentEnvArticlesDir } from "@/lib/parent-env";
 import { getLogger } from "@/lib/logger";
 import type { ApiResponse, Settings, UpdateSettingsRequest } from "@/types/api";
 
+export const dynamic = "force-dynamic";
+
 const logger = getLogger("system");
 
 const defaultSettingsBase = {

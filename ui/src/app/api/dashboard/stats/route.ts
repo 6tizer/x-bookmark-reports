@@ -1,6 +1,6 @@
 /**
  * GET /api/dashboard/stats
- * CONTRACT v1.0 — reads from filesystem when DB is empty
+ * CONTRACT v2 — reads from filesystem when DB is empty, enriches with Notion DB stats
  */
 
 import { NextResponse } from "next/server";
@@ -9,13 +9,18 @@ import {
   getDashboardStats as getFsDashboardStats,
   getPipelineStatus,
 } from "@/lib/fs-data";
-import type { ApiResponse, DashboardStats, DashboardPipelineThree } from "@/types/api";
+import { getNotionDbStats } from "@/lib/notion-stats";
+import type { ApiResponse, DashboardStats, DashboardPipelineFour } from "@/types/api";
 
-function emptyPipeline(): DashboardPipelineThree {
+export const dynamic = "force-dynamic";
+
+function emptyPipeline(): DashboardPipelineFour {
+  const p = { status: "pending" as const };
   return {
-    twitterSync: { status: "pending" },
-    deepReports: { status: "pending" },
-    notionUpload: { status: "pending" },
+    twitterSync: p,
+    deepReports: p,
+    rewrite: p,
+    notionUpload: p,
   };
 }
 
@@ -25,16 +30,17 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
       const fsStats = getFsDashboardStats();
       const pipeline = getPipelineStatus();
 
+      // Enrich with Notion DB stats (with filesystem fallback)
+      const notionStats = await getNotionDbStats();
+
       const stats: DashboardStats = {
         lastSyncAt: fsStats.lastSync,
         totalDrafts: fsStats.totalDrafts,
         totalBookmarks: fsStats.totalDrafts,
         newThisWeek: fsStats.newThisWeek,
-        articlesHermes: fsStats.totalArticles,
-        notionUploaded: fsStats.notionUploaded,
-        pendingRewrite: fsStats.pendingRewrite,
-        pendingCount: fsStats.pendingRewrite,
-        reportCount: fsStats.totalArticles,
+        articlesWritten: notionStats?.articlesWritten ?? fsStats.totalArticles,
+        notionTotalUploaded: notionStats?.totalRecords ?? fsStats.notionFinishedUploaded,
+        pendingRewrite: notionStats?.pendingRewrite ?? fsStats.pendingRewrite,
         pipeline,
       };
 
@@ -60,18 +66,6 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
       ).c
     );
 
-    const pendingCount = Number(
-      (
-        db
-          .prepare("SELECT COUNT(*) as c FROM bookmarks WHERE status = 'synced'")
-          .get() as { c: number }
-      ).c
-    );
-
-    const reportCount = Number(
-      (db.prepare("SELECT COUNT(*) as c FROM reports").get() as { c: number }).c
-    );
-
     const lastSyncRow = db
       .prepare(
         "SELECT completed_at FROM sync_jobs WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1"
@@ -83,18 +77,16 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
       .prepare("SELECT * FROM sync_jobs ORDER BY started_at DESC LIMIT 1")
       .get() as Record<string, unknown> | undefined;
 
-    const lastReportJob = db
-      .prepare("SELECT * FROM activities WHERE type = 'report' ORDER BY timestamp DESC LIMIT 1")
-      .get() as Record<string, unknown> | undefined;
-
     const lastArticleJob = db
       .prepare("SELECT * FROM activities WHERE type = 'article' ORDER BY timestamp DESC LIMIT 1")
       .get() as Record<string, unknown> | undefined;
 
     const syncSt = lastSyncJob ? String(lastSyncJob.status) : "";
-    const pipeline: DashboardPipelineThree = {
+    const pendingNode = { status: "pending" as const };
+
+    const pipeline: DashboardPipelineFour = {
       twitterSync: !lastSyncJob
-        ? { status: "pending" }
+        ? pendingNode
         : syncSt === "running"
           ? {
               status: "running",
@@ -113,12 +105,15 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
                 },
               }
             : { status: "completed", lastRun: String(lastSyncJob.started_at) },
-      deepReports: lastReportJob
-        ? { status: "completed", lastRun: String(lastReportJob.timestamp) }
-        : { status: "pending" },
+      deepReports: lastArticleJob
+        ? { status: "completed", lastRun: String(lastArticleJob.timestamp) }
+        : pendingNode,
+      rewrite: lastArticleJob
+        ? { status: "completed", lastRun: String(lastArticleJob.timestamp) }
+        : pendingNode,
       notionUpload: lastArticleJob
         ? { status: "completed", lastRun: String(lastArticleJob.timestamp) }
-        : { status: "pending" },
+        : pendingNode,
     };
 
     const pendingRewrite = Math.max(0, totalBookmarks - totalArticles);
@@ -128,11 +123,9 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
       totalDrafts: totalBookmarks,
       totalBookmarks,
       newThisWeek,
-      articlesHermes: totalArticles,
-      notionUploaded: 0,
+      articlesWritten: totalArticles,
+      notionTotalUploaded: 0,
       pendingRewrite,
-      pendingCount,
-      reportCount,
       pipeline,
     };
 
@@ -147,11 +140,9 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
           totalDrafts: 0,
           totalBookmarks: 0,
           newThisWeek: 0,
-          articlesHermes: 0,
-          notionUploaded: 0,
+          articlesWritten: 0,
+          notionTotalUploaded: 0,
           pendingRewrite: 0,
-          pendingCount: 0,
-          reportCount: 0,
           pipeline: emptyPipeline(),
         },
         error: { code: "INTERNAL_ERROR", message, detail: String(err) },
