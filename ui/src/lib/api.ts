@@ -649,7 +649,6 @@ export async function updateSettings(request: UpdateSettingsRequest): Promise<Se
 export async function updateApiKey(request: UpdateApiKeyRequest): Promise<{ success: boolean }> {
   if (USE_MOCK) {
     await mockDelay(300);
-    mockSettings.apiKey = "abc****xyz";
     return { success: true };
   }
   return api.put<{ success: boolean }>("/settings/api-key", request);

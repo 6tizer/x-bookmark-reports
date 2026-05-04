@@ -428,11 +428,25 @@ export interface PipelineRunResult {
 // ─────────────────────────────────────────────
 
 export interface Settings {
-  apiKey: string;        // 脱敏: abc****xyz
-  proxy: string | null;
-  dataPath: string;
+  // API Keys (masked in GET responses)
+  twitterApiKey: string;
+  notionToken: string;
+  notionDbId: string;
+  deepseekApiKey: string;
+  deepseekBaseUrl: string;
+  deepseekModel: string;
+  xaiApiKey: string;
+  xaiBaseUrl: string;
+  exaApiKey: string;
+  exaBaseUrl: string;
+  // Paths
+  bookmarksPath: string;
   articlesDir: string;
+  dataPath: string;
+  proxy: string | null;
+  // Toggles
   autoSync: boolean;
+  notionUploadLive: boolean;
   cronExpression: string | null;
 }
 
@@ -440,11 +454,21 @@ export interface UpdateSettingsRequest {
   proxy?: string | null;
   dataPath?: string;
   articlesDir?: string;
+  bookmarksPath?: string;
   autoSync?: boolean;
+  notionUploadLive?: boolean;
   cronExpression?: string | null;
+  notionDbId?: string;
+  deepseekBaseUrl?: string;
+  deepseekModel?: string;
+  xaiBaseUrl?: string;
+  exaBaseUrl?: string;
 }
 
+export type ApiKeyName = "TWITTER_API_IO_KEY" | "NOTION_TOKEN" | "DEEPSEEK_API_KEY" | "XAI_API_KEY" | "EXA_API_KEY";
+
 export interface UpdateApiKeyRequest {
+  keyName: ApiKeyName;
   apiKey: string;        // base64 encoded
 }
 
@@ -458,7 +482,7 @@ export interface ConnectionTestResult {
 // ─────────────────────────────────────────────
 
 export type LogLevel = "info" | "warn" | "error";
-export type LogComponent = "sync" | "x-reader" | "x-tweet-reader" | "agent" | "system";
+export type LogComponent = "sync" | "x-reader" | "x-tweet-reader" | "agent" | "system" | "coordinator" | "article_pipeline" | "notion_upload";
 
 export interface LogEntry {
   id: string;

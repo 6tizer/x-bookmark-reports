@@ -1,20 +1,12 @@
 "use client";
 
 /**
- * ScheduleSettings — Cron expression editor
+ * ScheduleSettings — Cron editor, built-in timer, launchd management, last run status
  */
 
-import { useState, useEffect } from "react";
-import { Save, Clock } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Save, Clock, Play, Square, Terminal, RefreshCw, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import type { Settings, UpdateSettingsRequest } from "@/types/api";
-
-const presetSchedules = [
-  { label: "Every 6 hours", value: "0 */6 * * *" },
-  { label: "Every 12 hours", value: "0 */12 * * *" },
-  { label: "Daily at midnight", value: "0 0 * * *" },
-  { label: "Daily at 8am", value: "0 8 * * *" },
-  { label: "Weekly (Sunday)", value: "0 0 * * 0" },
-];
 
 interface ScheduleSettingsProps {
   settings: Settings | null;
@@ -22,15 +14,61 @@ interface ScheduleSettingsProps {
   onSave: (request: UpdateSettingsRequest) => Promise<void>;
 }
 
+interface ScheduleStatus {
+  lastRun: string | null;
+  lastRunStatus: string | null;
+  lastRunStep: string | null;
+  lastRunError: string | null;
+  builtInTimerEnabled: boolean;
+  builtInTimerCron: string | null;
+  launchdLoaded: boolean;
+  launchdPlistPath: string | null;
+}
+
+const presetSchedules = [
+  { label: "Every 6 hours", value: "0 */6 * * *" },
+  { label: "Every 12 hours", value: "0 */12 * * *" },
+  { label: "Daily at midnight", value: "0 0 * * *" },
+  { label: "Daily at 8am", value: "0 8 * * *" },
+  { label: "Daily at 4pm", value: "0 16 * * *" },
+  { label: "Weekly (Sunday)", value: "0 0 * * 0" },
+];
+
 export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSettingsProps) {
   const [cron, setCron] = useState("0 */6 * * *");
   const [isValid, setIsValid] = useState(true);
+  const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [togglingTimer, setTogglingTimer] = useState(false);
+  const [timerEnabled, setTimerEnabled] = useState(false);
+  const [launchdLoading, setLaunchdLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (settings?.cronExpression) {
       setCron(settings.cronExpression);
     }
-  }, [settings]);
+    fetchStatus();
+  }, [settings?.cronExpression]);
+
+  const fetchStatus = useCallback(async () => {
+    setLoadingStatus(true);
+    try {
+      const res = await fetch("/api/schedule/status");
+      const data = await res.json();
+      if (data.success && data.data) {
+        setScheduleStatus(data.data);
+        setTimerEnabled(data.data.builtInTimerEnabled);
+        if (data.data.builtInTimerCron) {
+          setCron(data.data.builtInTimerCron);
+        }
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setLoadingStatus(false);
+    }
+  }, []);
 
   const validateCron = (value: string): boolean => {
     const parts = value.trim().split(/\s+/);
@@ -42,23 +80,149 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
     setIsValid(validateCron(value));
   };
 
-  const handleSave = () => {
+  const handleSaveCron = () => {
     if (isValid) {
       onSave({ cronExpression: cron });
     }
   };
 
+  const handleToggleTimer = async () => {
+    setTogglingTimer(true);
+    try {
+      const res = await fetch("/api/schedule/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !timerEnabled, cronExpression: cron }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTimerEnabled(data.data.enabled);
+        setMessage(timerEnabled ? "Timer disabled" : `Timer enabled: ${cron}`);
+      }
+    } catch {
+      setMessage("Failed to toggle timer");
+    } finally {
+      setTogglingTimer(false);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  };
+
+  const handleLaunchd = async (action: "load" | "unload") => {
+    setLaunchdLoading(true);
+    try {
+      const res = await fetch("/api/schedule/launchd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage(data.data.message);
+        await fetchStatus();
+      } else {
+        setMessage(data.error?.message || "launchd operation failed");
+      }
+    } catch {
+      setMessage("Failed to manage launchd");
+    } finally {
+      setLaunchdLoading(false);
+      setTimeout(() => setMessage(null), 4000);
+    }
+  };
+
+  const formatTime = (iso: string | null) => {
+    if (!iso) return "Never";
+    try {
+      return new Date(iso).toLocaleString();
+    } catch {
+      return iso;
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <div className="flex items-center gap-2">
-          <Clock size={16} className="text-twitter-blue" />
-          <h3 className="text-sm font-semibold text-foreground">Sync Schedule</h3>
+      {/* Last Run Status */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock size={16} className="text-twitter-blue" />
+            <h3 className="text-sm font-semibold text-foreground">Last Run</h3>
+          </div>
+          <button
+            onClick={fetchStatus}
+            disabled={loadingStatus}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <RefreshCw size={11} className={loadingStatus ? "animate-spin" : ""} />
+            Refresh
+          </button>
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          Use cron expression format: <code className="bg-muted px-1 rounded">min hour day month weekday</code>
-        </p>
+        {scheduleStatus?.lastRun ? (
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <p className="text-muted-foreground">Time</p>
+              <p className="font-mono text-foreground">{formatTime(scheduleStatus.lastRun)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Status</p>
+              <div className="flex items-center gap-1">
+                {scheduleStatus.lastRunStatus === "success" ? (
+                  <CheckCircle size={12} className="text-green-500" />
+                ) : scheduleStatus.lastRunStatus === "failed" ? (
+                  <XCircle size={12} className="text-red-500" />
+                ) : (
+                  <Loader2 size={12} className="text-yellow-500 animate-spin" />
+                )}
+                <span className="capitalize">{scheduleStatus.lastRunStatus || "unknown"}</span>
+              </div>
+            </div>
+            {scheduleStatus.lastRunStep && (
+              <div>
+                <p className="text-muted-foreground">Step</p>
+                <p className="font-mono">{scheduleStatus.lastRunStep}</p>
+              </div>
+            )}
+            {scheduleStatus.lastRunError && (
+              <div className="col-span-2">
+                <p className="text-muted-foreground">Error</p>
+                <p className="text-red-500 text-[11px] font-mono break-all">{scheduleStatus.lastRunError}</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">No previous runs recorded</p>
+        )}
+      </div>
+
+      {/* Built-in Timer */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Built-in Timer</h3>
+            <p className="text-[11px] text-muted-foreground">
+              Runs the full pipeline (sync → articles → Notion) when the dashboard is open
+            </p>
+          </div>
+          <button
+            onClick={handleToggleTimer}
+            disabled={togglingTimer}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              timerEnabled
+                ? "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-950 dark:text-red-400"
+                : "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-950 dark:text-green-400"
+            }`}
+          >
+            {togglingTimer ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : timerEnabled ? (
+              <Square size={12} />
+            ) : (
+              <Play size={12} />
+            )}
+            {timerEnabled ? "Disable" : "Enable"}
+          </button>
+        </div>
 
         {/* Presets */}
         <div className="flex flex-wrap gap-2">
@@ -111,18 +275,80 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
             </div>
           </div>
         )}
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSaveCron}
+            disabled={isSaving || !isValid}
+            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            <Save size={14} />
+            {isSaving ? "Saving..." : "Save Schedule"}
+          </button>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={handleSave}
-          disabled={isSaving || !isValid}
-          className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-        >
-          <Save size={14} />
-          {isSaving ? "Saving..." : "Save Schedule"}
-        </button>
+      {/* launchd Management */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <Terminal size={16} className="text-twitter-blue" />
+          <h3 className="text-sm font-semibold text-foreground">macOS launchd</h3>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Manage the system-level scheduled task. This runs even when the dashboard is closed.
+        </p>
+
+        {scheduleStatus?.launchdPlistPath && (
+          <div className="text-[11px] text-muted-foreground font-mono">
+            Plist: {scheduleStatus.launchdPlistPath}
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">Status:</span>
+            <span className={scheduleStatus?.launchdLoaded ? "text-green-500" : "text-muted-foreground"}>
+              {scheduleStatus?.launchdLoaded ? "Loaded" : "Not loaded"}
+            </span>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleLaunchd("load")}
+              disabled={launchdLoading || scheduleStatus?.launchdLoaded === true}
+              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[11px] hover:bg-muted disabled:opacity-50 transition-colors"
+            >
+              <Play size={10} />
+              Load
+            </button>
+            <button
+              onClick={() => handleLaunchd("unload")}
+              disabled={launchdLoading || scheduleStatus?.launchdLoaded === false}
+              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[11px] hover:bg-muted disabled:opacity-50 transition-colors"
+            >
+              <Square size={10} />
+              Unload
+            </button>
+          </div>
+        </div>
+
+        {/* Pipeline Steps */}
+        <div className="rounded-md bg-muted p-3">
+          <p className="text-[10px] text-muted-foreground mb-2 font-medium">Pipeline steps executed:</p>
+          <ol className="text-[11px] text-muted-foreground space-y-1 font-mono">
+            <li>1. coordinator.py --deep-batch</li>
+            <li>2. article_pipeline.py run-batch</li>
+            <li>3. upload_to_notion.py --mode finished --live</li>
+          </ol>
+        </div>
       </div>
+
+      {/* Message */}
+      {message && (
+        <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-xs text-blue-700 dark:text-blue-400">
+          {message}
+        </div>
+      )}
     </div>
   );
 }

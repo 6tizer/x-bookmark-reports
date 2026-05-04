@@ -1,6 +1,6 @@
 /**
- * Config Service — .env.twitter management
- * CONTRACT v1.0
+ * Config Service — .env management (repo root)
+ * Reads/writes all settings from the project root .env file.
  */
 
 import fs from "fs";
@@ -8,15 +8,40 @@ import path from "path";
 import dotenv from "dotenv";
 import { getRepoRoot } from "@/lib/repo-root";
 
-const ENV_PATH = path.join(getRepoRoot(), ".env.twitter");
+const ENV_PATH = path.join(getRepoRoot(), ".env");
 
 export interface RawEnvConfig {
-  API_KEY?: string;
-  PROXY?: string;
+  // API Keys
+  TWITTER_API_IO_KEY?: string;
+  NOTION_TOKEN?: string;
+  NOTION_DB_ID?: string;
+  DEEPSEEK_API_KEY?: string;
+  DEEPSEEK_BASE_URL?: string;
+  DEEPSEEK_MODEL?: string;
+  XAI_API_KEY?: string;
+  XAI_BASE_URL?: string;
+  EXA_API_KEY?: string;
+  EXA_BASE_URL?: string;
+  // Paths
+  BOOKMARKS_PATH?: string;
+  ARTICLES_DIR?: string;
   DATA_PATH?: string;
+  PROXY?: string;
+  // Toggles
   AUTO_SYNC?: string;
+  NOTION_UPLOAD_LIVE?: string;
   CRON_EXPRESSION?: string;
+  // Legacy
+  API_KEY?: string;
 }
+
+export const API_KEY_ENV_NAMES = [
+  "TWITTER_API_IO_KEY",
+  "NOTION_TOKEN",
+  "DEEPSEEK_API_KEY",
+  "XAI_API_KEY",
+  "EXA_API_KEY",
+] as const;
 
 function readEnvFile(): RawEnvConfig {
   if (!fs.existsSync(ENV_PATH)) {
@@ -53,7 +78,7 @@ export function updateEnv(updates: Partial<RawEnvConfig>): boolean {
     writeEnvFile(merged);
     return true;
   } catch (err) {
-    console.error("Failed to write .env.twitter:", err);
+    console.error("Failed to write .env:", err);
     return false;
   }
 }

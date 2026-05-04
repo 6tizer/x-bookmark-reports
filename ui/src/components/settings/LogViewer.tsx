@@ -18,7 +18,7 @@ interface LogViewerProps {
   onRefresh: () => void;
 }
 
-const components: LogComponent[] = ["sync", "x-reader", "x-tweet-reader", "agent", "system"];
+const components: LogComponent[] = ["sync", "x-reader", "x-tweet-reader", "agent", "system", "coordinator", "article_pipeline", "notion_upload"];
 const levels: LogLevel[] = ["info", "warn", "error"];
 
 export function LogViewer({

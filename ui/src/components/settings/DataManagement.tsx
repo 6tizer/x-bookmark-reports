@@ -1,29 +1,88 @@
 "use client";
 
 /**
- * DataManagement — Database/export management
+ * DataManagement — Export and Clear data with real API connections
  */
 
 import { useState } from "react";
-import { Database, Download, Trash2, AlertTriangle, CheckCircle } from "lucide-react";
+import { Database, Download, Trash2, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
 
 export function DataManagement() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<"success" | "error" | "info">("info");
+  const [isExporting, setIsExporting] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
-  const handleExport = () => {
-    setMessage("Export started... (mock)");
-    setTimeout(() => setMessage(null), 3000);
+  const handleExport = async () => {
+    setIsExporting(true);
+    setMessage("Preparing export...");
+    setMessageType("info");
+    try {
+      const res = await fetch("/api/data/export");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error?.message || "Export failed");
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `x-bookmark-reports-export-${new Date().toISOString().slice(0, 10)}.tar.gz`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setMessage("Export downloaded successfully!");
+      setMessageType("success");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Export failed");
+      setMessageType("error");
+    } finally {
+      setIsExporting(false);
+      setTimeout(() => setMessage(null), 5000);
+    }
   };
 
-  const handleDelete = () => {
-    if (confirmText === "DELETE") {
-      setMessage("All data cleared. (mock)");
+  const handleDelete = async () => {
+    if (confirmText !== "DELETE") return;
+
+    setIsClearing(true);
+    setMessage("Clearing data...");
+    setMessageType("info");
+    try {
+      const res = await fetch("/api/data/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        throw new Error(data.error?.message || "Clear failed");
+      }
+
+      const { tablesCleared, filesDeleted } = data.data;
+      setMessage(`Cleared ${tablesCleared.length} tables, ${filesDeleted} files.`);
+      setMessageType("success");
       setShowConfirm(false);
       setConfirmText("");
-      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Clear failed");
+      setMessageType("error");
+    } finally {
+      setIsClearing(false);
+      setTimeout(() => setMessage(null), 5000);
     }
+  };
+
+  const messageColors: Record<string, string> = {
+    success: "bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400",
+    error: "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400",
+    info: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400",
   };
 
   return (
@@ -37,14 +96,21 @@ export function DataManagement() {
         {/* Export */}
         <div className="flex items-center justify-between rounded-md bg-muted p-3">
           <div>
-            <p className="text-sm font-medium text-foreground">Export Database</p>
-            <p className="text-[11px] text-muted-foreground">Download a backup of all bookmarks, reports, and settings</p>
+            <p className="text-sm font-medium text-foreground">Export Data</p>
+            <p className="text-[11px] text-muted-foreground">
+              Download output/, cache/, database, and .env (API keys masked) as tar.gz
+            </p>
           </div>
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+            disabled={isExporting}
+            className="flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50 transition-colors"
           >
-            <Download size={14} />
+            {isExporting ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Download size={14} />
+            )}
             Export
           </button>
         </div>
@@ -54,7 +120,7 @@ export function DataManagement() {
           <div>
             <p className="text-sm font-medium text-red-700 dark:text-red-400">Clear All Data</p>
             <p className="text-[11px] text-red-600/70 dark:text-red-400/70">
-              Permanently delete all bookmarks, reports, articles, and settings
+              Permanently delete DB rows, output files, cache, and logs. Keeps .env and 归档/.
             </p>
           </div>
           <button
@@ -78,15 +144,15 @@ export function DataManagement() {
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
               placeholder="DELETE"
-              className="w-full rounded-md border border-red-200 dark:border-red-900 bg-white dark:bg-background px-3 py-1.5 text-sm outline-none"
+              className="w-full rounded-md border border-red-200 dark:border-red-900 bg-muted px-3 py-1.5 text-sm outline-none"
             />
             <div className="flex items-center gap-2">
               <button
                 onClick={handleDelete}
-                disabled={confirmText !== "DELETE"}
+                disabled={confirmText !== "DELETE" || isClearing}
                 className="rounded-md bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
               >
-                Confirm Delete
+                {isClearing ? "Clearing..." : "Confirm Delete"}
               </button>
               <button
                 onClick={() => { setShowConfirm(false); setConfirmText(""); }}
@@ -100,8 +166,8 @@ export function DataManagement() {
 
         {/* Message */}
         {message && (
-          <div className="flex items-center gap-1.5 rounded-md bg-green-50 dark:bg-green-950/30 px-3 py-2 text-xs text-green-700 dark:text-green-400">
-            <CheckCircle size={14} />
+          <div className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-xs ${messageColors[messageType]}`}>
+            {messageType === "success" ? <CheckCircle size={14} /> : messageType === "error" ? <AlertTriangle size={14} /> : <Loader2 size={14} className="animate-spin" />}
             {message}
           </div>
         )}

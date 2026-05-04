@@ -1,13 +1,15 @@
 /**
  * POST /api/pipeline/coordinator
- * Spawns bin/coordinator.py in repo root (detached).
+ * Spawns bin/coordinator.py and pipes stdout/stderr to UI Logger.
  */
 
 import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
+import { createInterface } from "readline";
 import { getRepoRoot } from "@/lib/repo-root";
+import { createLog } from "@/lib/db";
 import type { ApiResponse } from "@/types/api";
 
 interface CoordinatorRunResponse {
@@ -26,6 +28,36 @@ function resolvePython(repoRoot: string): string {
   const venvPy = path.join(repoRoot, ".venv", "bin", "python3");
   if (fs.existsSync(venvPy)) return venvPy;
   return "python3";
+}
+
+function pipeOutputToLogger(child: ReturnType<typeof spawn>, component: "coordinator" | "article_pipeline" | "notion_upload"): void {
+  if (child.stdout) {
+    const rl = createInterface({ input: child.stdout });
+    rl.on("line", (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      const level = /error|fail|exception/i.test(trimmed) ? "error" as const
+        : /warn|warning/i.test(trimmed) ? "warn" as const
+        : "info" as const;
+      try {
+        createLog(component, level, trimmed.slice(0, 500), trimmed.length > 500 ? trimmed : undefined);
+      } catch {
+        /* ignore if DB not ready */
+      }
+    });
+  }
+  if (child.stderr) {
+    const rl = createInterface({ input: child.stderr });
+    rl.on("line", (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      try {
+        createLog(component, "error", trimmed.slice(0, 500), trimmed.length > 500 ? trimmed : undefined);
+      } catch {
+        /* ignore */
+      }
+    });
+  }
 }
 
 export async function POST(
@@ -59,9 +91,11 @@ export async function POST(
     const child = spawn(py, args, {
       cwd: repoRoot,
       detached: true,
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env },
     });
+
+    pipeOutputToLogger(child, "coordinator");
     child.unref();
 
     return NextResponse.json({

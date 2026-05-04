@@ -1,13 +1,12 @@
 /**
  * GET + PUT /api/settings
- * CONTRACT v1.0 — returns defaults when no DB data (filesystem mode)
+ * Reads all config from .env file (repo root). API keys are masked in GET responses.
+ * PUT writes specified fields back to .env.
  */
 
 import { NextResponse } from "next/server";
-import { isDbEmpty, getSettings, updateSettings } from "@/lib/db";
-import { loadEnv, maskApiKey } from "@/lib/config";
+import { loadEnv, updateEnv, maskApiKey } from "@/lib/config";
 import { getArticlesDir } from "@/lib/fs-data";
-import { writeParentEnvArticlesDir } from "@/lib/parent-env";
 import { getLogger } from "@/lib/logger";
 import type { ApiResponse, Settings, UpdateSettingsRequest } from "@/types/api";
 
@@ -15,55 +14,40 @@ export const dynamic = "force-dynamic";
 
 const logger = getLogger("system");
 
-const defaultSettingsBase = {
-  proxy: "http://127.0.0.1:7897",
-  dataPath: "./data",
-  autoSync: false,
-  cronExpression: "0 16 * * *",
-  apiKey: "****",
-};
-
-function defaultSettings(): Settings {
+function buildSettingsFromEnv(): Settings {
+  const env = loadEnv();
   return {
-    ...defaultSettingsBase,
-    articlesDir: getArticlesDir(),
+    twitterApiKey: maskApiKey(env.TWITTER_API_IO_KEY || env.API_KEY),
+    notionToken: maskApiKey(env.NOTION_TOKEN),
+    notionDbId: env.NOTION_DB_ID || "",
+    deepseekApiKey: maskApiKey(env.DEEPSEEK_API_KEY),
+    deepseekBaseUrl: env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1",
+    deepseekModel: env.DEEPSEEK_MODEL || "deepseek-chat",
+    xaiApiKey: maskApiKey(env.XAI_API_KEY),
+    xaiBaseUrl: env.XAI_BASE_URL || "https://api.x.ai/v1",
+    exaApiKey: maskApiKey(env.EXA_API_KEY),
+    exaBaseUrl: env.EXA_BASE_URL || "https://api.exa.ai",
+    bookmarksPath: env.BOOKMARKS_PATH || "",
+    articlesDir: env.ARTICLES_DIR || getArticlesDir(),
+    dataPath: env.DATA_PATH || "./data",
+    proxy: env.PROXY || null,
+    autoSync: env.AUTO_SYNC === "true" || env.AUTO_SYNC === "1",
+    notionUploadLive: env.NOTION_UPLOAD_LIVE === "true" || env.NOTION_UPLOAD_LIVE === "1",
+    cronExpression: env.CRON_EXPRESSION || "0 */6 * * *",
   };
 }
 
 // ── GET ─────────────────────────────────────
 export async function GET(): Promise<NextResponse<ApiResponse<Settings>>> {
   try {
-    if (isDbEmpty()) {
-      const env = loadEnv();
-      const settings = defaultSettings();
-      if (env.API_KEY) settings.apiKey = maskApiKey(env.API_KEY);
-      if (env.PROXY) settings.proxy = env.PROXY;
-      if (env.DATA_PATH) settings.dataPath = env.DATA_PATH;
-      return NextResponse.json({ success: true, data: settings });
-    }
-
-    const dbSettings = getSettings();
-    const env = loadEnv();
-    if (env.API_KEY) dbSettings.apiKey = maskApiKey(env.API_KEY);
-    if (env.PROXY) dbSettings.proxy = env.PROXY;
-    if (env.DATA_PATH) dbSettings.dataPath = env.DATA_PATH;
-    if (env.AUTO_SYNC) {
-      dbSettings.autoSync = env.AUTO_SYNC === "true" || env.AUTO_SYNC === "1";
-    }
-    if (env.CRON_EXPRESSION) {
-      dbSettings.cronExpression = env.CRON_EXPRESSION;
-    }
-    if (!dbSettings.articlesDir) {
-      dbSettings.articlesDir = getArticlesDir();
-    }
-
-    return NextResponse.json({ success: true, data: dbSettings });
+    const settings = buildSettingsFromEnv();
+    return NextResponse.json({ success: true, data: settings });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
       {
         success: false,
-        data: defaultSettings(),
+        data: buildSettingsFromEnv(),
         error: { code: "INTERNAL_ERROR", message, detail: String(err) },
       },
       { status: 500 }
@@ -78,55 +62,69 @@ export async function PUT(
   try {
     const body = (await request.json()) as UpdateSettingsRequest;
 
-    if (isDbEmpty()) {
-      if (body.articlesDir !== undefined && body.articlesDir.trim()) {
-        const ok = writeParentEnvArticlesDir(body.articlesDir.trim());
-        if (!ok) {
-          logger.warn("Failed to persist ARTICLES_DIR to repo .env");
-        }
-        process.env.ARTICLES_DIR = body.articlesDir.trim();
-      }
-      return NextResponse.json({
-        success: true,
-        data: {
-          ...defaultSettings(),
-          proxy: body.proxy ?? defaultSettings().proxy,
-          dataPath: body.dataPath ?? defaultSettings().dataPath,
-          articlesDir: body.articlesDir?.trim() || getArticlesDir(),
-          autoSync: body.autoSync ?? defaultSettings().autoSync,
-          cronExpression: body.cronExpression ?? defaultSettings().cronExpression,
-        },
-      });
+    const envUpdates: Record<string, string> = {};
+
+    if (body.proxy !== undefined) {
+      envUpdates.PROXY = body.proxy || "";
+    }
+    if (body.dataPath !== undefined) {
+      envUpdates.DATA_PATH = body.dataPath;
+    }
+    if (body.articlesDir !== undefined && body.articlesDir.trim()) {
+      envUpdates.ARTICLES_DIR = body.articlesDir.trim();
+      process.env.ARTICLES_DIR = body.articlesDir.trim();
+    }
+    if (body.bookmarksPath !== undefined) {
+      envUpdates.BOOKMARKS_PATH = body.bookmarksPath;
+    }
+    if (body.autoSync !== undefined) {
+      envUpdates.AUTO_SYNC = body.autoSync ? "true" : "false";
+    }
+    if (body.notionUploadLive !== undefined) {
+      envUpdates.NOTION_UPLOAD_LIVE = body.notionUploadLive ? "true" : "false";
+    }
+    if (body.cronExpression !== undefined) {
+      envUpdates.CRON_EXPRESSION = body.cronExpression || "";
+    }
+    if (body.notionDbId !== undefined) {
+      envUpdates.NOTION_DB_ID = body.notionDbId;
+    }
+    if (body.deepseekBaseUrl !== undefined) {
+      envUpdates.DEEPSEEK_BASE_URL = body.deepseekBaseUrl;
+    }
+    if (body.deepseekModel !== undefined) {
+      envUpdates.DEEPSEEK_MODEL = body.deepseekModel;
+    }
+    if (body.xaiBaseUrl !== undefined) {
+      envUpdates.XAI_BASE_URL = body.xaiBaseUrl;
+    }
+    if (body.exaBaseUrl !== undefined) {
+      envUpdates.EXA_BASE_URL = body.exaBaseUrl;
     }
 
-    const ok = updateSettings({
-      proxy: body.proxy ?? undefined,
-      dataPath: body.dataPath,
-      autoSync: body.autoSync,
-      cronExpression: body.cronExpression ?? undefined,
-    });
-
-    if (!ok) {
-      return NextResponse.json(
-        {
-          success: false,
-          data: defaultSettings(),
-          error: { code: "SETTINGS_SAVE_ERROR", message: "Failed to save settings" },
-        },
-        { status: 500 }
-      );
+    if (Object.keys(envUpdates).length > 0) {
+      const ok = updateEnv(envUpdates);
+      if (!ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            data: buildSettingsFromEnv(),
+            error: { code: "SETTINGS_SAVE_ERROR", message: "Failed to save settings to .env" },
+          },
+          { status: 500 }
+        );
+      }
     }
 
     logger.info("Settings updated");
-    const updated = getSettings();
-    if (!updated.articlesDir) updated.articlesDir = getArticlesDir();
-    return NextResponse.json({ success: true, data: updated });
+    const settings = buildSettingsFromEnv();
+    return NextResponse.json({ success: true, data: settings });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
       {
         success: false,
-        data: defaultSettings(),
+        data: buildSettingsFromEnv(),
         error: { code: "SETTINGS_SAVE_ERROR", message, detail: String(err) },
       },
       { status: 500 }
