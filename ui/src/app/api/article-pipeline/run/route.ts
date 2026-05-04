@@ -93,7 +93,8 @@ export async function POST(
       if (body.limit && body.limit > 0) {
         args.push("--limit", String(body.limit));
       }
-      if (body.resume) args.push("--resume");
+      // Default to resume=true — only skip if explicitly set to false
+      if (body.resume !== false) args.push("--resume");
       if (body.force) args.push("--force");
       if (body.model) args.push("--model", body.model);
     } else {

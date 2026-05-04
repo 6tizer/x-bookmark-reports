@@ -20,7 +20,6 @@ import { getRepoRoot } from "@/lib/repo-root";
 
 const REPO_ROOT = getRepoRoot();
 const OUTPUT_DIR = path.join(REPO_ROOT, "output");
-const ARCHIVE_DIR = path.join(OUTPUT_DIR, "归档");
 const ARTICLE_FINAL_DIR = path.join(OUTPUT_DIR, "article-final");
 const PIPELINE_STATE_FILE = path.join(OUTPUT_DIR, ".article-pipeline-state.json");
 const NOTION_FINISHED_STATE = path.join(OUTPUT_DIR, ".notion-finished-state.json");
@@ -556,7 +555,6 @@ function countDeepDrafts(): { total: number; newThisWeek: number } {
   }
 
   scanDir(OUTPUT_DIR);
-  scanDir(ARCHIVE_DIR);
   return { total, newThisWeek };
 }
 
