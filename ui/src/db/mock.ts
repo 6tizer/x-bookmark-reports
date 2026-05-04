@@ -718,11 +718,22 @@ export const mockLogs: LogEntry[] = [
 // ─────────────────────────────────────────────
 
 export const mockSettings: Settings = {
-  apiKey: "abc****xyz",
-  proxy: "http://127.0.0.1:7897",
-  dataPath: "./data",
+  twitterApiKey: "abc****xyz",
+  notionToken: "ntk****xyz",
+  notionDbId: "notion-db-id-mock",
+  deepseekApiKey: "dsk****xyz",
+  deepseekBaseUrl: "https://api.deepseek.com/v1",
+  deepseekModel: "deepseek-chat",
+  xaiApiKey: "xai****xyz",
+  xaiBaseUrl: "https://api.x.ai/v1",
+  exaApiKey: "exa****xyz",
+  exaBaseUrl: "https://api.exa.ai",
+  bookmarksPath: "~/Library/Application Support/Google/Chrome/Default/Bookmarks",
   articlesDir: "~/Library/Mobile Documents/com~apple~CloudDocs/Hermes/bookmark-articles",
+  dataPath: "./data",
+  proxy: "http://127.0.0.1:7897",
   autoSync: false,
+  notionUploadLive: false,
   cronExpression: "0 */6 * * *",
 };
 

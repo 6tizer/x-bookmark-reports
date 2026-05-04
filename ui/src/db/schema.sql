@@ -142,7 +142,7 @@ CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type);
 -- ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS logs (
   id TEXT PRIMARY KEY,
-  component TEXT NOT NULL CHECK (component IN ('sync', 'x-reader', 'x-tweet-reader', 'agent', 'system')),
+  component TEXT NOT NULL CHECK (component IN ('sync', 'x-reader', 'x-tweet-reader', 'agent', 'system', 'coordinator', 'article_pipeline', 'notion_upload')),
   level TEXT NOT NULL CHECK (level IN ('info', 'warn', 'error')),
   message TEXT NOT NULL,
   detail TEXT,
@@ -158,11 +158,23 @@ CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level);
 -- ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS settings (
   id TEXT PRIMARY KEY DEFAULT 'default',
-  api_key TEXT,                     -- 加密存储
+  api_key TEXT,                     -- legacy (maps to TWITTER_API_IO_KEY)
   proxy TEXT,
   data_path TEXT DEFAULT './data',
   auto_sync INTEGER DEFAULT 0,
   cron_expression TEXT,
+  twitter_api_key TEXT,
+  notion_token TEXT,
+  notion_db_id TEXT,
+  deepseek_api_key TEXT,
+  deepseek_base_url TEXT DEFAULT 'https://api.deepseek.com/v1',
+  deepseek_model TEXT DEFAULT 'deepseek-chat',
+  xai_api_key TEXT,
+  xai_base_url TEXT DEFAULT 'https://api.x.ai/v1',
+  exa_api_key TEXT,
+  exa_base_url TEXT DEFAULT 'https://api.exa.ai',
+  bookmarks_path TEXT,
+  notion_upload_live INTEGER DEFAULT 0,
   updated_at TEXT DEFAULT (datetime('now'))
 );
 

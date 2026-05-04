@@ -56,11 +56,12 @@ export function useSettings(): UseSettingsReturn {
       store.setIsSaving(true);
       try {
         await updateApiKey(request);
+        await fetchSettings();
       } finally {
         store.setIsSaving(false);
       }
     },
-    [store]
+    [store, fetchSettings]
   );
 
   const test = useCallback(async () => {

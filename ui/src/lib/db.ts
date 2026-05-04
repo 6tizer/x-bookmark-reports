@@ -47,6 +47,58 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 // ─────────────────────────────────────────────
+// Auto-migration for existing databases
+// ─────────────────────────────────────────────
+
+function migrateSettingsTable(db: Database.Database): void {
+  const columns = db
+    .pragma("table_info(settings)") as Array<{ name: string }>;
+  const existing = new Set(columns.map((c) => c.name));
+
+  const newColumns: Array<{ name: string; type: string; default: string | null }> = [
+    { name: "twitter_api_key", type: "TEXT", default: null },
+    { name: "notion_token", type: "TEXT", default: null },
+    { name: "notion_db_id", type: "TEXT", default: null },
+    { name: "deepseek_api_key", type: "TEXT", default: null },
+    { name: "deepseek_base_url", type: "TEXT", default: "'https://api.deepseek.com/v1'" },
+    { name: "deepseek_model", type: "TEXT", default: "'deepseek-chat'" },
+    { name: "xai_api_key", type: "TEXT", default: null },
+    { name: "xai_base_url", type: "TEXT", default: "'https://api.x.ai/v1'" },
+    { name: "exa_api_key", type: "TEXT", default: null },
+    { name: "exa_base_url", type: "TEXT", default: "'https://api.exa.ai'" },
+    { name: "bookmarks_path", type: "TEXT", default: null },
+    { name: "notion_upload_live", type: "INTEGER", default: "0" },
+  ];
+
+  for (const col of newColumns) {
+    if (!existing.has(col.name)) {
+      const def = col.default ? ` DEFAULT ${col.default}` : "";
+      db.exec(`ALTER TABLE settings ADD COLUMN ${col.name} ${col.type}${def}`);
+    }
+  }
+}
+
+function migrateLogsComponent(db: Database.Database): void {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS logs_new (
+        id TEXT PRIMARY KEY,
+        component TEXT NOT NULL CHECK (component IN ('sync', 'x-reader', 'x-tweet-reader', 'agent', 'system', 'coordinator', 'article_pipeline', 'notion_upload')),
+        level TEXT NOT NULL CHECK (level IN ('info', 'warn', 'error')),
+        message TEXT NOT NULL,
+        detail TEXT,
+        timestamp TEXT DEFAULT (datetime('now'))
+      )
+    `);
+    db.exec(`INSERT OR IGNORE INTO logs_new SELECT * FROM logs`);
+    db.exec(`DROP TABLE logs`);
+    db.exec(`ALTER TABLE logs_new RENAME TO logs`);
+  } catch {
+    // Table already migrated or doesn't exist yet
+  }
+}
+
+// ─────────────────────────────────────────────
 // Connection + Schema
 // ─────────────────────────────────────────────
 
@@ -65,6 +117,10 @@ export function getDb(): Database.Database {
     dbInstance.exec(schema);
     // Import existing bookmarks_*.json from parent directory
     importExistingBookmarks();
+  } else {
+    // Migrate: add new columns if missing
+    migrateSettingsTable(dbInstance);
+    migrateLogsComponent(dbInstance);
   }
 
   return dbInstance;
@@ -992,21 +1048,43 @@ export function getSettings(): Settings {
 
   if (!row) {
     return {
-      apiKey: "****",
-      proxy: null,
-      dataPath: "./data",
+      twitterApiKey: "****",
+      notionToken: "****",
+      notionDbId: "",
+      deepseekApiKey: "****",
+      deepseekBaseUrl: "https://api.deepseek.com/v1",
+      deepseekModel: "deepseek-chat",
+      xaiApiKey: "****",
+      xaiBaseUrl: "https://api.x.ai/v1",
+      exaApiKey: "****",
+      exaBaseUrl: "https://api.exa.ai",
+      bookmarksPath: "",
       articlesDir: getArticlesDir(),
+      dataPath: "./data",
+      proxy: null,
       autoSync: false,
+      notionUploadLive: false,
       cronExpression: "0 */6 * * *",
     };
   }
 
   return {
-    apiKey: maskApiKey(row.api_key ? String(row.api_key) : null),
-    proxy: row.proxy ? String(row.proxy) : null,
-    dataPath: String(row.data_path ?? "./data"),
+    twitterApiKey: maskApiKey(row.twitter_api_key ? String(row.twitter_api_key) : null),
+    notionToken: maskApiKey(row.notion_token ? String(row.notion_token) : null),
+    notionDbId: row.notion_db_id ? String(row.notion_db_id) : "",
+    deepseekApiKey: maskApiKey(row.deepseek_api_key ? String(row.deepseek_api_key) : null),
+    deepseekBaseUrl: String(row.deepseek_base_url ?? "https://api.deepseek.com/v1"),
+    deepseekModel: String(row.deepseek_model ?? "deepseek-chat"),
+    xaiApiKey: maskApiKey(row.xai_api_key ? String(row.xai_api_key) : null),
+    xaiBaseUrl: String(row.xai_base_url ?? "https://api.x.ai/v1"),
+    exaApiKey: maskApiKey(row.exa_api_key ? String(row.exa_api_key) : null),
+    exaBaseUrl: String(row.exa_base_url ?? "https://api.exa.ai"),
+    bookmarksPath: row.bookmarks_path ? String(row.bookmarks_path) : "",
     articlesDir: getArticlesDir(),
+    dataPath: String(row.data_path ?? "./data"),
+    proxy: row.proxy ? String(row.proxy) : null,
     autoSync: Boolean(row.auto_sync),
+    notionUploadLive: Boolean(row.notion_upload_live),
     cronExpression: row.cron_expression ? String(row.cron_expression) : null,
   };
 }

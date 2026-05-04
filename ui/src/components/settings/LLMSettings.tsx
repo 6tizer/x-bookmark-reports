@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * GeneralSettings — API Keys, paths, toggles
+ * LLMSettings — DeepSeek, xAI, Exa, Pipeline Default Model
  */
 
 import { useState, useEffect } from "react";
 import { Save, Eye, EyeOff } from "lucide-react";
 import type { Settings, UpdateSettingsRequest, ApiKeyName } from "@/types/api";
 
-interface GeneralSettingsProps {
+interface LLMSettingsProps {
   settings: Settings | null;
   isLoading: boolean;
   isSaving: boolean;
@@ -121,34 +121,57 @@ function ApiKeyField({
   );
 }
 
-export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdateApiKey }: GeneralSettingsProps) {
-  const [proxy, setProxy] = useState("");
-  const [dataPath, setDataPath] = useState("");
-  const [bookmarksPath, setBookmarksPath] = useState("");
-  const [articlesDir, setArticlesDir] = useState("");
-  const [autoSync, setAutoSync] = useState(false);
-  const [notionUploadLive, setNotionUploadLive] = useState(false);
+const PIPELINE_MODEL_STORAGE = "articlePipelineModel";
+
+const MODEL_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Default (env)" },
+  { value: "deepseek-chat", label: "DeepSeek Chat" },
+  { value: "deepseek-reasoner", label: "DeepSeek Reasoner" },
+  { value: "grok-2-latest", label: "xAI Grok" },
+];
+
+export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApiKey }: LLMSettingsProps) {
+  const [deepseekBaseUrl, setDeepseekBaseUrl] = useState("https://api.deepseek.com/v1");
+  const [deepseekModel, setDeepseekModel] = useState("deepseek-chat");
+  const [xaiBaseUrl, setXaiBaseUrl] = useState("https://api.x.ai/v1");
+  const [exaBaseUrl, setExaBaseUrl] = useState("https://api.exa.ai");
+  const [pipelineModel, setPipelineModel] = useState("");
 
   useEffect(() => {
     if (settings) {
-      setProxy(settings.proxy || "");
-      setDataPath(settings.dataPath || "./data");
-      setBookmarksPath(settings.bookmarksPath || "");
-      setArticlesDir(settings.articlesDir || "");
-      setAutoSync(settings.autoSync);
-      setNotionUploadLive(settings.notionUploadLive);
+      setDeepseekBaseUrl(settings.deepseekBaseUrl || "https://api.deepseek.com/v1");
+      setDeepseekModel(settings.deepseekModel || "deepseek-chat");
+      setXaiBaseUrl(settings.xaiBaseUrl || "https://api.x.ai/v1");
+      setExaBaseUrl(settings.exaBaseUrl || "https://api.exa.ai");
     }
   }, [settings]);
 
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(PIPELINE_MODEL_STORAGE);
+      if (v !== null) setPipelineModel(v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const handleSave = () => {
     onSave({
-      proxy: proxy || null,
-      dataPath,
-      bookmarksPath,
-      articlesDir,
-      autoSync,
-      notionUploadLive,
+      deepseekBaseUrl,
+      deepseekModel,
+      xaiBaseUrl,
+      exaBaseUrl,
     });
+  };
+
+  const persistPipelineModel = (v: string) => {
+    setPipelineModel(v);
+    try {
+      if (v) localStorage.setItem(PIPELINE_MODEL_STORAGE, v);
+      else localStorage.removeItem(PIPELINE_MODEL_STORAGE);
+    } catch {
+      /* ignore */
+    }
   };
 
   const handleApiKeySave = (keyName: ApiKeyName, encoded: string) => {
@@ -167,132 +190,95 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
 
   return (
     <div className="space-y-6">
-      {/* API Keys Section */}
+      {/* DeepSeek */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">API Keys</h3>
-
+        <h3 className="text-sm font-semibold text-foreground">DeepSeek</h3>
         <ApiKeyField
-          label="Twitter API Key"
-          maskedValue={settings?.twitterApiKey || "****"}
-          keyName="TWITTER_API_IO_KEY"
+          label="API Key"
+          maskedValue={settings?.deepseekApiKey || "****"}
+          keyName="DEEPSEEK_API_KEY"
           onSave={handleApiKeySave}
         />
-
-        <ApiKeyField
-          label="Notion Token"
-          maskedValue={settings?.notionToken || "****"}
-          keyName="NOTION_TOKEN"
-          onSave={handleApiKeySave}
-        />
-
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Notion Database ID</label>
+          <label className="text-xs font-medium text-muted-foreground">Base URL</label>
           <input
             type="text"
-            value={settings?.notionDbId || ""}
-            onChange={(e) => onSave({ notionDbId: e.target.value })}
-            placeholder="notion-database-id"
-            className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm font-mono outline-none focus:ring-1 focus:ring-ring"
+            value={deepseekBaseUrl}
+            onChange={(e) => setDeepseekBaseUrl(e.target.value)}
+            className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
-
-        {/* Notion Upload Live */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">Notion Upload Live</p>
-            <p className="text-[11px] text-muted-foreground">Actually upload to Notion (vs dry-run)</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setNotionUploadLive(!notionUploadLive);
-            }}
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              notionUploadLive ? "bg-twitter-blue" : "bg-muted"
-            }`}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">Model</label>
+          <select
+            value={deepseekModel}
+            onChange={(e) => setDeepseekModel(e.target.value)}
+            className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           >
-            <span
-              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                notionUploadLive ? "translate-x-4" : "translate-x-0.5"
-              }`}
-            />
-          </button>
+            <option value="deepseek-chat">deepseek-chat</option>
+            <option value="deepseek-reasoner">deepseek-reasoner</option>
+          </select>
         </div>
       </div>
 
-      {/* Paths Section */}
+      {/* xAI */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Paths</h3>
-
+        <h3 className="text-sm font-semibold text-foreground">xAI (Grok)</h3>
+        <ApiKeyField
+          label="API Key"
+          maskedValue={settings?.xaiApiKey || "****"}
+          keyName="XAI_API_KEY"
+          onSave={handleApiKeySave}
+        />
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Bookmarks Path</label>
+          <label className="text-xs font-medium text-muted-foreground">Base URL</label>
           <input
             type="text"
-            value={bookmarksPath}
-            onChange={(e) => setBookmarksPath(e.target.value)}
-            placeholder="~/Library/Application Support/..."
-            className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Articles Output Dir</label>
-          <input
-            type="text"
-            value={articlesDir}
-            onChange={(e) => setArticlesDir(e.target.value)}
-            placeholder="output/article-final"
-            className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Data Directory</label>
-          <input
-            type="text"
-            value={dataPath}
-            onChange={(e) => setDataPath(e.target.value)}
-            placeholder="./data"
+            value={xaiBaseUrl}
+            onChange={(e) => setXaiBaseUrl(e.target.value)}
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
       </div>
 
-      {/* Network + Sync */}
+      {/* Exa */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Network</h3>
-
+        <h3 className="text-sm font-semibold text-foreground">Exa (Web Search)</h3>
+        <ApiKeyField
+          label="API Key"
+          maskedValue={settings?.exaApiKey || "****"}
+          keyName="EXA_API_KEY"
+          onSave={handleApiKeySave}
+        />
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Proxy URL</label>
+          <label className="text-xs font-medium text-muted-foreground">Base URL</label>
           <input
             type="text"
-            value={proxy}
-            onChange={(e) => setProxy(e.target.value)}
-            placeholder="http://127.0.0.1:7897"
+            value={exaBaseUrl}
+            onChange={(e) => setExaBaseUrl(e.target.value)}
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
+      </div>
 
-        {/* Auto Sync */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">Auto Sync</p>
-            <p className="text-[11px] text-muted-foreground">Automatically sync bookmarks on schedule</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAutoSync(!autoSync)}
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              autoSync ? "bg-twitter-blue" : "bg-muted"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                autoSync ? "translate-x-4" : "translate-x-0.5"
-              }`}
-            />
-          </button>
-        </div>
+      {/* Pipeline Default Model */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <h3 className="text-sm font-semibold text-foreground">Pipeline Default Model</h3>
+        <p className="text-[10px] text-muted-foreground">
+          Stored in this browser only. Passed to <code className="text-[10px]">bin/article_pipeline.py --model</code> when
+          you run the pipeline from the UI.
+        </p>
+        <select
+          value={pipelineModel}
+          onChange={(e) => persistPipelineModel(e.target.value)}
+          className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+        >
+          {MODEL_OPTIONS.map((o) => (
+            <option key={o.value || "default"} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex items-center gap-2">
