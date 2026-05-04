@@ -487,3 +487,19 @@ export interface UIState {
   commandPaletteOpen: boolean;
 }
 
+// ─────────────────────────────────────────────
+// Pipeline Control Center
+// ─────────────────────────────────────────────
+
+export type PipelineOperationType = "sync_bookmarks" | "article_pipeline" | "notion_upload";
+
+export interface PipelineOperation {
+  type: PipelineOperationType;
+  pid?: number;
+  startedAt: string;
+  status: "running" | "completed" | "failed";
+  command: string[];
+  completedAt?: string;
+  error?: string;
+}
+
