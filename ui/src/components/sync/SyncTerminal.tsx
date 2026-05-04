@@ -9,10 +9,10 @@ import { Copy, Check } from "lucide-react";
 
 interface SyncTerminalProps {
   logs: string[];
+  title?: string;
 }
 
 function parseLogColor(log: string): React.ReactNode {
-  // Detect log levels and color them
   if (log.includes("错误") || log.includes("失败") || log.includes("超时") || log.includes("error") || log.includes("Error")) {
     return <span className="text-red-400">{log}</span>;
   }
@@ -25,7 +25,7 @@ function parseLogColor(log: string): React.ReactNode {
   return <span className="text-gray-300">{log}</span>;
 }
 
-export function SyncTerminal({ logs }: SyncTerminalProps) {
+export function SyncTerminal({ logs, title }: SyncTerminalProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -39,10 +39,12 @@ export function SyncTerminal({ logs }: SyncTerminalProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const displayTitle = title ?? "sync.log";
+
   return (
     <div className="rounded-lg border border-border bg-[#1e1e1e] overflow-hidden">
       <div className="flex items-center justify-between border-b border-[#333] px-3 py-1.5">
-        <span className="text-[11px] text-gray-400 font-mono">sync.log</span>
+        <span className="text-[11px] text-gray-400 font-mono">{displayTitle}</span>
         <button
           onClick={handleCopy}
           className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white transition-colors"
