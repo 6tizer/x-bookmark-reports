@@ -1,16 +1,19 @@
 /**
  * POST /api/pipeline/coordinator
- * Spawns bin/coordinator.py and pipes stdout/stderr to UI Logger.
+ * Sync Bookmarks: runs sync_bookmarks.sh first, then coordinator.py --deep-batch.
+ * Kills any existing Python/bash pipeline processes before starting.
  */
 
 import { NextResponse } from "next/server";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { createInterface } from "readline";
 import { getRepoRoot } from "@/lib/repo-root";
 import { createLog } from "@/lib/db";
 import type { ApiResponse } from "@/types/api";
+
+export const dynamic = "force-dynamic";
 
 interface CoordinatorRunResponse {
   pid: number | undefined;
@@ -22,6 +25,7 @@ interface CoordinatorBody {
   limit?: number;
   resume?: boolean;
   full?: boolean;
+  skipSync?: boolean;
 }
 
 function resolvePython(repoRoot: string): string {
@@ -60,6 +64,30 @@ function pipeOutputToLogger(child: ReturnType<typeof spawn>, component: "coordin
   }
 }
 
+function killExistingPipelineProcesses(): void {
+  try {
+    const output = execSync(
+      "pgrep -f 'python.*coordinator\\.py|sync_bookmarks\\.sh'",
+      { encoding: "utf-8", timeout: 5000 }
+    ).trim();
+    if (!output) return;
+    for (const line of output.split("\n")) {
+      const pid = parseInt(line.trim(), 10);
+      if (!isNaN(pid) && pid > 0) {
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch { /* already dead */ }
+      }
+    }
+  } catch {
+    // pgrep returns exit code 1 when no matches
+  }
+}
+
+/**
+ * Run sync_bookmarks.sh then coordinator.py as a chained pipeline.
+ * Uses bash -c to serialize: sync_bookmarks.sh && coordinator.py
+ */
 export async function POST(
   request: Request
 ): Promise<NextResponse<ApiResponse<CoordinatorRunResponse>>> {
@@ -78,17 +106,41 @@ export async function POST(
       );
     }
 
+    killExistingPipelineProcesses();
+
     const py = resolvePython(repoRoot);
-    const args: string[] = [script, "--deep-batch"];
-
+    const coordinatorArgs: string[] = [script, "--deep-batch"];
     if (body.limit && body.limit > 0) {
-      args.push("--limit", String(body.limit));
+      coordinatorArgs.push("--limit", String(body.limit));
     }
-    if (body.resume) args.push("--resume");
-    if (body.full) args.push("--full");
+    if (body.resume === false) coordinatorArgs.push("--no-resume");
+    if (body.full) coordinatorArgs.push("--full");
 
+    // Build the chained command: sync_bookmarks.sh && coordinator.py
+    const parentDir = path.dirname(repoRoot);
+    const syncScript = path.join(parentDir, "sync_bookmarks.sh");
+    const skipSync = body.skipSync === true || !fs.existsSync(syncScript);
+
+    // Run sync_bookmarks.sh synchronously first (it's fast, ~10s)
+    if (!skipSync) {
+      try {
+        createLog("coordinator", "info", "Running sync_bookmarks.sh to fetch new bookmarks...");
+        execSync(`bash '${syncScript}'`, {
+          cwd: parentDir,
+          encoding: "utf-8",
+          timeout: 120000,
+          env: { ...process.env },
+        });
+        createLog("coordinator", "info", "sync_bookmarks.sh completed successfully");
+      } catch (syncErr) {
+        const errMsg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+        createLog("coordinator", "warn", `sync_bookmarks.sh failed: ${errMsg}. Proceeding to coordinator anyway.`);
+      }
+    }
+
+    // Now spawn coordinator.py as detached process
     const startedAt = new Date().toISOString();
-    const child = spawn(py, args, {
+    const child = spawn(py, coordinatorArgs, {
       cwd: repoRoot,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
@@ -103,7 +155,7 @@ export async function POST(
       data: {
         pid: child.pid,
         startedAt,
-        command: [py, ...args],
+        command: [py, ...coordinatorArgs],
       },
     });
   } catch (err) {
