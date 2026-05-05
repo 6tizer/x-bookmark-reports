@@ -1,16 +1,19 @@
 #!/bin/bash
 #
-# 书签自动化流水线：同步新书签 → 生成深度报告 → 上传到 Notion
+# 书签自动化流水线：同步新书签 → 生成深度报告 → 撰写成品文章 → 上传到 Notion
 #
 # 用法:
-#   bash auto_run.sh          # 正常运行（代理检测 + 增量同步 + 批量处理 + Notion 上传）
+#   bash auto_run.sh          # 正常运行（代理检测 + 增量同步 + 深度报告 + 成品文章 + Notion 上传）
 #   bash auto_run.sh --force  # 跳过代理检测，直接运行
 #
-# 被 launchd 定时调用，也可从 Streamlit UI 手动触发。
-# 运行状态写入 output/auto_run_state.json，日志写入 /tmp/bookmark-auto.log。
+# 被 launchd 定时调用。运行状态写入 output/auto_run_state.json，日志写入 /tmp/bookmark-auto.log。
 #
-# Notion 上传默认为 dry-run 模式（只记录日志，不写入 Notion）。
-# 在 .env 中设置 NOTION_UPLOAD_LIVE=true 可激活真实上传。
+# 新管线流程（5 步）:
+#   Step 0: 代理检测
+#   Step 1: sync_bookmarks.sh      — 从 Twitter 拉取新书签
+#   Step 2: coordinator.py         — 生成深度草稿（deep reports）
+#   Step 3: article_pipeline.py    — 研究(xAI+Exa) + 撰写成品文章
+#   Step 4: upload_to_notion.py    — 上传成品文章到 Notion（finished 模式）
 #
 
 set -euo pipefail
@@ -23,29 +26,33 @@ LOG_FILE="/tmp/bookmark-auto.log"
 SYNC_LOG="$PROJECT_ROOT/twitter_data/sync_log.txt"
 PROXY_URL="http://127.0.0.1:7897"
 PYTHON3="/usr/bin/python3"
+# article_pipeline.py 需要 openai 包，用 .venv 的 python
+VENV_PYTHON3="$SCRIPT_DIR/.venv/bin/python3"
 
 # ========== 工具函数 ==========
 
 write_state() {
-    # write_state STATUS STEP SYNC_NEW PROCESS_NEW UPLOAD_NEW ERROR_MSG
+    # write_state STATUS STEP SYNC_NEW PROCESS_NEW ARTICLE_NEW UPLOAD_NEW ERROR_MSG
     local status="$1"
     local step="$2"
     local sync_new="${3:-0}"
     local process_new="${4:-0}"
-    local upload_new="${5:-0}"
-    local error_msg="${6:-}"
+    local article_new="${5:-0}"
+    local upload_new="${6:-0}"
+    local error_msg="${7:-}"
 
     mkdir -p "$(dirname "$STATE_FILE")"
 
-    "$PYTHON3" - "$status" "$step" "$sync_new" "$process_new" "$upload_new" "$error_msg" "$STATE_FILE" "$LOG_FILE" <<'PYEOF'
+    "$PYTHON3" - "$status" "$step" "$sync_new" "$process_new" "$article_new" "$upload_new" "$error_msg" "$STATE_FILE" "$LOG_FILE" <<'PYEOF'
 import sys, json, datetime
-status, step, sync_new, process_new, upload_new, error_msg, state_file, log_file = sys.argv[1:]
+status, step, sync_new, process_new, article_new, upload_new, error_msg, state_file, log_file = sys.argv[1:]
 s = {
     "last_run": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     "status": status,
     "step": step,
     "sync_new_count": int(sync_new),
     "process_new_count": int(process_new),
+    "article_new_count": int(article_new),
     "upload_new_count": int(upload_new),
     "error": error_msg if error_msg else None,
     "log_file": log_file,
@@ -69,7 +76,7 @@ if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE")" -gt $((5 * 1024 * 1024)) ]; 
 fi
 
 log "===== 书签自动化流水线启动 ====="
-write_state "running" "init" 0 0 0 ""
+write_state "running" "init" 0 0 0 0 ""
 
 # ========== Step 0: 代理检测 ==========
 FORCE_MODE=false
@@ -89,7 +96,7 @@ if [ "$FORCE_MODE" = false ]; then
     if [ "$PROBE_OK" = false ]; then
         ERR="代理不可达（$PROXY_URL），请确认 Clash Verge 已启动后手动执行"
         log "ERROR: $ERR"
-        write_state "failed" "proxy_check" 0 0 0 "$ERR"
+        write_state "failed" "proxy_check" 0 0 0 0 "$ERR"
         exit 1
     fi
     log "Step 0: 代理正常"
@@ -109,7 +116,7 @@ fi
 if ! bash "$PROJECT_ROOT/sync_bookmarks.sh" >> "$LOG_FILE" 2>&1; then
     ERR="sync_bookmarks.sh 执行失败，查看日志: $LOG_FILE"
     log "ERROR: $ERR"
-    write_state "failed" "sync" 0 0 0 "$ERR"
+    write_state "failed" "sync" 0 0 0 0 "$ERR"
     exit 1
 fi
 
@@ -147,7 +154,7 @@ cd "$SCRIPT_DIR"
 if ! "$PYTHON3" bin/coordinator.py --deep-batch >> "$LOG_FILE" 2>&1; then
     ERR="coordinator.py --deep-batch 执行失败，查看日志: $LOG_FILE"
     log "ERROR: $ERR"
-    write_state "failed" "process" "$SYNC_NEW" 0 0 "$ERR"
+    write_state "failed" "process" "$SYNC_NEW" 0 0 0 "$ERR"
     exit 1
 fi
 
@@ -167,14 +174,54 @@ PROCESS_NEW=$((COMPLETED_AFTER - COMPLETED_BEFORE))
 [ "$PROCESS_NEW" -lt 0 ] && PROCESS_NEW=0
 log "Step 2: 处理完成，本次新增 $PROCESS_NEW 篇报告"
 
-# ========== Step 3: 上传草稿到 Notion ==========
-log "Step 3: 上传书签草稿到 Notion..."
+# ========== Step 3: 撰写成品文章（article pipeline）==========
+log "Step 3: 运行 Article Pipeline（研究 + 撰写成品文章）..."
+
+ARTICLE_STATE="$SCRIPT_DIR/output/.article-pipeline-state.json"
+ARTICLE_WRITTEN_BEFORE=0
+if [ -f "$ARTICLE_STATE" ]; then
+    ARTICLE_WRITTEN_BEFORE="$("$PYTHON3" -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    arts = d.get('articles', {})
+    print(sum(1 for e in arts.values() if e.get('status') == 'written'))
+except Exception:
+    print(0)
+" "$ARTICLE_STATE")"
+fi
+
+if ! "$VENV_PYTHON3" bin/article_pipeline.py run-batch >> "$LOG_FILE" 2>&1; then
+    ERR="article_pipeline.py run-batch 执行失败，查看日志: $LOG_FILE"
+    log "ERROR: $ERR"
+    write_state "failed" "article" "$SYNC_NEW" "$PROCESS_NEW" 0 0 "$ERR"
+    exit 1
+fi
+
+ARTICLE_WRITTEN_AFTER=0
+if [ -f "$ARTICLE_STATE" ]; then
+    ARTICLE_WRITTEN_AFTER="$("$PYTHON3" -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    arts = d.get('articles', {})
+    print(sum(1 for e in arts.values() if e.get('status') == 'written'))
+except Exception:
+    print(0)
+" "$ARTICLE_STATE")"
+fi
+ARTICLE_NEW=$((ARTICLE_WRITTEN_AFTER - ARTICLE_WRITTEN_BEFORE))
+[ "$ARTICLE_NEW" -lt 0 ] && ARTICLE_NEW=0
+log "Step 3: Article Pipeline 完成，本次新增 $ARTICLE_NEW 篇成品文章"
+
+# ========== Step 4: 上传成品文章到 Notion ==========
+log "Step 4: 上传成品文章到 Notion（finished 模式）..."
 
 UPLOAD_OUTPUT=""
 UPLOAD_NEW=0
 UPLOAD_ERRORS=0
 UPLOAD_EXIT=0
-UPLOAD_OUTPUT="$("$PYTHON3" bin/upload_to_notion.py 2>&1)" || UPLOAD_EXIT=$?
+UPLOAD_OUTPUT="$("$VENV_PYTHON3" bin/upload_to_notion.py --mode finished --live 2>&1)" || UPLOAD_EXIT=$?
 
 # 打印 upload 输出到主日志
 echo "$UPLOAD_OUTPUT" >> "$LOG_FILE"
@@ -186,23 +233,20 @@ UPLOAD_ERRORS="$(echo "$UPLOAD_OUTPUT" | grep -oE 'errors: [0-9]+' | grep -oE '[
 [ -z "$UPLOAD_ERRORS" ] && UPLOAD_ERRORS=0
 
 if [ "$UPLOAD_EXIT" -ne 0 ] && [ "$UPLOAD_NEW" -eq 0 ]; then
-    # 全部失败
     ERR="upload_to_notion.py 全部失败（errors: $UPLOAD_ERRORS），查看日志: $LOG_FILE"
     log "ERROR: $ERR"
-    write_state "failed" "upload" "$SYNC_NEW" "$PROCESS_NEW" 0 "$ERR"
+    write_state "failed" "upload" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" 0 "$ERR"
     exit 1
 elif [ "$UPLOAD_EXIT" -ne 0 ] && [ "$UPLOAD_NEW" -gt 0 ]; then
-    # 部分成功：POST 创建页面成功、PATCH 追加内容失败的文件已计入 state，不会再重试
-    # （避免在 Cloudflare/网络抖动下重复创建空页）；用户可在日志中搜索 [PARTIAL] 检查这些页面
-    WARN="Notion 上传部分完成（新增 $UPLOAD_NEW 篇，告警 $UPLOAD_ERRORS 篇；partial 文件已写入 state 不会重试，详见日志中的 [PARTIAL] 行）"
+    WARN="Notion 上传部分完成（新增 $UPLOAD_NEW 篇，告警 $UPLOAD_ERRORS 篇；partial 文件已写入 state 不会重试）"
     log "WARN: $WARN"
-    write_state "partial" "done" "$SYNC_NEW" "$PROCESS_NEW" "$UPLOAD_NEW" "$WARN"
-    log "===== 流水线完成（同步 +$SYNC_NEW 条，报告 +$PROCESS_NEW 篇，Notion +$UPLOAD_NEW 篇，失败 $UPLOAD_ERRORS 篇）====="
+    write_state "partial" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" "$WARN"
+    log "===== 流水线完成（同步 +$SYNC_NEW 条，报告 +$PROCESS_NEW 篇，成品 +$ARTICLE_NEW 篇，Notion +$UPLOAD_NEW 篇，失败 $UPLOAD_ERRORS 篇）====="
     exit 0
 fi
 
-log "Step 3: Notion 上传完成，本次新增 $UPLOAD_NEW 篇"
+log "Step 4: Notion 上传完成，本次新增 $UPLOAD_NEW 篇"
 
 # ========== 写入成功状态 ==========
-write_state "success" "done" "$SYNC_NEW" "$PROCESS_NEW" "$UPLOAD_NEW" ""
-log "===== 流水线完成（同步 +$SYNC_NEW 条，报告 +$PROCESS_NEW 篇，Notion +$UPLOAD_NEW 篇）====="
+write_state "success" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" ""
+log "===== 流水线完成（同步 +$SYNC_NEW 条，报告 +$PROCESS_NEW 篇，成品 +$ARTICLE_NEW 篇，Notion +$UPLOAD_NEW 篇）====="

@@ -4,7 +4,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { createInterface } from "readline";
@@ -33,6 +33,27 @@ function resolvePython(repoRoot: string): string {
   const venvPy = path.join(repoRoot, ".venv", "bin", "python3");
   if (fs.existsSync(venvPy)) return venvPy;
   return "python3";
+}
+
+function killExistingPythonProcesses(): void {
+  try {
+    const output = execSync("pgrep -f 'python.*article_pipeline\\.py'", {
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
+    if (!output) return;
+    for (const line of output.split("\n")) {
+      const pid = parseInt(line.trim(), 10);
+      if (!isNaN(pid) && pid > 0) {
+        try {
+          process.kill(pid, "SIGTERM");
+          // eslint-disable-next-line no-empty
+        } catch { /* already dead */ }
+      }
+    }
+  } catch {
+    // pgrep returns exit code 1 when no matches — that's fine
+  }
 }
 
 function pipeOutputToLogger(child: ReturnType<typeof spawn>, component: "coordinator" | "article_pipeline" | "notion_upload"): void {
@@ -82,6 +103,9 @@ export async function POST(
         { status: 500 }
       );
     }
+
+    // Kill any existing Python pipeline processes before starting new one
+    killExistingPythonProcesses();
 
     const py = resolvePython(repoRoot);
     const args: string[] = [script];

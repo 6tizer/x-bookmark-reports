@@ -258,22 +258,52 @@ class Researcher:
         # --- Exa (optional supplement) ---
         exa_client = self._get_exa_client()
         if exa_client is not None:
-            try:
-                logger.info("Exa research: supplementing for '%s'", topic[:60])
-                exa_query = f"对以下主题进行深度研究，补充竞品分析、社区反馈和项目背景：{topic}\n\n{body_excerpt[:1000]}"
-                exa_resp = exa_client.chat.completions.create(
-                    model="exa-research",
-                    messages=[
-                        {"role": "system", "content": self._system_prompt},
-                        {"role": "user", "content": exa_query},
-                    ],
-                )
-                exa_text = exa_resp.choices[0].message.content or ""
-                bundle.raw_exa_response = exa_text
-                logger.info("Exa research done: %d chars", len(exa_text))
-            except Exception as exc:
-                logger.warning("Exa research failed (non-fatal): %s", exc)
-                bundle.raw_exa_response = f"[Exa error: {exc}]"
+            max_retries = 2
+            for attempt in range(1, max_retries + 1):
+                try:
+                    logger.info(
+                        "Exa research: supplementing for '%s' (attempt %d/%d)",
+                        topic[:60], attempt, max_retries,
+                    )
+                    exa_query = f"对以下主题进行深度研究，补充竞品分析、社区反馈和项目背景：{topic}\n\n{body_excerpt[:1000]}"
+                    exa_resp = exa_client.chat.completions.create(
+                        model="exa-research",
+                        messages=[
+                            {"role": "system", "content": self._system_prompt},
+                            {"role": "user", "content": exa_query},
+                        ],
+                        timeout=60,
+                    )
+                    # Exa returns multiple choices; early ones are intermediate
+                    # search steps with empty content. Find the last non-empty one.
+                    exa_text = ""
+                    for choice in reversed(exa_resp.choices):
+                        c = choice.message.content
+                        if c:
+                            exa_text = c
+                            break
+                    if exa_text:
+                        bundle.raw_exa_response = exa_text
+                        logger.info("Exa research done: %d chars", len(exa_text))
+                        break  # success
+                    else:
+                        logger.warning(
+                            "Exa returned %d choices, all empty (attempt %d/%d)",
+                            len(exa_resp.choices), attempt, max_retries,
+                        )
+                        if attempt < max_retries:
+                            import time as _t
+                            _t.sleep(3)
+                except Exception as exc:
+                    logger.warning(
+                        "Exa research failed (attempt %d/%d): %s",
+                        attempt, max_retries, exc,
+                    )
+                    if attempt == max_retries:
+                        bundle.raw_exa_response = f"[Exa error: {exc}]"
+                    else:
+                        import time as _t
+                        _t.sleep(3)
 
         # Parse structured data from combined text
         self._parse_research(bundle, xai_text)

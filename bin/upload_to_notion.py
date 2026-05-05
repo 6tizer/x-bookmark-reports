@@ -655,6 +655,30 @@ def _build_finished_payload(meta: dict[str, str], body: str) -> dict[str, Any]:
     return payload
 
 
+def _check_duplicate_in_notion(source_url: str) -> str | None:
+    """Query Notion DB for an existing page with the same source_url.
+
+    Returns the page_id if found, None otherwise.
+    """
+    if not source_url or not NOTION_DB_ID:
+        return None
+    try:
+        payload = {
+            "filter": {
+                "property": "\u6587\u7ae0\u94fe\u63a5",
+                "url": {"equals": source_url},
+            },
+            "page_size": 1,
+        }
+        result = _api_request("POST", f"/databases/{NOTION_DB_ID}/query", payload)
+        pages = result.get("results", [])
+        if pages:
+            return pages[0].get("id", "")
+    except Exception as e:
+        print(f"  [WARN] Duplicate check failed: {e}", file=sys.stderr)
+    return None
+
+
 def upload_finished_file(md_path: Path, live: bool) -> tuple[str, str]:
     """Upload a finished article .md to Notion (status=已发布).
 
@@ -683,6 +707,11 @@ def upload_finished_file(md_path: Path, live: bool) -> tuple[str, str]:
         print(f"    \u6807\u7b7e   : {tags}")
         print(f"    Blocks : {len(blocks)}")
         return "dry-run", "dry-run"
+
+    existing_page = _check_duplicate_in_notion(source_url)
+    if existing_page:
+        print(f"  [SKIP-DUP] {md_path.name} already in Notion (page_id={existing_page})")
+        return "ok", f"already_exists page_id={existing_page}"
 
     payload = _build_finished_payload(meta, body)
     try:
