@@ -1,6 +1,6 @@
 # x-bookmark-reports
 
-Twitter 书签 → 报告 → 成品文章的全流程系统。自动抓取、分类、清洗书签内容，AI 加工为深度文章，提供 Notion 风格的可视化 Dashboard。
+Twitter 书签 → 深度报告 → 成品文章的全自动流水线系统。自动抓取、分类、清洗书签内容，AI 加工为深度文章，提供 Next.js Dashboard 可视化管控，并定时上传 Notion。
 
 ---
 
@@ -11,32 +11,23 @@ Twitter 书签 → 报告 → 成品文章的全流程系统。自动抓取、�
 ```bash
 cd ui/
 npm install
+npm run build   # 生产构建
+npm start       # 启动（端口 3001）
+# 或开发模式：
 npm run dev
 ```
 
-也可在仓库根目录执行（Next 的当前工作目录为 `x-bookmark-reports/` 时同样有效）：
+浏览器打开 `http://localhost:3001`，5 个主页面：
 
-```bash
-cd ui && npm install && npm run dev
-# 或从 monorepo 根目录：在含 ui/package.json 的目录下执行 npm run dev --prefix ui
-```
+| 页面 | 内容 |
+|---|---|
+| Dashboard | 管线统计卡片 + 4 节点 Pipeline 状态图 |
+| Bookmarks | 书签列表（作者、标题、互动数据） |
+| Sync | Pipeline 控制中心（触发各阶段、查看日志） |
+| Articles | 成品文章列表 |
+| Settings | API Key 配置、调度、日志、数据管理 |
 
-浏览器打开 `http://localhost:3001`（与本机 3000 上其他服务错开），6 个页面：
-
-若 Cursor 内置浏览器 **502 / 白屏**：`Cmd+Shift+P` → **Developer: Reload Window**；仍不行见 `ui/TROUBLESHOOTING.txt`，并在 `ui/` 执行 **`npm run dev:clean`**。
-
-
-| 页面        | 内容                                            |
-| --------- | --------------------------------------------- |
-| Dashboard | 总量统计 (485 书签 / 74 报告 / 411 待处理) + Pipeline 状态 |
-| Bookmarks | 书签列表 (作者、推文标题、互动数据)                           |
-| Sync      | 同步控制中心 (增量/全量同步、日志、环境配置)                      |
-| Reports   | 深度报告草稿列表 (从 `output/` 读取)                     |
-| Articles  | 成品文章列表 (从 `bookmark-articles/` 读取)            |
-| Settings  | 代理/数据目录/Auto Sync 开关                          |
-
-
-Dashboard 从本地文件系统直接读取 `output/` (草稿) 和 `bookmark-articles/` (成品文章)，无需数据库。
+> 若 Cursor 内置浏览器 502/白屏：`npm run dev:clean` 清除缓存后重试。
 
 ---
 
@@ -44,152 +35,165 @@ Dashboard 从本地文件系统直接读取 `output/` (草稿) 和 `bookmark-art
 
 ```
 x-bookmark-reports/
-├── app.py                      # Streamlit Web UI (旧版)
-├── auto_run.sh                 # 自动化流水线（同步 + 生成 + 上传）
-├── sync_bookmarks.sh           # Twitter 书签增量同步脚本
-├── ui/                         # Next.js Dashboard UI ★
-│   ├── src/
-│   │   ├── app/                # 页面路由 (6 页面)
-│   │   ├── components/         # UI 组件
-│   │   ├── lib/fs-data.ts      # 文件系统数据层 (读取 output/ + bookmark-articles/)
-│   │   ├── hooks/              # React Hooks
-│   │   └── store/              # Zustand 状态管理
-│   ├── package.json
-│   └── tailwind.config.ts
+├── auto_run.sh                 # launchd 定时任务入口（每 3 小时）
 ├── bin/
-│   ├── coordinator.py          # 主入口脚本（报告生成）
-│   ├── upload_to_notion.py     # Notion 批量上传脚本（草稿 + 成品）
-│   └── article_pipeline.py     # 成文管线 CLI（研究 + 改写）
+│   ├── coordinator.py          # 深度报告生成主入口
+│   ├── article_pipeline.py     # 成品文章管线 CLI（研究 + 成文）
+│   └── upload_to_notion.py     # Notion 上传脚本（草稿 + 成品）
 ├── lib/
-│   ├── article_client.py       # TwitterAPI.io Article API 客户端
-│   ├── quoted_client.py        # FxTwitter API 客户端
-│   ├── github_client.py        # GitHub API 客户端
+│   ├── config.py               # 配置（从 .env 读取）
+│   ├── coordinator.py          # 书签处理核心逻辑
+│   ├── article_client.py       # TwitterAPI.io Article 客户端
+│   ├── quoted_client.py        # FxTwitter 引用推文客户端
+│   ├── github_client.py        # GitHub README 客户端
 │   ├── external_client.py      # 外部链接抓取客户端
 │   ├── report_builder.py       # Markdown 报告生成器
-│   ├── config.py               # 配置（含 Article Pipeline LLM 配置）
-│   └── article_pipeline/       # 成文管线模块
-│       ├── state.py            # 管线状态管理
+│   └── article_pipeline/       # 成品文章管线模块
+│       ├── state.py            # 管线状态（幂等、可续跑）
 │       ├── metadata.py         # 深度报告元数据解析
-│       ├── research.py         # x.ai + Exa 双路检索
-│       ├── rewrite.py          # DeepSeek 成文
+│       ├── research.py         # xAI + Exa 双路搜索研究
+│       ├── rewrite.py          # DeepSeek 文章成文
 │       └── prompts/            # System prompt 模板
-├── cache/                      # API 响应缓存
-├── output/                     # 深度报告草稿 (.md)
+├── ui/                         # Next.js Dashboard ★
+│   ├── src/
+│   │   ├── app/                # 页面路由 + API routes
+│   │   ├── components/         # UI 组件
+│   │   ├── lib/
+│   │   │   ├── fs-data.ts      # 文件系统数据层
+│   │   │   └── db.ts           # SQLite 数据库（日志、设置）
+│   │   └── types/              # TypeScript 类型定义
+│   └── data/
+│       └── x_bookmarks.db      # SQLite DB（日志、书签、设置）
+├── output/                     # 管线产出（gitignore）
+│   ├── bookmark-deep-*.md      # 深度报告草稿
 │   ├── article-final/          # 成品文章 (.md)
-│   └── article-research/       # 研究结果 (.json)
-└── .env                        # 环境配置（不提交）
+│   ├── article-research/       # 研究结果 (.json)
+│   ├── .deep-run-state.json    # 深度报告进度
+│   ├── .article-pipeline-state.json  # 成品管线进度
+│   └── .notion-finished-state.json   # Notion 上传进度
+├── cache/                      # API 响应缓存（gitignore）
+├── .env                        # 环境配置（不提交）
+└── .env.example                # 配置示例
 ```
 
 ---
 
-## 🔧 数据管道 (Python 后端)
+## 🔄 完整管线流程
 
-### 功能介绍
+```
+Twitter 书签
+    │
+    ▼  sync_bookmarks.sh
+bookmarks.json（增量同步）
+    │
+    ▼  coordinator.py --deep-batch
+深度报告草稿（bookmark-deep-*.md）
+    │
+    ▼  article_pipeline.py run-batch
+成品文章（output/article-final/*.md）
+研究结果（output/article-research/*.json）
+    │
+    ▼  upload_to_notion.py --mode finished --live
+Notion DB（状态=已发布）
+```
 
-
-| 类型               | 描述                | 数据来源                 |
-| ---------------- | ----------------- | -------------------- |
-| **Article**      | Twitter 长篇文章原文    | TwitterAPI.io API    |
-| **Quoted Tweet** | 引用的推文和纯文字推文       | FxTwitter API / 本地数据 |
-| **GitHub**       | GitHub 仓库的 README | GitHub REST API      |
-| **External**     | 其他外部链接内容          | 直接抓取                 |
-
-
-**核心功能**：自动分类书签类型、多级缓存、增量/全量运行、t.co 短链解析、HTML 内容清理、回复抓取。
-
-### 运行命令
-
-
-| 命令                                        | 说明                    |
-| ----------------------------------------- | --------------------- |
-| `python3 bin/coordinator.py`              | 增量运行                  |
-| `python3 bin/coordinator.py --full`       | 全量运行（忽略缓存）            |
-| `python3 bin/coordinator.py --limit 10`   | 仅处理前 10 条             |
-| `python3 bin/coordinator.py --deep-batch` | 批量深度报告，每条单独文件         |
-| `bash auto_run.sh`                        | 手动执行全流程（同步 + 生成 + 上传） |
-
+每 3 小时由 `launchd (com.tizer.bookmark-auto)` 自动触发全流程，也可在 UI Sync 页面手动触发各阶段。
 
 ---
 
-## Article Pipeline — 本地成文管线
+## ⚙️ 环境配置
 
-深度报告草稿经过 **研究搜索 + DeepSeek 成文** 转为成品文章，上传 Notion 时状态直接为「已发布」。
-
-### 前置条件
-
-在 `.env` 中配置以下 API Key：
+在项目根目录创建 `.env`：
 
 ```bash
-DEEPSEEK_API_KEY=your_key     # 文章改写（DeepSeek，OpenAI 兼容）
-XAI_API_KEY=your_key          # 研究搜索（x.ai grok）
-# EXA_API_KEY=your_key        # 可选：Exa 补充搜索
+# 必填
+TWITTER_API_IO_KEY=your_key      # TwitterAPI.io（书签 Article 获取）
+NOTION_TOKEN=secret_xxx          # Notion Integration Token
+NOTION_DB_ID=your_db_id          # Notion 数据库 ID
+
+# AI 模型（成品管线必填）
+DEEPSEEK_API_KEY=your_key        # DeepSeek（文章成文）
+XAI_API_KEY=your_key             # xAI Grok（搜索研究）
+EXA_API_KEY=your_key             # Exa（补充研究，可选）
+
+# 可选
+PROXY=http://127.0.0.1:7897
+BOOKMARKS_PATH=../twitter_data/bookmarks.json
+XAI_MODEL=grok-4.3
+DEEPSEEK_MODEL=deepseek-chat
+NOTION_UPLOAD_LIVE=true          # 默认 false（dry-run）
 ```
 
-### 运行命令
+---
+
+## 🐍 Python 后端命令
+
+### 深度报告（coordinator.py）
+
+```bash
+# 增量生成深度报告（跳过已完成）
+python3 bin/coordinator.py --deep-batch
+
+# 全量重新生成
+python3 bin/coordinator.py --full
+
+# 单条测试
+python3 bin/coordinator.py --id <tweet_id>
+```
+
+### 成品文章管线（article_pipeline.py）
 
 ```bash
 # 查看管线状态
-python3 bin/article_pipeline.py status
+.venv/bin/python3 bin/article_pipeline.py status
 
-# 处理单篇文章（完整流程：元数据 → 研究 → 成文）
-python3 bin/article_pipeline.py run-one --id <tweet_id>
+# 批量处理（默认 resume，跳过已完成）
+.venv/bin/python3 bin/article_pipeline.py run-batch
 
-# 批量处理（跳过已完成）
-python3 bin/article_pipeline.py run-batch --resume
+# 处理单篇
+.venv/bin/python3 bin/article_pipeline.py run-one --id <tweet_id>
 
 # 只跑研究步骤
-python3 bin/article_pipeline.py research-only --id <tweet_id>
+.venv/bin/python3 bin/article_pipeline.py research-only --id <tweet_id>
 
-# 只跑成文步骤（需要已有研究结果）
-python3 bin/article_pipeline.py write-only --id <tweet_id>
+# 只跑成文步骤
+.venv/bin/python3 bin/article_pipeline.py write-only --id <tweet_id>
 ```
 
-### 成品上传到 Notion
+### Notion 上传（upload_to_notion.py）
 
 ```bash
-# 预览（dry-run）
-python3 bin/upload_to_notion.py --mode finished
+# 上传成品文章（dry-run）
+.venv/bin/python3 bin/upload_to_notion.py --mode finished
 
-# 真实上传
-python3 bin/upload_to_notion.py --mode finished --live
+# 真实上传（自动去重：已存在则跳过）
+.venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 
 # 上传单篇
-python3 bin/upload_to_notion.py --mode finished --file output/article-final/<tweet_id>.md
+.venv/bin/python3 bin/upload_to_notion.py --mode finished --live \
+  --file output/article-final/<tweet_id>.md
 ```
 
-### 产出目录
+### 手动触发全流程
 
-| 目录 | 内容 |
-|------|------|
-| `output/article-final/` | 成品 Markdown 文件 |
-| `output/article-research/` | 研究搜索结果 JSON |
-| `output/.article-pipeline-state.json` | 管线状态（幂等、可续跑） |
-
-### 搜索供应商
-
-| 供应商 | 用途 | 模型 |
-|--------|------|------|
-| x.ai | Web + X 搜索（Responses API，server-side agentic） | `grok-4.3` |
-| Exa | 补充深度研究（可选） | `exa-research` |
-| DeepSeek | 文章改写 | `deepseek-chat` |
-
+```bash
+bash auto_run.sh --force   # 跳过代理检测，立即运行全流程
+```
 
 ---
 
-## ⚙️ 配置
+## 🤖 AI 搜索供应商
 
-```bash
-# .env
-TWITTER_API_IO_KEY=your_api_key_here   # 必填
-PROXY=http://127.0.0.1:7897            # 可选
-BOOKMARKS_PATH=../twitter_data/bookmarks.json  # 书签文件路径
-```
+| 供应商 | 用途 | 模型 | 说明 |
+|---|---|---|---|
+| **xAI (Grok)** | 主力搜索 | `grok-4.3` | Responses API，含 `web_search` + `x_search` |
+| **Exa** | 补充研究 | `exa-research` | 多 choices，自动取最后非空结果，2 次重试 |
+| **DeepSeek** | 文章成文 | `deepseek-chat` | OpenAI 兼容 API |
 
 ---
 
 ## 🔗 相关文档
 
-- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) — 项目详细上下文
-- [WORKFLOW.md](./WORKFLOW.md) — 工作流规范
-- [BUGS.md](./BUGS.md) — Bug 跟踪
-
+- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) — 项目详细技术上下文
+- [WORKFLOW.md](./WORKFLOW.md) — 开发工作流规范
+- [BUGS.md](./BUGS.md) — Bug 跟踪记录

@@ -1,0 +1,8 @@
+{
+  "http.proxySupport": "override",
+  "http.noProxy": "127.0.0.1,localhost,::1,0.0.0.0,<local>,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
+  "terminal.integrated.env.osx": {
+    "NO_PROXY": "127.0.0.1,localhost,::1,0.0.0.0",
+    "no_proxy": "127.0.0.1,localhost,::1,0.0.0.0"
+  }
+}

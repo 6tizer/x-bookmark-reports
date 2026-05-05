@@ -1,23 +1,47 @@
-# Twitter Bookmark 报告生成系统 — 项目上下文
+# Twitter Bookmark 报告系统 — 项目上下文
 
-> 本文件供 Subagent 了解项目实际情况。数据截止 2026-04-20。
+> 本文件供 Subagent 了解项目实际情况。数据截止 2026-05-05。
 > 每次开发迭代前先读此文件。
 
 ---
 
-## 一、项目位置与现有结构
+## 一、项目位置与结构
 
 ```
 /Users/tizer_mac_studio/work/Cursor/Twitter Bookmark/
 ├── twitter_data/
-│   └── bookmarks.json          ← 书签数据源（必读）
-├── .env.twitter                 ← API_KEY 和 PROXY（敏感）
-├── sync_bookmarks.sh            ← 书签同步脚本（已有）
-├── README.md                    ← 项目主文档
-├── x-reader/                    ← 已有工具目录
-├── x-tweet-fetcher/
-├── x-tweet-reader/
-└── x-bookmark-reports/         ← 【本次新建】报告生成系统根目录
+│   └── bookmarks.json          ← 书签数据源（主数据，不提交 git）
+├── sync_bookmarks.sh            ← 书签同步脚本（rettiwt-api v7）
+└── x-bookmark-reports/         ← 本系统根目录
+    ├── auto_run.sh              ← launchd 定时脚本（每 3 小时）
+    ├── bin/
+    │   ├── coordinator.py       ← 深度报告生成主入口
+    │   ├── article_pipeline.py  ← 成品文章管线 CLI
+    │   └── upload_to_notion.py  ← Notion 上传脚本（含去重保护）
+    ├── lib/
+    │   ├── config.py
+    │   ├── coordinator.py
+    │   ├── report_builder.py
+    │   ├── article_client.py / quoted_client.py / github_client.py / external_client.py
+    │   └── article_pipeline/   ← 成品管线子模块
+    │       ├── state.py / metadata.py / research.py / rewrite.py
+    │       └── prompts/
+    ├── ui/                      ← Next.js Dashboard
+    │   ├── src/app/             ← 页面路由 + API routes（Next.js App Router）
+    │   ├── src/components/      ← React 组件
+    │   ├── src/lib/
+    │   │   ├── fs-data.ts       ← 文件系统数据层（读 output/ 目录）
+    │   │   └── db.ts            ← SQLite 数据库访问层
+    │   └── data/x_bookmarks.db  ← SQLite DB（日志、书签元数据、设置）
+    ├── output/                  ← 管线产出（gitignore）
+    │   ├── bookmark-deep-*.md   ← 深度报告草稿
+    │   ├── article-final/       ← 成品文章 .md
+    │   ├── article-research/    ← 研究结果 .json
+    │   ├── 归档/                 ← 历史文件归档（不计入统计）
+    │   ├── .deep-run-state.json
+    │   ├── .article-pipeline-state.json
+    │   └── .notion-finished-state.json
+    └── cache/                   ← API 响应缓存（gitignore）
 ```
 
 **重要**：项目名含空格（`Twitter Bookmark`），Shell 命令中涉及路径必须加引号。
@@ -27,369 +51,214 @@
 ## 二、书签数据详情（bookmarks.json）
 
 - **路径**：`/Users/tizer_mac_studio/work/Cursor/Twitter Bookmark/twitter_data/bookmarks.json`
-- **格式**：JSON 数组，共 **654 条**书签记录
-- **时间范围**：2024-11-19 ~ 2026-04-20
-- **排序**：**不是**按时间排序，**不是**按 ID 排序。`sync_bookmarks.sh` 每次把本轮新增 prepend 到数组开头，所以**数组靠前 ≈ 最近加入书签的**，但不严格
-- **作者数**：363 位
+- **格式**：JSON 数组，当前约 **940+ 条**书签记录（每次 sync 追加到数组头部）
+- **排序**：数组靠前 ≈ 最近加入的书签，不严格按时间排序
 
 ### 字段说明
 
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | string | 推文 ID（19 位数字字符串） |
+| `fullText` | string | 推文全文 |
+| `createdAt` | string | **两种格式并存**（见 schema 兼容说明） |
+| `lang` | string | 语言代码 zh/en |
+| `tweetBy` | dict | 作者信息（userName, fullName 等） |
+| `entities.urls` | **list[str]** | URL 字符串数组（**不是 dict**） |
+| `media` | list[dict] | 图片/视频 |
+| `quoted` | dict | 引用推文 |
 
-| 字段                                                                      | 类型            | 说明                                                             |
-| ----------------------------------------------------------------------- | ------------- | -------------------------------------------------------------- |
-| `id`                                                                    | string        | 推文 ID（19位数字字符串）                                                |
-| `fullText`                                                              | string        | 推文全文                                                           |
-| `createdAt`                                                             | string        | **两种格式并存**（见下方 schema 兼容说明）                                    |
-| `lang`                                                                  | string        | 语言代码 zh/en                                                     |
-| `tweetBy`                                                               | dict          | 作者信息（userName, fullName, id 等）                                 |
-| `entities`                                                              | dict          | 含 `hashtags`, `mentionedUsers`, `urls`                         |
-| `entities.urls`                                                         | **list[str]** | URL 字符串数组（**不是 dict**）                                         |
-| `media`                                                                 | list[dict]    | 图片/视频，含 `url`, `type`, `thumbnailUrl`。v7 仍返回此字段（不在 entities 里） |
-| `quoted`                                                                | dict          | null                                                           |
-| `quoted.entities.urls`                                                  | **list[str]** | 同上                                                             |
-| `bookmarkCount`, `likeCount`, `retweetCount`, `replyCount`, `viewCount` | int           | 互动数据                                                           |
-| `conversationId`, `url`                                                 | string        | v7 新增字段（可选，下游可忽略）                                              |
+### schema 兼容说明（两种 createdAt 格式并存）
 
+| rettiwt 版本 | `createdAt` 格式 | 样例 |
+|---|---|---|
+| v4（旧版 567 条） | Twitter native | `Thu Apr 16 22:43:55 +0000 2026` |
+| v7（2026-04-20 升级后） | ISO 8601 | `2026-04-20T01:30:35.000Z` |
 
-### schema 兼容说明（2026-04-20 rettiwt v4 → v7 升级）
-
-数据库里 `createdAt` 字段**有两种格式并存**，下游必须同时接受：
-
-
-| rettiwt 版本                | `createdAt` 格式 | 样例                               | 条目数（当前 654） |
-| ------------------------- | -------------- | -------------------------------- | ----------- |
-| v4（2026-04-17 及之前的 567 条） | Twitter native | `Thu Apr 16 22:43:55 +0000 2026` | 567         |
-| v7（2026-04-20 升级后的 87 条）  | ISO 8601       | `2026-04-20T01:30:35.000Z`       | 87          |
-
-
-**已处理双格式的位置**（新增解析逻辑需同步）：
-
-- `lib/report_builder.py::_parse_datetime` — 先试 ISO，失败再试 Twitter native
-- `bin/upload_to_notion.py::_parse_published_at` — 同上
-
-**tweetBy 对象**在 v7 里多出 `isFollowed`、`isFollowing`、`location`、`pinnedTweets`、`profileImage`、`statusesCount`、`userName` 等字段，非破坏性。
-
-### `entities.urls` 格式（关键！）
-
-URL 字段**统一是字符串数组**，不是 dict。格式分三种：
-
-1. `http://x.com/i/article/{article_id}` → X Article
-2. `https://t.co/xxx` → 未展开短链（需 FxTwitter 解析）
-3. 其他外部 URL
-
-**代码判断**：
-
-```python
-for url in bookmark.get('entities', {}).get('urls', []):
-    if isinstance(url, str):
-        if '/i/article/' in url:
-            article_id = url.split('/i/article/')[-1].split('?')[0]
-        elif url.startswith('https://t.co') or url.startswith('http://t.co'):
-            # t.co 短链
-        else:
-            # 其他外部链接
-```
+**已处理双格式的位置**：
+- `lib/report_builder.py::_parse_datetime`
+- `bin/upload_to_notion.py::_parse_published_at`
 
 ---
 
-## 三、书签内容分类统计（2026-04-20 实时计数）
+## 三、管线全流程
 
+```
+Step 1: sync_bookmarks.sh
+        → 从 Twitter 拉取新书签，prepend 到 bookmarks.json
 
-| 类型             | 数量        | 说明                                |
-| -------------- | --------- | --------------------------------- |
-| X Article 书签   | 164 条     | 主推文 entities.urls 含 `/i/article/` |
-| 引用推文（quoted）   | 167 条     | 含 `quoted` 字段                     |
-| 含 GitHub 链接    | 58 条      | 外部链接含 github.com                  |
-| 含其他外部链接        | 97 条      | 非 X、非 GitHub 的外部链接                |
-| 有媒体（图片/视频）     | 325 条     | 含 media 字段                        |
-| 纯文字（无外链无媒体无引用） | 49 条      | 仅 fullText                        |
-| **总计**         | **654 条** |                                   |
+Step 2: python3 bin/coordinator.py --deep-batch
+        → 读 bookmarks.json，生成深度报告草稿
+        → 输出：output/bookmark-deep-{tweet_id}.md
+        → 进度：output/.deep-run-state.json
 
+Step 3: .venv/bin/python3 bin/article_pipeline.py run-batch
+        → 对每篇深度草稿执行：元数据解析 → 研究搜索 → DeepSeek 成文
+        → 输出：output/article-final/{tweet_id}.md + output/article-research/{tweet_id}.json
+        → 进度：output/.article-pipeline-state.json
 
-> 以上类别可能重叠（例如同一条既含 Article 也含媒体）。
+Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
+        → 上传成品文章到 Notion（已有 source_url 则跳过，防重复）
+        → 进度：output/.notion-finished-state.json
+```
 
-**引用推文中 Article 情况**：
+**自动化**：`launchd (com.tizer.bookmark-auto)` 每 3 小时运行 `auto_run.sh` 执行完整 4 步流程。
 
-- quoted 推文共 167 条
-- 其中有 `/i/article/` URL 的走 TwitterAPI.io，普通 t.co 走 FxTwitter fallback
+**UI 手动触发**：Sync 页面分别触发「同步书签」（Step 1+2）、「Run Pipeline」（Step 3）、「Upload to Notion」（Step 4）。
 
 ---
 
-## 四、Article ID 关键说明
+## 四、状态文件说明
 
-```
-书签的 tweet_id ≠ Article 自己的 ID
+| 文件 | 用途 | 重置影响 |
+|---|---|---|
+| `output/.deep-run-state.json` | 记录已生成深度报告的 tweet_id 集合 | 清空后 coordinator 将重新处理所有书签 |
+| `output/.article-pipeline-state.json` | 记录每篇文章在成品管线中的状态（pending/research/written） | 清空后管线从头处理所有草稿 |
+| `output/.notion-finished-state.json` | 记录已上传成品文章的 tweet_id | 即使清空，upload 也会通过 Notion DB 去重 |
 
-书签 tweet_id：书签那条推文自己的 ID
-Article ID：从 /i/article/{article_id} URL 提取的独立 ID
-
-两者是不同的 19 位数字！
-```
-
-**实际需要处理的 unique Article ID 数量**（2026-04-20 实时计数）：
-
-
-| 来源                              | 数量        |
-| ------------------------------- | --------- |
-| 书签 entities.urls 中的 Article     | 164 个     |
-| quoted.entities.urls 中的 Article | 62 个      |
-| 两者重叠                            | 12 个      |
-| **总计 unique Article ID**        | **214 个** |
-
+**注意**：多个进程同时写同一状态文件会导致内容损坏。API routes 在启动新进程前会 kill 同类型的旧进程。
 
 ---
 
 ## 五、外部 API 清单
 
-### 1. TwitterAPI.io（Article 正文，必填）
-
-- **用途**：获取 98 个 unique Article 的正文
+### 1. TwitterAPI.io（Article 正文）
+- **用途**：获取 X Article 正文
 - **Endpoint**：`GET https://api.twitterapi.io/twitter/article?tweet_id={article_id}`
-- **Header**：`x-api-key: {API_KEY}`
-- **认证**：必填，从 [twitterapi.io/dashboard](https://twitterapi.io/dashboard) 获取
+- **认证**：`x-api-key: {TWITTER_API_IO_KEY}`
 - **费用**：100 credits/article ≈ $0.001/article
-  - 98 个 Article ≈ $0.098
-- **响应结构**（重要）：
-  ```json
-  {
-    "article": {
-      "author": {...},
-      "title": "标题",
-      "preview_text": "预览",
-      "cover_media_img_url": "封面图 URL",
-      "contents": [
-        {"type": "unstyled", "text": "正文段落"},
-        {"type": "header-one", "text": "一级标题"},
-        {"type": "markdown", "text": "Markdown 内容"},
-        {"type": "image", "url": "图片 URL", "width": 1200, "height": 800},
-        {"type": "gif", "url": "mp4 URL", "previewUrl": "预览图"},
-        {"type": "divider", "text": ""}
-      ],
-      "replyCount": 0, "likeCount": 0, "quoteCount": 0, "viewCount": 0,
-      "createdAt": "Fri Mar 28 09:01:12 +0000 2025"
-    },
-    "status": "success"
-  }
-  ```
 
-### 2. FxTwitter（普通引用推文）
-
-- **用途**：获取 fullText 为 t.co 的引用推文正文（非 Article 情况，**实际不存在**，仅作 fallback）
+### 2. FxTwitter（普通引用推文，免费）
 - **Endpoint**：`GET https://api.fxtwitter.com/status/{tweet_id}`（无需认证）
-- **响应**：`{"code":200, "tweet": {"raw_text": {"text": "完整正文"}, ...}}`
-- **免费**，无需 API key
 
 ### 3. GitHub REST API（README）
-
-- **用途**：获取 GitHub 仓库 README 内容
 - **Endpoint**：`GET https://api.github.com/repos/{owner}/{repo}/readme`
-- **Header**：`Accept: application/vnd.github.v3.raw`
-- **认证**：无认证 60次/小时；用 gh CLI 认证后 5000次/小时
-- **免费**
 
 ### 4. TwitterAPI.io（推文回复）
-
-- **用途**：获取推文回复
 - **Endpoint**：`GET https://api.twitterapi.io/twitter/tweet/replies`
-- **参数**：`tweetId`（必填）、`cursor`（可选分页）
-- **Header**：`x-api-key: {API_KEY}`
-- **认证**：必填（使用 TWITTER_API_IO_KEY）
-- **响应结构**：
-  ```json
-  {
-    "data": [
-      {
-        "tweet_id": "xxx",
-        "author": {"username": "xxx", "name": "xxx"},
-        "text": "回复内容",
-        "like_count": 10,
-        "retweet_count": 2,
-        "created_at": "2026-03-20"
-      }
-    ],
-    "next_cursor": "xxx",
-    "has_next_page": true
-  }
-  ```
+
+### 5. xAI Responses API（搜索研究）
+- **Endpoint**：`https://api.x.ai/v1/responses`（OpenAI 兼容）
+- **模型**：`grok-4.3`（含 `web_search` + `x_search` 工具）
+
+### 6. Exa Research API（补充研究，可选）
+- **Endpoint**：`https://api.exa.ai/v1/chat/completions`（OpenAI 兼容）
+- **模型**：`exa-research`
+- **注意**：返回多个 choices，需取最后一个非空结果；有重试机制（最多 2 次，间隔 3s）
+
+### 7. DeepSeek（文章成文）
+- **Endpoint**：`https://api.deepseek.com/v1`（OpenAI 兼容）
+- **模型**：`deepseek-chat`
+
+### 8. Notion API（上传）
+- **Endpoint**：`https://api.notion.com/v1/`
+- **认证**：`Authorization: Bearer {NOTION_TOKEN}`
+- **去重**：上传前查 `文章链接`（source_url）属性，已存在则跳过
 
 ---
 
 ## 六、系统环境
 
-
-| 项目              | 当前状态                                           |
-| --------------- | ---------------------------------------------- |
-| Python          | 3.9.6（Mac 系统自带）                                |
-| gh CLI          | ✅ 已安装 v2.89.0，**已认证**（account: 6tizer）         |
-| xfetch          | ❌ 不存在，跳过（PROJECT_CONTEXT 中标注可能有误）              |
-| 代理              | `http://127.0.0.1:7897`（在 `.env.twitter` 中）    |
-| Node.js         | v24.14.0                                       |
-| **rettiwt-api** | **v7.0.1**（全局安装于 `~/.local/bin/rettiwt`，书签同步用） |
-
-
-**rettiwt-api 升级历史**（见第十二节）：2026-04-20 从 v4.2.0 升到 v7.0.1，原因是 v4 反序列化新版 Twitter bookmarks 响应失败（静默返回 `{}`）。升级路径已验证兼容：API_KEY 无需重生、`sync_bookmarks.sh` CLI 兼容。
-
-**如再次出现"同步 +0 数天"的沉默失败**，第一步先检查 rettiwt 版本：`npm view rettiwt-api version`。
+| 项目 | 当前状态 |
+|---|---|
+| Python（系统） | 3.9.6（`/usr/bin/python3`，用于 coordinator / upload） |
+| Python（venv） | `/Users/.../x-bookmark-reports/.venv/bin/python3`（含 openai，用于 article_pipeline） |
+| Node.js | v24.14.0 |
+| rettiwt-api | v7.0.1（全局，`~/.local/bin/rettiwt`，书签同步用） |
+| gh CLI | v2.89.0（已认证 account: 6tizer） |
+| 代理 | `http://127.0.0.1:7897`（在 `.env` 中配置） |
 
 **Python 版本注意**：代码必须兼容 Python 3.9，禁止使用：
-
 - `match/case`（Python 3.10+）
-- `:=` walrus operator（Python 3.8 起支持，**可用**）
-- `str.removeprefix()`（Python 3.9+，**可用**）
+- `str | None` 类型注解（Python 3.10+，需用 `Optional[str]`）
 
 ---
 
-## 七、报告系统目录结构
+## 七、UI API Routes（Next.js）
 
-```
-x-bookmark-reports/              ← 新建根目录
-├── bin/
-│   └── coordinator.py           ← 主入口
-├── lib/
-│   ├── __init__.py
-│   ├── config.py                ← 配置（从 .env.twitter 读 PROXY）
-│   ├── article_client.py        ← TwitterAPI.io
-│   ├── quoted_client.py         ← FxTwitter
-│   ├── github_client.py         ← gh CLI
-│   ├── external_client.py       ← urllib
-│   └── report_builder.py       ← Markdown 组装
-├── cache/                       ← API 缓存（gitignore）
-│   ├── articles/
-│   ├── quoted/
-│   └── github/
-├── output/                      ← 报告输出（gitignore）
-│   ├── index.json
-│   └── index.md
-└── .env.example                 ← 配置示例（TWITTER_API_IO_KEY）
-```
-
-**报告文件命名**：`output/{tweet_id}.md`
+| Route | 作用 |
+|---|---|
+| `POST /api/pipeline/coordinator` | 触发 sync_bookmarks.sh + coordinator.py --deep-batch |
+| `POST /api/article-pipeline/run` | 触发 article_pipeline.py run-batch（默认 --resume） |
+| `GET /api/article-pipeline/progress` | 查询成品管线实时进度 |
+| `POST /api/pipeline/notion-upload` | 触发 upload_to_notion.py --mode finished --live |
+| `GET /api/dashboard/stats` | 返回 Dashboard 统计数据 |
+| `GET /api/settings` | 读取设置（从 .env + SQLite） |
+| `POST /api/settings` | 保存设置 |
+| `GET /api/system/rettiwt` | 检查 rettiwt 环境 |
+| `GET /api/articles` | 列出成品文章 |
+| `GET /api/articles/[id]` | 获取单篇文章详情 |
+| `PUT /api/articles/[id]/publish` | 更新文章发布状态 |
 
 ---
 
-## 八、coordinator.py 入口命令
+## 八、launchd 定时任务
 
+- **Plist**：`~/Library/LaunchAgents/com.tizer.bookmark-auto.plist`
+- **脚本**：`auto_run.sh`（项目根目录）
+- **频率**：每 3 小时（00:00 / 03:00 / 06:00 / 09:00 / 12:00 / 15:00 / 18:00 / 21:00）
+- **日志**：`auto_run.sh` 内部写入 `auto_run_state.json`
+
+管理命令：
+```bash
+launchctl unload ~/Library/LaunchAgents/com.tizer.bookmark-auto.plist
+launchctl load ~/Library/LaunchAgents/com.tizer.bookmark-auto.plist
+launchctl list | grep bookmark
+```
+
+---
+
+## 九、重要注意事项
+
+### 9.1 路径引号
+项目路径含空格，bash 命令必须引用：
 ```bash
 cd "/Users/tizer_mac_studio/work/Cursor/Twitter Bookmark/x-bookmark-reports"
-python3 bin/coordinator.py              # 增量（跳过 done/cached）
-python3 bin/coordinator.py --full        # 全量
-python3 bin/coordinator.py --id 2037365525542797367  # 单条测试
+bash -c "'$SCRIPT_PATH' && ..."  # 单引号包住含空格路径
 ```
 
----
+### 9.2 Notion 去重
+`upload_to_notion.py` 在每次上传前会查询 Notion DB 的 `文章链接` 属性。
+若该 source_url 已存在则打印 `[SKIP-DUP]` 跳过，不会创建重复页面。
 
-## 九、当前计划执行清单
+### 9.3 archive 目录不计入统计
+`output/归档/` 目录下的历史文件不会被 `countDeepDrafts()` 扫描，不影响 Dashboard 计数。
 
-1. ✅ 计划已制定（见 `.cursor/plans/` 目录）
-2. ✅ 初始化 git 仓库和目录骨架
-3. ✅ 安装系统工具（gh CLI v2.89.0 已安装并认证）
-4. ✅ 实现 config.py
-5. ✅ 实现 article_client.py
-6. ✅ 实现 quoted_client.py
-7. ✅ 实现 github_client.py
-8. ✅ 实现 external_client.py
-9. ✅ 实现 report_builder.py
-10. ✅ 实现 coordinator.py
-11. ✅ 端到端测试 + 生成第一份报告
-12. ✅ 更新 README.md
-13. ✅ **报告增强 Phase 1.1: Article 格式增强（Statistics/Media/Hashtags/Mentions）**
-14. ✅ **报告增强 Phase 1.2: ExternalLinks HTML 内容清理**
-15. ✅ **报告增强 Phase 1.3: HTML 清理工具方法**
-16. ✅ **报告增强 Phase 2: Header 增强（Summary/Statistics）**
-17. ✅ **报告增强 Phase 3: Replies Client 集成（TwitterAPI.io）**
-18. ✅ **Bug 修复: HTML 清理缓存问题、缓存目录创建、纯文本分类**
-19. ✅ **Bug 修复: B012 - external_client.py CSS/style 块未清理**
-20. ✅ **Bug 修复: B013 - replies_client.py API 响应键名不匹配**
+### 9.4 Exa API 行为
+`exa-research` 返回多个 choices，前面的 choices 是中间搜索步骤（content 为空），
+真正的研究结果在最后一个非空 choice。代码已处理，并有 2 次重试机制（3s 间隔）。
+
+### 9.5 并发进程保护
+每个 API route 在启动新子进程前，会用 `pgrep` + `kill -9` 终止同类型的旧进程，
+防止多个实例并发写入共享状态文件。
 
 ---
 
-## 十、进阶功能（不在本次计划内）
+## 十、里程碑（Changelog 视角）
 
-- **去重**：SimHash/MinHash 对高度相似报告合并
-- **自动归类**：sentence-transformers + HDBSCAN 按主题聚类
+### 2026-05-05 — 管线全面重构与稳定化
 
----
+**主要变更**：
+1. **4 步管线固化**：sync → deep draft → article pipeline → upload finished（原 3 步）
+2. **auto_run.sh 更新**：加入 `article_pipeline.py` 步骤；改用 `.venv/bin/python3` 运行含 openai 依赖的脚本
+3. **launchd 调频**：8 小时改为每 3 小时
+4. **Notion 去重保护**：上传前查 source_url，防止重复创建页面
+5. **Exa bug 修复**：`choices[0]` → 遍历取最后非空；加入重试
+6. **并发进程保护**：各 API route 精准 kill 同类进程
+7. **Sync Bookmarks UI**：正确执行 `sync_bookmarks.sh` 后再启动 `coordinator.py`
+8. **归档目录**：历史文件归档到 `output/归档/`，不计入 Dashboard 统计
+9. **默认 --resume**：`article_pipeline.py run-batch` 默认启用续跑，防止重复处理
 
-## 十一、报告增强功能（2026-03-31）
+### 2026-04-20 — rettiwt-api v4→v7 升级
 
-### 已实现功能
-
-
-| 功能                    | 说明                                    | 文件                                    |
-| --------------------- | ------------------------------------- | ------------------------------------- |
-| Article 格式增强          | 显示 Engagement、Media、Hashtags、Mentions | report_builder.py                     |
-| ExternalLinks HTML 清理 | 自动移除 CSS/JS，提取纯文本                     | external_client.py, report_builder.py |
-| Summary 区块            | 显示书签分类统计                              | report_builder.py                     |
-| Statistics 区块         | 显示互动数据汇总                              | report_builder.py                     |
-| Replies 区块            | 显示推文回复列表                              | replies_client.py, report_builder.py  |
-
-
-### 使用方法
-
-```bash
-# 生成报告（不含回复）
-python3 bin/coordinator.py --full
-
-# 生成报告（含回复）
-python3 bin/coordinator.py --full --replies
-```
+详见 [此前 PROJECT_CONTEXT.md 第十二节]。
 
 ---
 
-## 十二、里程碑（Changelog 视角）
+## 十一、工作流规范
 
-### 2026-04-20 rettiwt-api v4→v7 升级 + sync 容错加固
-
-**触发**：用户发现 `sync_log.txt` 连续 3 天（4/17 ~ 4/20）都是"新增: 0"，实际每天都有手动加书签。
-
-**根因链**（3 层嵌套 bug）：
-
-1. `rettiwt-api` **v4.2.0** 已无法反序列化新版 Twitter bookmarks 响应，返回空对象 `{}`（认证成功、但所有数据被吃掉）。
-2. `rettiwt-api` **v7** 把 cursor 字段从 `.next.value` 改成 `.next`（直接字符串），`sync_bookmarks.sh` 里 `.next.value` 永远取不到。
-3. `sync_bookmarks.sh` 的增量策略是"**遇到第一条已知就停**"，中途失败导致的 gap 后，穿插在已知之间的未知条目永远补不回来。
-
-**修复清单**：
-
-
-| 位置                                         | 改动                                                                   |
-| ------------------------------------------ | -------------------------------------------------------------------- |
-| 全局 `rettiwt-api`                           | 4.2.0 → 7.0.1（`npm install -g --prefix ~/.local rettiwt-api@7.0.1`）  |
-| `sync_bookmarks.sh` L138                   | cursor 提取改为双兼容：`if .next type=="string" then .next else .next.value` |
-| `sync_bookmarks.sh` 增量逻辑                   | 改为"**连续 `CONSECUTIVE_KNOWN_STOP=2` 页全为已知**"才停止                       |
-| `upload_to_notion.py::_parse_published_at` | 同时接受 Twitter native 和 ISO 8601 格式                                    |
-| `report_builder.py::_parse_datetime`       | 本来已双格式兼容，无需改                                                         |
-
-
-**成效验证**：
-
-- 单次 sync 捡回 67 条缺失书签（567→654）
-- 随后 `auto_run.sh` 手动触发：`+87/87` 深度报告（27.4 min，0 failed）、`+87` Notion 页面（86 OK + 1 PARTIAL，2h 8min）
-- 总计 2h 36min 跑通端到端
-
-**值得记录的外部行为观察**：
-
-- Notion 数据库侧有**自动编译工作流**（"未编译到 Wiki" → "已编译到 Wiki"），能把仅有 properties、无正文的 partial 页面**自愈**为完整文章。
-因此 `upload_to_notion.py` 报 `[PARTIAL]` 时，对应 Notion 页面**通常不是空页**，无需人工修复。这是 workspace 层的行为，**不应写入代码假设**。
-
----
-
-## 十三、工作流规范
-
-详细规范请见以下文件：
-
-
-| 文件                           | 职责            |
-| ---------------------------- | ------------- |
-| `WORKFLOW.md`                | 工作流详细规范       |
-| `BUGS.md`                    | Bug 跟踪（必读）    |
-| `TASK_SUMMARY.md`            | Subagent 输出模板 |
+| 文件 | 职责 |
+|---|---|
+| `WORKFLOW.md` | 工作流详细规范 |
+| `BUGS.md` | Bug 跟踪（必读） |
+| `TASK_SUMMARY.md` | Subagent 输出模板 |
 | `.cursor/rules/workflow.mdc` | Cursor IDE 规则 |
-
-
-### 快速指南
-
-1. **代码审查** → 在 `BUGS.md` 记录发现
-2. **Bug 修复** → 更新 `BUGS.md` 状态
-3. **Subagent 调用** → 使用 `TASK_SUMMARY.md` 模板
-4. **验证** → 必须运行验证脚本
-
