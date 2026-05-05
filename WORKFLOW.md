@@ -8,16 +8,19 @@
 ## 1. 核心原则
 
 ### 1.1 信息持久化
+
 - 所有重要发现必须写入文件（`BUGS.md`）
 - 避免仅依赖 agent transcript 的临时信息
 - 审查结果必须结构化记录，便于后续查阅
 
 ### 1.2 Subagent 标准化
+
 - 每个 subagent 任务必须使用 `TASK_SUMMARY.md` 模板输出摘要
 - 摘要包含：完成项、新发现问题、验证结果、后续建议
 - 主 agent 汇总摘要到 `BUGS.md`
 
 ### 1.3 状态跟踪
+
 - Bug 状态：`待修复` → `修复中` → `已修复`
 - 每次状态变更需更新 `BUGS.md`
 - 修复后运行验证脚本确认
@@ -78,12 +81,15 @@
 
 ## 3. 文件职责
 
+
 | 文件 | 职责 | 更新频率 |
-|------|------|----------|
-| `PROJECT_CONTEXT.md` | 项目全局上下文 | 重大变更时 |
+|---|---|---|
+| `PROJECT_CONTEXT.md` | 项目全局上下文（技术栈、API、管线说明） | 重大变更时 |
 | `BUGS.md` | Bug 跟踪 | 每次审查/修复后 |
 | `TASK_SUMMARY.md` | Subagent 输出模板 | 仅作为模板引用 |
+| `README.md` | 对外快速上手文档 | 功能/管线变更时 |
 | `.cursor/rules/workflow.mdc` | Cursor IDE 规则 | 需要时更新 |
+
 
 ---
 
@@ -91,10 +97,12 @@
 
 ### 4.1 职责划分（重要）
 
-| 谁来做 | 职责 |
-|--------|------|
-| **Subagent** | 执行任务、报告发现、更新摘要 |
-| **主 agent** | 汇总发现、更新 BUGS.md、决策是否记录 |
+
+| 谁来做          | 职责                     |
+| ------------ | ---------------------- |
+| **Subagent** | 执行任务、报告发现、更新摘要         |
+| **主 agent**  | 汇总发现、更新 BUGS.md、决策是否记录 |
+
 
 **核心原则**：Subagent 只报告，主 agent 决策并执行文件更新。
 
@@ -132,7 +140,9 @@ python3 -c "from lib.github_client import GitHubClient; ..."
 ```
 
 ### 输出
+
 按 TASK_SUMMARY.md 格式输出摘要。
+
 ```
 
 ### 4.3 示例：调用审查任务
@@ -221,6 +231,7 @@ print('验证通过!')
 ### 6.2 版本更新
 
 重大版本更新时，清理 BUGS.md：
+
 - 归档历史记录到 CHANGELOG.md
 - 保留当前活跃问题
 
@@ -229,18 +240,23 @@ print('验证通过!')
 ## 7. 常见问题处理
 
 ### Q1: Subagent 找不到之前审查的问题？
+
 **A**: 检查 BUGS.md，所有审查发现必须记录在此。
 
 ### Q2: Subagent 修复后忘记更新 BUGS.md？
+
 **A**: 主 agent 负责汇总，主 agent 应在调用修复任务后主动更新。
 
 ### Q3: 多个 subagent 并行执行？
+
 **A**: 主 agent 负责汇总各自的摘要，确保无遗漏。
 
 ### Q4: 任务描述的文件状态与实际不符？
+
 **A**: 在任务描述中添加"预期情况"字段，明确文件存在/不存在状态。Subagent 执行时在摘要中记录实际状态。
 
 ### Q5: Subagent 报告"无需更新 BUGS.md"但实际有新问题？
+
 **A**: 主 agent 收到摘要后，主动检查代码变更是否涉及 BUGS.md 中的待修复项，不依赖 subagent 的判断。
 
 ---
@@ -249,20 +265,69 @@ print('验证通过!')
 
 ### 8.1 严重性定义
 
-| 级别 | 定义 | 处理优先级 |
-|------|------|------------|
-| HIGH | 致命错误，功能完全不可用 | 立即修复 |
-| MEDIUM | 功能受限，但有 workaround | 尽快修复 |
-| LOW | 小问题，不影响核心功能 | 计划修复 |
+
+| 级别     | 定义                 | 处理优先级 |
+| ------ | ------------------ | ----- |
+| HIGH   | 致命错误，功能完全不可用       | 立即修复  |
+| MEDIUM | 功能受限，但有 workaround | 尽快修复  |
+| LOW    | 小问题，不影响核心功能        | 计划修复  |
+
 
 ### 8.2 状态定义
 
-| 状态 | 定义 |
-|------|------|
-| 待修复 | 问题已记录，等待修复 |
-| 修复中 | 正在修复 |
-| 已修复 | 修复完成，验证通过 |
-| 不会修复 | 已知限制，暂不处理 |
+
+| 状态   | 定义         |
+| ---- | ---------- |
+| 待修复  | 问题已记录，等待修复 |
+| 修复中  | 正在修复       |
+| 已修复  | 修复完成，验证通过  |
+| 不会修复 | 已知限制，暂不处理  |
+
+
+---
+
+---
+
+## 9. 管线运维参考
+
+### 9.1 完整管线（4 步）
+
+```bash
+# Step 1: 同步书签
+bash sync_bookmarks.sh
+
+# Step 2: 生成深度报告
+python3 bin/coordinator.py --deep-batch
+
+# Step 3: 成品文章（需 .venv 的 Python）
+.venv/bin/python3 bin/article_pipeline.py run-batch
+
+# Step 4: 上传 Notion（含去重保护）
+.venv/bin/python3 bin/upload_to_notion.py --mode finished --live
+```
+
+### 9.2 手动触发全流程
+
+```bash
+bash auto_run.sh --force   # 跳过代理检测
+```
+
+### 9.3 查看自动任务状态
+
+```bash
+launchctl list | grep bookmark                                  # 查看 launchd 状态
+cat auto_run_state.json                                         # 查看最近一次执行状态
+```
+
+### 9.4 常见故障排查
+
+| 现象 | 可能原因 | 处理 |
+|---|---|---|
+| Dashboard 数量不对 | 旧 build 缓存 | `npm run dev:clean` 重启 |
+| coordinator 重复处理 | .deep-run-state.json 被覆盖 | 检查是否有 launchd 并发进程 |
+| Exa 步骤空结果 | choices[0] 为空（正常现象） | 代码已取最后非空 choice |
+| Notion 重复页面 | upload 去重未生效 | 检查 source_url 属性是否存在 |
+| article_pipeline 找不到 openai | 用了系统 Python | 改用 `.venv/bin/python3` |
 
 ---
 

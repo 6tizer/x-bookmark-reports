@@ -54,6 +54,15 @@
 | B033 | lib/coordinator.py                 | 调用 `_unshorten` 私有方法                                                                                   | LOW    | 2026-04-28 | 2026-04-28 | `ExternalClient.unshorten()` 公开封装                       |
 | B035 | ui (Next dev) + Cursor | 系统 HTTP 代理导致 127.0.0.1:3001 走代理→502；损坏的 `.next` 导致 `Cannot find module './NNN.js'`→500 白屏 | MEDIUM | 2026-05-02 | 2026-05-02 | 工作区 `http.noProxy` + `NO_PROXY`；`npm run dev:clean`；`ui/TROUBLESHOOTING.txt` |
 | B036 | ui/src/lib/fs-data.ts | `next build` 失败：未使用 `articleBasenameNoExt` / `meta`；`for..of` 遍历 `Set` 在未开 `downlevelIteration` 的 TS 目标下报错 | LOW | 2026-05-04 | 2026-05-04 | 删除死代码；`const { body }`；`Array.from(tweetIds)` 再遍历 |
+| B037 | bin/article_pipeline.py | `run-batch` 默认不 resume，导致 UI 点击「Run Pipeline」重新处理所有 942 篇草稿 | HIGH | 2026-05-04 | 2026-05-05 | `--resume` 默认 True；加 `--no-resume` 选项；UI 默认传 resume=true |
+| B038 | ui/src/app/api/article-pipeline/run/route.ts | 未 kill 同类旧进程，多实例并发写 .article-pipeline-state.json 导致状态损坏 | HIGH | 2026-05-05 | 2026-05-05 | 添加 `killExistingPythonProcesses()` 仅 kill article_pipeline 进程 |
+| B039 | ui/src/app/api/pipeline/coordinator/route.ts | 「Sync Bookmarks」只触发 coordinator.py，未执行 sync_bookmarks.sh 拉取新书签 | HIGH | 2026-05-05 | 2026-05-05 | execSync 先跑 sync_bookmarks.sh，再 spawn coordinator.py |
+| B040 | ui/src/app/api/pipeline/coordinator/route.ts | bash -c 中含空格的路径未加引号，导致执行失败（`is a directory` 等错误） | HIGH | 2026-05-05 | 2026-05-05 | syncScript 和 py 路径用单引号包裹 |
+| B041 | lib/article_pipeline/research.py | Exa `choices[0]` 取错：早期 choices content 为空，只有最后非空才是研究结果 | HIGH | 2026-05-05 | 2026-05-05 | `reversed(exa_resp.choices)` 找最后非空 choice |
+| B042 | lib/article_pipeline/research.py | Exa API 不稳定（空响应/5xx），无重试机制导致该步骤静默失败 | MEDIUM | 2026-05-05 | 2026-05-05 | 加最多 2 次重试，间隔 3s |
+| B043 | auto_run.sh | 旧 3 步管线（sync + deep + upload drafts），未含 article_pipeline，上传草稿而非成品 | HIGH | 2026-05-05 | 2026-05-05 | 增加 Step 3 (article_pipeline.py)；Step 4 改 --mode finished；改用 .venv/bin/python3 |
+| B044 | bin/upload_to_notion.py | 无 Notion 去重检查，重复执行会创建相同 source_url 的多个页面 | HIGH | 2026-05-05 | 2026-05-05 | 上传前查 Notion DB `文章链接` 属性，已存在则 [SKIP-DUP] |
+| B045 | ui/src/lib/fs-data.ts | `countDeepDrafts()` 扫描 `output/归档/` 目录，归档后 Dashboard 仍显示旧数量 | MEDIUM | 2026-05-05 | 2026-05-05 | 移除 `scanDir(ARCHIVE_DIR)`；删除未使用的 ARCHIVE_DIR 常量 |
 
 
 ---
@@ -111,6 +120,8 @@
 
 ## 更新日志
 
+- **2026-05-05**: 修复 B037–B045（管线全面稳定化：--resume 默认、Notion 去重、Exa bug、并发保护、auto_run.sh 更新等）
+- **2026-05-04**: 修复 B036（TypeScript build 错误）；修复 B035（代理/白屏）
 - **2026-04-28**: 修复 B021–B025、B027–B034（HIGH/MEDIUM/LOW）；B026 暂缓 deferred；requirements 锁定；`_unshorten` HEAD+GET fallback；`get_config` 注入 author
 - **2026-04-28**: 代码审查 — 新增 B021–B034
 - **2026-04-01**: 修复 B014–B020
