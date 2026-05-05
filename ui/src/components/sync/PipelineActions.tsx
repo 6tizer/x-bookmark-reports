@@ -98,7 +98,7 @@ export function PipelineActions({
   const [syncResume, setSyncResume] = useState(false);
 
   const [pipelineLimit, setPipelineLimit] = useState("");
-  const [pipelineResume, setPipelineResume] = useState(false);
+  const [pipelineResume, setPipelineResume] = useState(true);
   const [pipelineModel, setPipelineModel] = useState("");
 
   const [notionIds, setNotionIds] = useState("");

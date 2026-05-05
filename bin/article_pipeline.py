@@ -436,7 +436,8 @@ Examples:
     # run-batch
     p_batch = sub.add_parser("run-batch", help="Process multiple articles")
     p_batch.add_argument("--limit", type=int, default=0, help="Max articles to process (0=all)")
-    p_batch.add_argument("--resume", action="store_true", help="Skip already completed")
+    p_batch.add_argument("--resume", action="store_true", default=True, help="Skip already completed (default: True)")
+    p_batch.add_argument("--no-resume", dest="resume", action="store_false", help="Do NOT skip completed articles")
     p_batch.add_argument("--force", action="store_true", help="Force re-run all steps")
     p_batch.add_argument("--model", default=None, help="Override rewrite model")
 
