@@ -33,14 +33,18 @@ function formatLogLine(entry: {
   return `[${ts}] [${level}] ${entry.message ?? ""}`;
 }
 
+/** 按终端行内 [LEVEL] 标签着色，避免 message 里 errors:0 被误判为红色 */
 function parseLogColor(log: string): React.ReactNode {
-  if (log.includes("错误") || log.includes("失败") || log.includes("超时") || log.includes("error") || log.includes("Error")) {
+  const levelMatch = log.match(/^\[[^\]]+\] \[([A-Z]+)\]/);
+  const level = levelMatch?.[1]?.toUpperCase();
+
+  if (level === "ERROR") {
     return <span className="text-red-400">{log}</span>;
   }
-  if (log.includes("警告") || log.includes("warn")) {
+  if (level === "WARN" || level === "WARNING") {
     return <span className="text-yellow-400">{log}</span>;
   }
-  if (log.includes("完成") || log.includes("成功") || log.includes("success")) {
+  if (/完成|成功|COMPLETE/i.test(log)) {
     return <span className="text-green-400">{log}</span>;
   }
   return <span className="text-gray-300">{log}</span>;
@@ -122,11 +126,12 @@ export function SyncTerminal({ component, startedAt, title, onStop }: SyncTermin
         <div className="flex items-center gap-3">
           {onStop && component && (
             <button
+              type="button"
               onClick={onStop}
-              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-red-400 transition-colors"
-              title="停止订阅并清除当前操作"
+              className="flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+              title="停止终端日志订阅（不终止后台进程）"
             >
-              <Square size={11} />
+              <Square size={11} fill="currentColor" />
               Stop
             </button>
           )}

@@ -212,10 +212,11 @@ export default function ArticlesPage() {
               ))}
             </select>
 
+            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Run model</span>
             <select
               value={pipelineModel}
               onChange={(e) => persistModel(e.target.value)}
-              title="Rewrite model for article_pipeline.py"
+              title="单条 Run / Batch run 使用的 rewrite 模型"
               className="h-8 rounded-md border border-border bg-muted px-2 text-xs outline-none max-w-[140px]"
             >
               {modelOptions.length === 0 ? (
@@ -314,7 +315,28 @@ export default function ArticlesPage() {
                     </div>
                   </div>
                 </Link>
-                <button
+                <div className="flex shrink-0 items-center gap-1">
+                  {/* 与顶部工具栏共用 pipelineModel，Run 旁可直接选模型 */}
+                  <select
+                    value={pipelineModel}
+                    onChange={(e) => persistModel(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    title="本条 Run 使用的模型"
+                    className="h-8 max-w-[110px] rounded-md border border-border bg-background px-1 text-[10px] outline-none"
+                  >
+                    {modelOptions.length === 0 ? (
+                      <option disabled value="">
+                        …
+                      </option>
+                    ) : (
+                      modelOptions.map((o) => (
+                        <option key={`row-${o.value || "default"}`} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <button
                   type="button"
                   title="Run article pipeline for this tweet"
                   data-run-button
@@ -326,6 +348,7 @@ export default function ArticlesPage() {
                   <Play size={12} />
                   {runBusyId === article.id ? "…" : "Run"}
                 </button>
+                </div>
               </div>
             ))}
           </div>

@@ -1,7 +1,7 @@
 /**
  * GET /api/dashboard/activity
- * CONTRACT v1.0 — DB 真值化：直接读取 activities 表
- * Stage 4 — fs 兜底：DB 无 activities 时从 4 个 state 文件派生事件，解决 B-ACT-001
+ * CONTRACT v1.0 — 合并 DB activities 与 fs 派生事件，按时间倒序取最新
+ * 修复：仅有旧 DB 模拟数据时仍显示 fs 中较新的 auto_run / coordinator 事件
  */
 
 import { NextResponse } from "next/server";
@@ -14,6 +14,24 @@ interface ActivityResponse {
   total: number;
 }
 
+/** 合并两路活动并按 timestamp 去重、倒序 */
+function mergeActivities(dbItems: ActivityItem[], fsItems: ActivityItem[], limit: number): ActivityResponse {
+  const seen = new Set<string>();
+  const merged: ActivityItem[] = [];
+
+  for (const item of [...dbItems, ...fsItems].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  )) {
+    const key = `${item.type}|${item.timestamp}|${item.message?.slice(0, 48) ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+    if (merged.length >= limit) break;
+  }
+
+  return { items: merged, total: merged.length };
+}
+
 export async function GET(
   request: Request
 ): Promise<NextResponse<ApiResponse<ActivityResponse>>> {
@@ -21,15 +39,11 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10), 100);
 
-    // Stage 4：DB 真值优先，fs 派生兜底
-    // - hasDbActivities()=true → 读 activities 表（DB 真值模式）
-    // - hasDbActivities()=false → 从 4 个 state 文件派生事件（fs 模式，B-ACT-001）
-    if (hasDbActivities()) {
-      const result = listActivities(limit);
-      return NextResponse.json({ success: true, data: result });
-    }
-    const fsResult = listFsActivities(limit);
-    return NextResponse.json({ success: true, data: fsResult });
+    const dbResult = hasDbActivities() ? listActivities(limit * 2) : { items: [], total: 0 };
+    const fsResult = listFsActivities(limit * 2);
+    const result = mergeActivities(dbResult.items, fsResult.items, limit);
+
+    return NextResponse.json({ success: true, data: result });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
