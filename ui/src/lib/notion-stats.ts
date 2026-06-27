@@ -30,7 +30,15 @@ function parseEnv(): { notionToken: string; notionDbId: string } | null {
       if (trimmed.startsWith("#") || !trimmed.includes("=")) continue;
       const eqIdx = trimmed.indexOf("=");
       const key = trimmed.slice(0, eqIdx).trim();
-      const val = trimmed.slice(eqIdx + 1).trim();
+      // 剥离首尾引号（单/双引号都支持），避免 .env 用 KEY="value" 包裹时
+      // 把引号一并发送给上游 API 导致 401
+      let val = trimmed.slice(eqIdx + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
       if (key === "NOTION_TOKEN") notionToken = val;
       if (key === "NOTION_DB_ID") notionDbId = val;
     }
@@ -151,7 +159,12 @@ export async function getNotionDbStats(): Promise<NotionDbStats | null> {
     cachedStats = stats;
     cachedAt = now;
     return stats;
-  } catch {
+  } catch (err) {
+    // 之前 catch 静默吞错，导致 Dashboard totalArticlesNotion=0 难以排查
+    console.error(
+      "[notion-stats] queryAllPages failed:",
+      err instanceof Error ? `${err.message}` : String(err)
+    );
     return null;
   }
 }
