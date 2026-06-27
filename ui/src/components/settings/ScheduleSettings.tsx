@@ -64,6 +64,10 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
   const [launchdLoading, setLaunchdLoading] = useState(false);
   const [launchdSchedule, setLaunchdSchedule] = useState<LaunchdScheduleInfo | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // 调度预设切换状态：当前正在应用的 preset value（null = 空闲）
+  const [applyingPreset, setApplyingPreset] = useState<string | null>(null);
+  // 预设切换后展示的提示消息（成功 / 失败）
+  const [presetMessage, setPresetMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStatus();
@@ -121,6 +125,34 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
     } finally {
       setLaunchdLoading(false);
       setTimeout(() => setMessage(null), 4000);
+    }
+  };
+
+  /** 应用调度预设（PUT /api/schedule/launchd），成功后刷新 schedule 显示 */
+  const handleApplyPreset = async (preset: string) => {
+    setApplyingPreset(preset);
+    setPresetMessage(null);
+    try {
+      const res = await fetch("/api/schedule/launchd", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setLaunchdSchedule(data.data);
+        const label = launchdPresets.find((p) => p.value === preset)?.label ?? preset;
+        setPresetMessage(`调度已切换：${label}`);
+        // 同步刷新 status（loaded 状态可能因 reload 变化）
+        void fetchStatus();
+      } else {
+        setPresetMessage(`切换失败：${data.error?.message ?? "未知错误"}`);
+      }
+    } catch (err) {
+      setPresetMessage(`切换异常：${err instanceof Error ? err.message : "unknown"}`);
+    } finally {
+      setApplyingPreset(null);
+      setTimeout(() => setPresetMessage(null), 4000);
     }
   };
 
@@ -229,29 +261,35 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
           <span className="text-foreground">{formatLaunchdSchedule(launchdSchedule)}</span>
         </div>
 
-        {/* 6 个预设按钮 — onClick 暂 disabled，Commit 3 接通 PUT */}
+        {/* 6 个预设按钮 — 调用 PUT /api/schedule/launchd 切换调度 */}
         <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">切换调度（Commit 3 接通 PUT）</p>
+          <p className="text-xs font-medium text-muted-foreground">切换调度</p>
           <div className="flex flex-wrap gap-2">
             {launchdPresets.map((preset) => {
               const isActive = isPresetActive(launchdSchedule, preset);
+              const isApplyingThis = applyingPreset === preset.value;
               return (
                 <button
                   key={preset.value}
                   type="button"
-                  disabled // Commit 3 改为 onClick={handleApplyPreset}
-                  title={`预设：${preset.label}（Commit 3 启用）`}
-                  className={`rounded-md border px-2.5 py-1 text-[11px] transition-colors ${
+                  disabled={applyingPreset !== null}
+                  onClick={() => handleApplyPreset(preset.value)}
+                  title={`切换到 ${preset.label}`}
+                  className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] transition-colors disabled:opacity-50 ${
                     isActive
                       ? "bg-twitter-blue text-white border-twitter-blue"
                       : "border-border hover:bg-muted"
                   }`}
                 >
-                  {preset.label}
+                  {isApplyingThis && <Loader2 size={10} className="animate-spin" />}
+                  {isApplyingThis ? "应用中…" : preset.label}
                 </button>
               );
             })}
           </div>
+          {presetMessage && (
+            <p className="text-[11px] text-muted-foreground mt-1">{presetMessage}</p>
+          )}
         </div>
 
         {/* Status + Load/Unload */}
