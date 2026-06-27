@@ -181,6 +181,10 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
             onChange={(e) => setDeepseekBaseUrl(e.target.value)}
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
+          {/* DeepSeek 双兼容提示：SDK 会自动拼接 /chat/completions */}
+          <p className="text-[10px] text-muted-foreground">
+            DeepSeek SDK 双兼容：用 <code>https://api.deepseek.com</code> 或 <code>.../v1</code> 均可；OpenAI SDK 会自动拼接 <code>/chat/completions</code>
+          </p>
         </div>
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">
