@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { Sidebar, type SidebarCounts } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { useUIStore } from "@/store/useUIStore";
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen } = useUIStore();
-  const [counts, setCounts] = useState<{ bookmarks?: number; articles?: number }>({});
+  const [counts, setCounts] = useState<SidebarCounts>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -22,9 +22,11 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
         const res = await fetch("/api/dashboard/stats");
         const json = await res.json();
         if (!cancelled && json.success && json.data) {
+          const stats = json.data;
+          // Stage 2: bookmarks 徽章用 "total/totalDrafts" 形式；articles 用 totalArticlesLocal
           setCounts({
-            bookmarks: json.data.totalBookmarks,
-            articles: json.data.articlesWritten,
+            bookmarks: `${stats.totalBookmarks}/${stats.totalDrafts}`,
+            articles: stats.totalArticlesLocal,
           });
         }
       } catch {

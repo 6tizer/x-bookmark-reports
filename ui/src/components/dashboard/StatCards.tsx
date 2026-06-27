@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * StatCards — 5 cards: Deep Drafts, Articles Written, Finished in Notion, Pending Rewrite, Last Sync
+ * StatCards — 6 cards: Bookmarks, Deep Drafts, Articles (Local), In Notion DB,
+ * Pending Rewrite, Last Sync
  */
 
 import {
@@ -11,6 +12,7 @@ import {
   CloudUpload,
   AlertCircle,
   Terminal,
+  PenLine,
 } from "lucide-react";
 import type { DashboardStats, RettiwtStatus } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -83,8 +85,8 @@ function StatCard({
 export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
   if (isLoading || !stats) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {Array.from({ length: 5 }).map((_, i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
             className="rounded-lg border border-border bg-card p-4"
@@ -110,30 +112,41 @@ export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         <StatCard
-          icon={<Bookmark size={16} className="text-green-600" />}
-          label="Deep Drafts"
-          value={stats.totalDrafts}
+          icon={<Bookmark size={16} className="text-twitter-blue" />}
+          label="Bookmarks"
+          value={stats.totalBookmarks}
+          subtext="bookmarks.json"
           trend="neutral"
         />
         <StatCard
-          icon={<FileStack size={16} className="text-blue-500" />}
-          label="Articles Written"
-          value={stats.articlesWritten}
+          icon={<FileStack size={16} className="text-green-600" />}
+          label="Deep Drafts"
+          value={stats.totalDrafts}
+          subtext={`${stats.pendingRewriteGlobal} pending`}
+          trend="neutral"
+        />
+        <StatCard
+          icon={<PenLine size={16} className="text-blue-500" />}
+          label="Articles (Local)"
+          value={stats.totalArticlesLocal}
+          subtext="output/article-final/"
           trend="neutral"
         />
         <StatCard
           icon={<CloudUpload size={16} className="text-violet-500" />}
-          label="Finished in Notion"
-          value={stats.notionTotalUploaded}
+          label="In Notion DB"
+          value={stats.totalArticlesNotion}
+          subtext="Notion 总记录"
           trend="neutral"
         />
         <StatCard
           icon={<AlertCircle size={16} className="text-orange-500" />}
           label="Pending Rewrite"
-          value={stats.pendingRewrite}
-          trend={stats.pendingRewrite > 0 ? "down" : "neutral"}
+          value={stats.pendingRewriteGlobal}
+          subtext={`Local: ${stats.pendingRewriteLocal}`}
+          trend={stats.pendingRewriteGlobal > 0 ? "down" : "neutral"}
         />
         <StatCard
           icon={<Clock size={16} className="text-twitter-blue" />}

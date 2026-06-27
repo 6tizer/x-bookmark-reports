@@ -72,6 +72,25 @@ function formatDuration(iso?: string): string {
   return `${Math.floor(sec / 3600)}h ago`;
 }
 
+// 单行进度条：label + 百分比 + 横向 progress bar
+function ProgressBarRow({ label, progress }: { label: string; progress: number }) {
+  const pct = Math.max(0, Math.min(100, progress));
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center justify-between">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-medium text-foreground">{pct}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-border overflow-hidden">
+        <div
+          className="h-full bg-twitter-blue transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function Pipeline({
   pipeline,
   batchProgress,
@@ -185,7 +204,7 @@ export function Pipeline({
                   <X size={14} />
                 </button>
               </div>
-              <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+              <div className="mt-2 space-y-2 text-[11px] text-muted-foreground">
                 <p>
                   Status:{" "}
                   <span className="font-medium text-foreground capitalize">
@@ -199,7 +218,20 @@ export function Pipeline({
                   </p>
                 )}
                 {pipeline[selectedNode].progress !== undefined && (
-                  <p>Progress: {pipeline[selectedNode].progress}%</p>
+                  <div className="space-y-1.5">
+                    <ProgressBarRow
+                      label="本批"
+                      progress={pipeline[selectedNode].progress}
+                    />
+                    {pipeline[selectedNode].progressGlobal !== undefined &&
+                      pipeline[selectedNode].progressGlobal !==
+                        pipeline[selectedNode].progress && (
+                        <ProgressBarRow
+                          label="全局"
+                          progress={pipeline[selectedNode].progressGlobal!}
+                        />
+                      )}
+                  </div>
                 )}
               </div>
             </div>

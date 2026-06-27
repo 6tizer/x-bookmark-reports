@@ -610,11 +610,13 @@ function node(
   status: PipelineStepStatus,
   lastRun?: string,
   progress?: number,
-  err?: { code: string; message: string }
+  err?: { code: string; message: string },
+  progressGlobal?: number,
 ): PipelineNode {
   const n: PipelineNode = { status };
   if (lastRun) n.lastRun = lastRun;
   if (progress !== undefined) n.progress = progress;
+  if (progressGlobal !== undefined) n.progressGlobal = progressGlobal;
   if (err) n.error = err;
   return n;
 }
@@ -733,36 +735,49 @@ export function getPipelineStatus(): DashboardPipelineFour {
   const sc = pipelineStageCounts();
   const rewP = pct(sc.written, denom);
 
+  // Stage 2: 全局进度（denom 改为 1584 总书签数）
+  const totalBookmarks = countTotalBookmarks();
+  const denomGlobal = Math.max(totalBookmarks, 1);
+  const rewPGlobal = pct(sc.written, denomGlobal);
+
   const bp = getBatchProgress();
   const articleSubRunning = bp.isRunning;
 
   const rewrite: PipelineNode = articleSubRunning
-    ? node("running", bp.items[0]?.updatedAt, rewP)
+    ? node("running", bp.items[0]?.updatedAt, rewP, undefined, rewPGlobal)
     : rewP >= 100
-      ? node("completed", lastRun, 100)
+      ? node("completed", lastRun, 100, undefined, rewPGlobal)
       : rewP > 0
-        ? node("running", lastRun, rewP)
-        : node("pending", lastRun, 0);
+        ? node("running", lastRun, rewP, undefined, rewPGlobal)
+        : node("pending", lastRun, 0, undefined, rewPGlobal);
 
   const finishedRatio = totalDrafts > 0 ? notionFinishedCount / totalDrafts : 0;
   const notionProgress = Math.min(100, Math.round(finishedRatio * 100));
+  // Stage 2: Notion 上传全局进度（相对 1584 总书签数）
+  const notionProgressGlobal = pct(notionFinishedCount, denomGlobal);
 
   let notionUpload: PipelineNode;
   if (st === "running" && step === "upload") {
-    notionUpload = node("running", lastRun, notionProgress);
+    notionUpload = node("running", lastRun, notionProgress, undefined, notionProgressGlobal);
   } else if (st === "failed" && step === "upload") {
     notionUpload = node("failed", lastRun, notionProgress, {
       code: "NOTION_FAILED",
       message: errMsg,
-    });
+    }, notionProgressGlobal);
   } else if (st === "success" || st === "partial") {
-    notionUpload = node("completed", lastRun, notionProgress >= 100 ? 100 : notionProgress);
+    notionUpload = node(
+      "completed",
+      lastRun,
+      notionProgress >= 100 ? 100 : notionProgress,
+      undefined,
+      notionProgressGlobal,
+    );
   } else if (st === "failed" && step !== "upload") {
-    notionUpload = node("pending", lastRun, notionProgress);
+    notionUpload = node("pending", lastRun, notionProgress, undefined, notionProgressGlobal);
   } else if (notionFinishedCount > 0) {
-    notionUpload = node("completed", lastRun, Math.min(100, notionProgress));
+    notionUpload = node("completed", lastRun, Math.min(100, notionProgress), undefined, notionProgressGlobal);
   } else {
-    notionUpload = node("pending", lastRun, 0);
+    notionUpload = node("pending", lastRun, 0, undefined, notionProgressGlobal);
   }
 
   return {
