@@ -307,65 +307,74 @@ export default function ArticleDetailPage() {
           </div>
 
           <div className="flex items-center gap-1 flex-wrap justify-end">
-            <div className="flex items-center rounded-md border border-border overflow-hidden">
+            {/* View 组：编辑视图切换 + 历史版本 */}
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">View</span>
+              <div className="flex items-center rounded-md border border-border overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("edit")}
+                  className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "edit" ? "bg-muted font-medium" : ""}`}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("split")}
+                  className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "split" ? "bg-muted font-medium" : ""}`}
+                >
+                  Split
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("preview")}
+                  className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "preview" ? "bg-muted font-medium" : ""}`}
+                >
+                  <Eye size={12} /> Preview
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setViewMode("edit")}
-                className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "edit" ? "bg-muted font-medium" : ""}`}
+                onClick={() => setShowVersions(!showVersions)}
+                className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] hover:bg-muted transition-colors"
               >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("split")}
-                className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "split" ? "bg-muted font-medium" : ""}`}
-              >
-                Split
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("preview")}
-                className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "preview" ? "bg-muted font-medium" : ""}`}
-              >
-                <Eye size={12} /> Preview
+                <History size={12} />
+                {versions.length}
+                <ChevronDown size={10} />
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowVersions(!showVersions)}
-              className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] hover:bg-muted transition-colors"
-            >
-              <History size={12} />
-              {versions.length}
-              <ChevronDown size={10} />
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || !canEditFinal}
-              title={!canEditFinal ? "Save available when article-final exists (written/uploaded)" : undefined}
-              className="flex h-7 items-center gap-1 rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-            >
-              <Save size={12} />
-              {isSaving ? "Saving..." : "Save"}
-            </button>
-
-            {/* Stage 4：文章修改组（Save）与管线操作组（Upload to Notion）之间的视觉分隔 */}
-            {showNotion && (
-              <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
-            )}
-
-            {showNotion && (
+            {/* Article 组：文章修改操作 */}
+            <div className="flex items-center gap-1">
+              <span aria-hidden className="mx-1 h-5 w-px bg-border" />
+              <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">Article</span>
               <button
                 type="button"
-                onClick={() => void handleNotionUpload()}
-                disabled={publishBusy}
-                className="flex h-7 items-center gap-1 rounded-md bg-green-600 px-2 text-[11px] font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                onClick={handleSave}
+                disabled={isSaving || !canEditFinal}
+                title={!canEditFinal ? "Save available when article-final exists (written/uploaded)" : undefined}
+                className="flex h-7 items-center gap-1 rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
               >
-                <Send size={12} /> {publishBusy ? "…" : "Upload to Notion"}
+                <Save size={12} />
+                {isSaving ? "Saving..." : "Save"}
               </button>
+            </div>
+
+            {/* Pipeline 组：管线操作（仅 showNotion 时显示） */}
+            {showNotion && (
+              <div className="flex items-center gap-1">
+                <span aria-hidden className="mx-1 h-5 w-px bg-border" />
+                <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">Pipeline</span>
+                <button
+                  type="button"
+                  onClick={() => void handleNotionUpload()}
+                  disabled={publishBusy}
+                  className="flex h-7 items-center gap-1 rounded-md bg-green-600 px-2 text-[11px] font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                  <Send size={12} /> {publishBusy ? "…" : "Upload to Notion"}
+                </button>
+              </div>
             )}
           </div>
         </div>
