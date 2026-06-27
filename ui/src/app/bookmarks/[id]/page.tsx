@@ -1,27 +1,36 @@
 "use client";
 
 /**
- * Bookmark detail page — full text, reports, replies, external links
+ * Bookmark detail page (V2)
+ * - breadcrumb
+ * - author header + 3 jump buttons (Open on X / 查看成品文章 / Notion 已上传)
+ * - 主推文高亮卡片 + stats
+ * - Tags（优先 articleTags）
+ * - 深度报告全文（CollapsibleSection + ReactMarkdown）
+ *
+ * 删除旧的：Basic/Enhanced Report 跳转按钮（指向 /reports 僵尸路由）、
+ *          External Links 区块、Replies 区块。
  */
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ClientLayout } from "@/components/layout/ClientLayout";
-import { getBookmarkByIdAPI, startRead } from "@/lib/api";
+import { getBookmarkByIdAPI } from "@/lib/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { BookmarkDetail } from "@/types/api";
 import {
-  ArrowLeft,
   Heart,
   MessageCircle,
   Bookmark as BookmarkIcon,
   Eye,
   ExternalLink,
   BookOpen,
-  Sparkles,
-  FileText,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function BookmarkDetailPage() {
   const params = useParams();
@@ -46,7 +55,7 @@ export default function BookmarkDetailPage() {
     return (
       <ClientLayout>
         <div className="max-w-3xl space-y-4">
-          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-72" />
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-32 w-full" />
         </div>
@@ -67,19 +76,34 @@ export default function BookmarkDetailPage() {
     );
   }
 
+  const tags = bookmark.articleTags ?? bookmark.tags;
+
   return (
     <ClientLayout>
-      <div className="max-w-3xl space-y-6">
-        {/* Back link */}
-        <Link
-          href="/bookmarks"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Back to bookmarks
-        </Link>
+      <div className="max-w-3xl space-y-5">
+        {/* 面包屑 */}
+        <nav className="text-xs text-muted-foreground" aria-label="breadcrumb">
+          <ol className="flex items-center gap-1 flex-wrap">
+            <li>
+              <Link href="/" className="hover:text-foreground transition-colors">
+                Home
+              </Link>
+            </li>
+            <li className="opacity-50">›</li>
+            <li>
+              <Link href="/bookmarks" className="hover:text-foreground transition-colors">
+                Bookmarks
+              </Link>
+            </li>
+            <li className="opacity-50">›</li>
+            <li className="text-foreground font-medium truncate max-w-md">
+              @{bookmark.author.handle} · {bookmark.fullText.slice(0, 40)}
+              {bookmark.fullText.length > 40 ? "…" : ""}
+            </li>
+          </ol>
+        </nav>
 
-        {/* Author header */}
+        {/* Author header + 顶部 3 跳转按钮 */}
         <div className="flex items-center gap-3">
           {bookmark.author.avatar ? (
             <img
@@ -92,125 +116,113 @@ export default function BookmarkDetailPage() {
               {bookmark.author.name[0]}
             </div>
           )}
-          <div>
-            <p className="font-semibold text-foreground">{bookmark.author.name}</p>
-            <p className="text-sm text-muted-foreground">{bookmark.author.handle}</p>
+          <div className="min-w-0">
+            <p className="font-semibold text-foreground truncate">{bookmark.author.name}</p>
+            <p className="text-sm text-muted-foreground truncate">{bookmark.author.handle}</p>
           </div>
-          <a
-            href={bookmark.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-auto flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-muted transition-colors"
-          >
-            <ExternalLink size={12} />
-            Open on X
-          </a>
+          <div className="ml-auto flex items-center gap-2">
+            <a
+              href={bookmark.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-muted transition-colors"
+            >
+              <ExternalLink size={12} />
+              Open on X
+            </a>
+            {bookmark.hasArticle && bookmark.tweetId && (
+              <Link
+                href={`/articles/${bookmark.tweetId}`}
+                className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-muted transition-colors text-twitter-blue"
+              >
+                <BookOpen size={12} />
+                查看成品文章
+              </Link>
+            )}
+            {bookmark.inNotion && (
+              <span
+                className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs text-violet-600 dark:text-violet-400"
+                title="Notion page URL 留 PR-3 接入"
+              >
+                <ExternalLink size={12} />
+                Notion 已上传
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Full text */}
-        <div className="rounded-lg border border-border bg-card p-5">
+        {/* 主推文卡片 — 高亮 */}
+        <div className="rounded-lg border-2 border-twitter-blue/30 bg-card p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-xs text-twitter-blue font-medium mb-2">
+            <span className="rounded-full bg-twitter-blue/10 px-2 py-0.5">主推文</span>
+          </div>
           <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
             {bookmark.fullText}
           </p>
           <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-0.5"><Heart size={12} /> {bookmark.stats.likes}</span>
-            <span className="flex items-center gap-0.5"><MessageCircle size={12} /> {bookmark.stats.replies}</span>
-            <span className="flex items-center gap-0.5"><BookmarkIcon size={12} /> {bookmark.stats.bookmarks}</span>
-            <span className="flex items-center gap-0.5"><Eye size={12} /> {bookmark.stats.views}</span>
+            <span className="flex items-center gap-0.5">
+              <Heart size={12} /> {bookmark.stats.likes}
+            </span>
+            <span className="flex items-center gap-0.5">
+              <MessageCircle size={12} /> {bookmark.stats.replies}
+            </span>
+            <span className="flex items-center gap-0.5">
+              <BookmarkIcon size={12} /> {bookmark.stats.bookmarks}
+            </span>
+            <span className="flex items-center gap-0.5">
+              <Eye size={12} /> {bookmark.stats.views}
+            </span>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => startRead(bookmark.id, false)}
-            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-          >
-            <BookOpen size={14} /> Read
-          </button>
-          <button
-            onClick={() => startRead(bookmark.id, true)}
-            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-          >
-            <Sparkles size={14} /> Enhanced Read
-          </button>
-          {bookmark.reports.basic && (
-            <Link
-              href={`/reports/${bookmark.reports.basic.id}`}
-              className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-            >
-              <FileText size={14} /> Basic Report
-            </Link>
-          )}
-          {bookmark.reports.enhanced && (
-            <Link
-              href={`/reports/${bookmark.reports.enhanced.id}`}
-              className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-            >
-              <FileText size={14} /> Enhanced Report
-            </Link>
-          )}
-        </div>
-
-        {/* Tags */}
-        {bookmark.tags.length > 0 && (
+        {/* Tags（优先 articleTags） */}
+        {tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {bookmark.tags.map((tag) => (
-              <span key={tag} className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
+              >
                 {tag}
               </span>
             ))}
           </div>
         )}
 
-        {/* External Links */}
-        {bookmark.externalLinks.length > 0 && (
-          <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground mb-2">External Links</h3>
-            <ul className="space-y-2">
-              {bookmark.externalLinks.map((link) => (
-                <li key={link.url}>
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex items-center gap-2 text-sm text-twitter-blue hover:underline"
-                  >
-                    <ExternalLink size={12} className="opacity-50 group-hover:opacity-100" />
-                    {link.title}
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                      {link.category}
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Replies */}
-        {bookmark.replies.length > 0 && (
-          <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Replies ({bookmark.replies.length})</h3>
-            <div className="space-y-3">
-              {bookmark.replies.map((reply) => (
-                <div key={reply.id} className="border-l-2 border-border pl-3 py-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-medium">{reply.author.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{reply.author.handle}</p>
-                  </div>
-                  <p className="text-sm text-foreground mt-0.5">{reply.text}</p>
-                  <div className="mt-1 flex items-center gap-3 text-[10px] text-muted-foreground">
-                    <span className="flex items-center gap-0.5"><Heart size={10} /> {reply.stats.likes}</span>
-                    <span className="flex items-center gap-0.5"><MessageCircle size={10} /> {reply.stats.replies}</span>
-                    <span>{new Date(reply.createdAt).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              ))}
+        {/* 深度报告全文 — 可折叠 */}
+        {bookmark.deepDraftBody && (
+          <CollapsibleSection title="深度报告全文" defaultOpen={false}>
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{bookmark.deepDraftBody}</ReactMarkdown>
             </div>
-          </div>
+          </CollapsibleSection>
         )}
       </div>
     </ClientLayout>
+  );
+}
+
+// 可折叠区块 helper
+function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-foreground hover:bg-muted/50 transition-colors"
+      >
+        <span>{title}</span>
+        {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+      </button>
+      {open && <div className="px-4 pb-4 pt-1">{children}</div>}
+    </div>
   );
 }

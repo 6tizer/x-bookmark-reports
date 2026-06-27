@@ -55,6 +55,11 @@ export default function ArticlesPage() {
   const [runBusyId, setRunBusyId] = useState<string | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const LIMIT = 20;
+  // 二次确认 modal（in-page，避开浏览器 window.confirm 拦截 / webview 差异）
+  const [confirmingArticle, setConfirmingArticle] = useState<Article | null>(null);
 
   useEffect(() => {
     try {
@@ -74,12 +79,14 @@ export default function ArticlesPage() {
     }
   };
 
-  const fetchData = useCallback(async (status?: ArticleStatus, s?: string) => {
+  const fetchData = useCallback(async (status?: ArticleStatus, s?: string, pg: number = 1) => {
     setIsLoading(true);
     try {
-      const res: PaginatedResponse<Article> = await getArticles(status, s);
+      const res: PaginatedResponse<Article> = await getArticles(status, s, pg, LIMIT);
       setArticles(res.items);
       setTotal(res.total);
+      setHasMore(res.hasMore);
+      setPage(res.page);
     } finally {
       setIsLoading(false);
     }
@@ -101,9 +108,7 @@ export default function ArticlesPage() {
     published: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400",
   };
 
-  const onRunOne = async (e: React.MouseEvent, article: Article) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const executeRun = async (article: Article) => {
     setRunBusyId(article.id);
     setToast(null);
     try {
@@ -117,6 +122,17 @@ export default function ArticlesPage() {
     } finally {
       setRunBusyId(null);
     }
+  };
+
+  const onRunOne = (e: React.MouseEvent, article: Article) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // written/uploaded 状态弹出 in-page modal 二次确认；其它状态直接运行
+    if (article.status === "written" || article.status === "uploaded") {
+      setConfirmingArticle(article);
+      return;
+    }
+    void executeRun(article);
   };
 
   const onRunBatch = async () => {
@@ -281,8 +297,10 @@ export default function ArticlesPage() {
                 <button
                   type="button"
                   title="Run article pipeline for this tweet"
+                  data-run-button
+                  data-article-status={article.status}
                   disabled={runBusyId === article.id}
-                  onClick={(e) => void onRunOne(e, article)}
+                  onClick={(e) => onRunOne(e, article)}
                   className="shrink-0 flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted disabled:opacity-50"
                 >
                   <Play size={12} />
@@ -290,6 +308,83 @@ export default function ArticlesPage() {
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* 翻页控件 — 列表底部 Previous / Page N / Next */}
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-xs text-muted-foreground">
+            Showing {articles.length} of {total}
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void fetchData(statusFilter, search, Math.max(1, page - 1))}
+              disabled={page <= 1}
+              className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50 transition-colors"
+            >
+              Previous
+            </button>
+            <span className="px-2 text-xs text-muted-foreground">Page {page}</span>
+            <button
+              type="button"
+              onClick={() => void fetchData(statusFilter, search, page + 1)}
+              disabled={!hasMore}
+              className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50 transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+        {confirmingArticle && (
+          <div
+            data-testid="run-confirm-modal"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setConfirmingArticle(null);
+            }}
+          >
+            <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+              <h2 className="text-base font-semibold text-foreground">
+                {confirmingArticle.status === "uploaded"
+                  ? "该文章已上传 Notion"
+                  : "该文章已成文"}
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                「{confirmingArticle.title.slice(0, 60)}
+                {confirmingArticle.title.length > 60 ? "…" : ""}」
+              </p>
+              <p className="mt-2 text-sm text-foreground">
+                再次运行 pipeline 会
+                <span className="font-medium text-red-600 dark:text-red-400">
+                  覆盖
+                </span>
+                现有结果。确认继续吗？
+              </p>
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmingArticle(null)}
+                  className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = confirmingArticle;
+                    setConfirmingArticle(null);
+                    void executeRun(target);
+                  }}
+                  className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                >
+                  确认运行
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

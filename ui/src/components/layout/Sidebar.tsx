@@ -19,9 +19,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** `articles` is wired to `DashboardStats.articlesWritten` (output/article-final count). */
+/** `articles` is wired to `DashboardStats.totalArticlesLocal` (output/article-final count).
+ *  `bookmarks` accepts string form like "1584/642" (totalBookmarks/totalDrafts). */
 export interface SidebarCounts {
-  bookmarks?: number;
+  bookmarks?: string | number;
   articles?: number;
 }
 

@@ -669,10 +669,15 @@ export const mockDashboardStats: DashboardStats = {
   articlesWritten: 932,
   notionTotalUploaded: 946,
   pendingRewrite: 14,
+  // Stage 2: 4 个新字段与旧字段语义对齐（mock 数值不一定满足真实约束，仅用于 UI 调试）
+  totalArticlesLocal: 932,
+  totalArticlesNotion: 946,
+  pendingRewriteLocal: 0,
+  pendingRewriteGlobal: 14,
   pipeline: {
     twitterSync: { status: "completed", lastRun: "2026-04-28T08:30:00.000Z" },
     deepReports: { status: "completed", lastRun: "2026-04-28T08:30:00.000Z", progress: 100 },
-    rewrite: { status: "running", progress: 67 },
+    rewrite: { status: "running", progress: 67, progressGlobal: 40 },
     notionUpload: { status: "pending" },
   },
 };

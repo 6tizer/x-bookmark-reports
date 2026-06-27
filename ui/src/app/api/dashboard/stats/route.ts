@@ -8,6 +8,8 @@ import { getDb, isDbEmpty } from "@/lib/db";
 import {
   getDashboardStats as getFsDashboardStats,
   getPipelineStatus,
+  countTotalBookmarks,
+  getArticleWrittenSet,
 } from "@/lib/fs-data";
 import { getNotionDbStats } from "@/lib/notion-stats";
 import type { ApiResponse, DashboardStats, DashboardPipelineFour } from "@/types/api";
@@ -33,15 +35,28 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
       // Enrich with Notion DB stats (with filesystem fallback)
       const notionStats = await getNotionDbStats();
 
+      // Stage 2: 真实填充 4 个新字段（bookmarks.json 为真相源）
+      const totalBookmarks = countTotalBookmarks();             // 1584
+      const totalDrafts = fsStats.totalDrafts;                  // 642
+      const totalArticlesLocal = getArticleWrittenSet().size;   // 642
+      const totalArticlesNotion = notionStats?.totalRecords ?? 0;
+      const pendingRewriteLocal = Math.max(0, totalDrafts - totalArticlesLocal);
+      const pendingRewriteGlobal = Math.max(0, totalBookmarks - totalDrafts);
+
       const stats: DashboardStats = {
         lastSyncAt: fsStats.lastSync,
-        totalDrafts: fsStats.totalDrafts,
-        totalBookmarks: fsStats.totalDrafts,
+        totalBookmarks,
+        totalDrafts,
+        totalArticlesLocal,
+        totalArticlesNotion,
+        pendingRewriteLocal,
+        pendingRewriteGlobal,
         newThisWeek: fsStats.newThisWeek,
-        articlesWritten: notionStats?.articlesWritten ?? fsStats.totalArticles,
-        notionTotalUploaded: notionStats?.totalRecords ?? fsStats.notionFinishedUploaded,
-        pendingRewrite: notionStats?.pendingRewrite ?? fsStats.pendingRewrite,
         pipeline,
+        // 旧字段同义别名
+        articlesWritten: totalArticlesLocal,
+        notionTotalUploaded: totalArticlesNotion,
+        pendingRewrite: pendingRewriteGlobal,
       };
 
       return NextResponse.json({ success: true, data: stats });
@@ -118,10 +133,20 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
 
     const pendingRewrite = Math.max(0, totalBookmarks - totalArticles);
 
+    // Stage 2: DB 模式 4 个新字段真实填充（DB 不查 Notion）
+    const totalArticlesLocal = totalArticles;
+    const totalArticlesNotion = 0;
+    const pendingRewriteLocal = Math.max(0, totalBookmarks - totalArticles);
+    const pendingRewriteGlobal = pendingRewriteLocal;
+
     const stats: DashboardStats = {
       lastSyncAt,
       totalDrafts: totalBookmarks,
       totalBookmarks,
+      totalArticlesLocal,
+      totalArticlesNotion,
+      pendingRewriteLocal,
+      pendingRewriteGlobal,
       newThisWeek,
       articlesWritten: totalArticles,
       notionTotalUploaded: 0,
@@ -143,6 +168,11 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
           articlesWritten: 0,
           notionTotalUploaded: 0,
           pendingRewrite: 0,
+          // 兜底无数据，4 个新字段保持 0
+          totalArticlesLocal: 0,
+          totalArticlesNotion: 0,
+          pendingRewriteLocal: 0,
+          pendingRewriteGlobal: 0,
           pipeline: emptyPipeline(),
         },
         error: { code: "INTERNAL_ERROR", message, detail: String(err) },

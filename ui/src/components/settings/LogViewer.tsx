@@ -46,64 +46,68 @@ export function LogViewer({
 
   return (
     <div className="space-y-3">
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Filter size={12} />
-          <span>Component:</span>
-        </div>
-        <button
-          onClick={() => onComponentChange(undefined)}
-          className={`rounded-md border border-border px-2 py-0.5 text-[11px] transition-colors ${
-            !component ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
-          }`}
-        >
-          All
-        </button>
-        {components.map((c) => (
+      {/* Filters — 强制两行：Component 与 Level/Refresh 分两行，避免按钮过多挤一行 */}
+      <div className="space-y-2">
+        {/* Row 1: Component */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+            <Filter size={12} />
+            <span>Component:</span>
+          </div>
           <button
-            key={c}
-            onClick={() => onComponentChange(c)}
+            onClick={() => onComponentChange(undefined)}
             className={`rounded-md border border-border px-2 py-0.5 text-[11px] transition-colors ${
-              component === c ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
+              !component ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
             }`}
           >
-            {c}
+            All
           </button>
-        ))}
-
-        <div className="w-px h-4 bg-border mx-1" />
-
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span>Level:</span>
+          {components.map((c) => (
+            <button
+              key={c}
+              onClick={() => onComponentChange(c)}
+              className={`rounded-md border border-border px-2 py-0.5 text-[11px] transition-colors ${
+                component === c ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
         </div>
-        <button
-          onClick={() => onLevelChange(undefined)}
-          className={`rounded-md border border-border px-2 py-0.5 text-[11px] transition-colors ${
-            !level ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
-          }`}
-        >
-          All
-        </button>
-        {levels.map((l) => (
+
+        {/* Row 2: Level + Refresh */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+            <span>Level:</span>
+          </div>
           <button
-            key={l}
-            onClick={() => onLevelChange(l)}
-            className={`rounded-md border border-border px-2 py-0.5 text-[11px] capitalize transition-colors ${
-              level === l ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
+            onClick={() => onLevelChange(undefined)}
+            className={`rounded-md border border-border px-2 py-0.5 text-[11px] transition-colors ${
+              !level ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
             }`}
           >
-            {l}
+            All
           </button>
-        ))}
+          {levels.map((l) => (
+            <button
+              key={l}
+              onClick={() => onLevelChange(l)}
+              className={`rounded-md border border-border px-2 py-0.5 text-[11px] capitalize transition-colors ${
+                level === l ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
+              }`}
+            >
+              {l}
+            </button>
+          ))}
 
-        <button
-          onClick={onRefresh}
-          className="ml-auto flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] hover:bg-muted transition-colors"
-        >
-          <RefreshCw size={11} />
-          Refresh
-        </button>
+          <button
+            onClick={onRefresh}
+            className="ml-auto flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] hover:bg-muted transition-colors"
+          >
+            <RefreshCw size={11} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Log table */}

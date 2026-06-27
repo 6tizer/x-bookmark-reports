@@ -13,7 +13,7 @@ import {
   Eye,
   ExternalLink,
 } from "lucide-react";
-import type { Bookmark, BookmarkStatus } from "@/types/api";
+import type { Bookmark, BookmarkStatus, BookmarkLifecycle } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BookmarkToolbar } from "./BookmarkToolbar";
 
@@ -89,11 +89,11 @@ export function BookmarkCard({
               <p className="text-sm font-medium truncate">{bookmark.author.name}</p>
               <p className="text-[11px] text-muted-foreground">{bookmark.author.handle}</p>
             </div>
-            <StatusBadge status={bookmark.status} />
+            <LifecycleBadge lifecycle={bookmark.lifecycle} status={bookmark.status} />
           </div>
 
           {/* Tweet text */}
-          <Link href={`/bookmarks/${bookmark.id}`}>
+          <Link href={`/bookmarks/${bookmark.tweetId ?? bookmark.id}`}>
             <p className="mt-3 text-sm text-foreground line-clamp-3 leading-relaxed hover:text-twitter-blue transition-colors">
               {bookmark.text}
             </p>
@@ -108,9 +108,9 @@ export function BookmarkCard({
           </div>
 
           {/* Tags */}
-          {bookmark.tags.length > 0 && (
+          {(bookmark.articleTags ?? bookmark.tags).length > 0 && (
             <div className="mt-2.5 flex flex-wrap gap-1">
-              {bookmark.tags.map((tag) => (
+              {(bookmark.articleTags ?? bookmark.tags).map((tag) => (
                 <span
                   key={tag}
                   className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
@@ -166,6 +166,38 @@ function StatusBadge({ status }: { status: BookmarkStatus }) {
   return (
     <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${colors[status]}`}>
       {status}
+    </span>
+  );
+}
+
+// V2 lifecycle badge — lifecycle 缺失时 fallback 到 V1 StatusBadge
+function LifecycleBadge({
+  lifecycle,
+  status,
+}: {
+  lifecycle?: BookmarkLifecycle;
+  status: BookmarkStatus;
+}) {
+  if (!lifecycle) {
+    return <StatusBadge status={status} />;
+  }
+  const colors: Record<BookmarkLifecycle, string> = {
+    pending: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+    drafted: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+    written: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+    uploaded: "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+  };
+  const labels: Record<BookmarkLifecycle, string> = {
+    pending: "待生成",
+    drafted: "已报告",
+    written: "已成文",
+    uploaded: "已 Notion",
+  };
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${colors[lifecycle]}`}
+    >
+      {labels[lifecycle]}
     </span>
   );
 }

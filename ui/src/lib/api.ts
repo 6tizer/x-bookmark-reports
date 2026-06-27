@@ -488,7 +488,12 @@ export async function exportReport(reportId: string, format: "md" | "pdf"): Prom
 // Articles
 // ─────────────────────────────────────────────
 
-export async function getArticles(status?: string, search?: string): Promise<PaginatedResponse<Article>> {
+export async function getArticles(
+  status?: string,
+  search?: string,
+  page: number = 1,
+  limit: number = 20,
+): Promise<PaginatedResponse<Article>> {
   if (USE_MOCK) {
     await mockDelay(300);
     let items = [...mockArticles];
@@ -497,9 +502,9 @@ export async function getArticles(status?: string, search?: string): Promise<Pag
       const q = search.toLowerCase();
       items = items.filter((a) => a.title.toLowerCase().includes(q));
     }
-    return paginate(items, 1, 20);
+    return paginate(items, page, limit);
   }
-  return api.get<PaginatedResponse<Article>>("/articles", { status, search });
+  return api.get<PaginatedResponse<Article>>("/articles", { status, search, page, limit });
 }
 
 export async function getArticleByIdAPI(id: string): Promise<Article> {

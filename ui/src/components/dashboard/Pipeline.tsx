@@ -72,6 +72,25 @@ function formatDuration(iso?: string): string {
   return `${Math.floor(sec / 3600)}h ago`;
 }
 
+// 单行进度条：label + 百分比 + 横向 progress bar
+function ProgressBarRow({ label, progress }: { label: string; progress: number }) {
+  const pct = Math.max(0, Math.min(100, progress));
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center justify-between">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-medium text-foreground">{pct}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-border overflow-hidden">
+        <div
+          className="h-full bg-twitter-blue transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function Pipeline({
   pipeline,
   batchProgress,
@@ -164,6 +183,34 @@ export function Pipeline({
         })}
       </div>
 
+      {(() => {
+        // 默认始终显示：有全局进度且与本批不一致的阶段（rewrite / notionUpload）
+        // 让用户不点节点就能看到「本批 100% / 全局 41%」的差异
+        const stagesWithGlobal = nodes.filter((n) => {
+          const d = pipeline[n.key];
+          return (
+            d.progressGlobal !== undefined &&
+            d.progress !== undefined &&
+            d.progressGlobal !== d.progress
+          );
+        });
+        if (stagesWithGlobal.length === 0) return null;
+        return (
+          <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3 text-[11px]">
+            {stagesWithGlobal.map((n) => {
+              const d = pipeline[n.key];
+              return (
+                <div key={n.key} className="space-y-1.5">
+                  <p className="font-medium text-foreground">{n.label}</p>
+                  <ProgressBarRow label="本批" progress={d.progress!} />
+                  <ProgressBarRow label="全局" progress={d.progressGlobal!} />
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       <AnimatePresence>
         {selectedNode && (
           <motion.div
@@ -185,7 +232,7 @@ export function Pipeline({
                   <X size={14} />
                 </button>
               </div>
-              <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+              <div className="mt-2 space-y-2 text-[11px] text-muted-foreground">
                 <p>
                   Status:{" "}
                   <span className="font-medium text-foreground capitalize">
@@ -199,7 +246,20 @@ export function Pipeline({
                   </p>
                 )}
                 {pipeline[selectedNode].progress !== undefined && (
-                  <p>Progress: {pipeline[selectedNode].progress}%</p>
+                  <div className="space-y-1.5">
+                    <ProgressBarRow
+                      label="本批"
+                      progress={pipeline[selectedNode].progress}
+                    />
+                    {pipeline[selectedNode].progressGlobal !== undefined &&
+                      pipeline[selectedNode].progressGlobal !==
+                        pipeline[selectedNode].progress && (
+                        <ProgressBarRow
+                          label="全局"
+                          progress={pipeline[selectedNode].progressGlobal!}
+                        />
+                      )}
+                  </div>
                 )}
               </div>
             </div>
