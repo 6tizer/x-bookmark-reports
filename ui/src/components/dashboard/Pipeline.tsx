@@ -183,6 +183,34 @@ export function Pipeline({
         })}
       </div>
 
+      {(() => {
+        // 默认始终显示：有全局进度且与本批不一致的阶段（rewrite / notionUpload）
+        // 让用户不点节点就能看到「本批 100% / 全局 41%」的差异
+        const stagesWithGlobal = nodes.filter((n) => {
+          const d = pipeline[n.key];
+          return (
+            d.progressGlobal !== undefined &&
+            d.progress !== undefined &&
+            d.progressGlobal !== d.progress
+          );
+        });
+        if (stagesWithGlobal.length === 0) return null;
+        return (
+          <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3 text-[11px]">
+            {stagesWithGlobal.map((n) => {
+              const d = pipeline[n.key];
+              return (
+                <div key={n.key} className="space-y-1.5">
+                  <p className="font-medium text-foreground">{n.label}</p>
+                  <ProgressBarRow label="本批" progress={d.progress!} />
+                  <ProgressBarRow label="全局" progress={d.progressGlobal!} />
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       <AnimatePresence>
         {selectedNode && (
           <motion.div
