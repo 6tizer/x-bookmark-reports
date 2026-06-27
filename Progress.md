@@ -5,6 +5,38 @@
 
 ---
 
+## 2026-06-27 — PR-3 Schedule 单一真相 + Settings/Articles/Reports 加固（cursor/pr-3-schedule-truth-and-cleanup）
+
+### 实现的功能（11 commit × Coder/Reviewer/Test 子代理流水）
+
+1. **后端死字段清理**：删 toggle route + scheduler-state.ts；settings/route.ts GET/PUT 不再读写 autoSync / cronExpression；types/api.ts 标 @deprecated
+2. **ScheduleSettings UI 重构**：删整个 Built-in Timer 区块 + cron 编辑器；新增 6 预设按钮（3h/6h/12h/daily-0/daily-8/daily-16）
+3. **launchd PUT 实现**：preset 枚举校验 → .bak 备份 → plutil 改写 StartCalendarInterval → plutil -lint → launchctl unload+load；三条失败链完整回滚
+4. **GeneralSettings 清理**：删 Auto Sync toggle；Notion DB ID 改本地 state 由 Save 按钮提交
+5. **auto_run.sh + history API**：append_history 函数旋转保留 100 条 jsonl；GET /api/pipeline/history 倒序返回
+6. **usePipelineHistory + Sync Resume 重排**：PipelineHistory 8 列表格读 jsonl；usePipeline.ts 删 localStorage history 全套；Sync Bookmarks 卡删 Resume checkbox
+7. **LLMSettings 跨 provider 拆分（P0 修复）**：model-options 仅返回 DeepSeek；LLMSettings 删 UI 临时覆盖区块；xAI Research Model 独立输入框写 .env XAI_MODEL；research.py 改用 config.XAI_MODEL；article_pipeline.py 加 --xai-model CLI
+8. **Paths 绝对路径 + DeepSeek baseUrl helper**：toAbsolutePath 兜底；placeholder 改绝对路径风格；DeepSeek Base URL 下加 SDK 双兼容说明
+9. **Articles 状态机收敛**：ArticleStatus 删 editing/reviewing/published；uploaded 真实可达（fs-data 已支持）；Written Run 二次确认 modal
+10. **Reports 死代码批量删除**：删 11 文件 + 改 6 文件，净减 1525 行；/reports HTTP 404
+11. **BUGS.md 维护 + coordinator last_run 修复**：B056-B061 移入已修复（实际 PR-1 已修）；B026 标 obsolete；B-SYNC-DEEP-TIMESTAMP-MISLEADING 修复（coordinator.py 每次跑完都更新 last_run）
+
+### 遇到的错误
+
+1. ScheduleSettings 删 Built-in Timer 后 GeneralSettings 还读 autoSync → Commit 1 用 @deprecated 降级，Commit 4 才彻底删 UI
+2. model-options API 早期返回 grok 选项 → P0 bug 触发路径，Commit 7 闭环删除
+3. Append-Only 测试发现 `key={i}` 数组下标作 React key（PR-3 范围外，留观察）
+4. BUGS.md 中 B056-B061 状态偏移：在「待修复」和「已修复」表都登记 → Commit 11 一次性清理
+
+### 解决方案
+
+1. 多代理流水（Coder → Reviewer → Tester）每 commit 严格验证后入库；fix loop 上限 1 次
+2. P0 修复采用「UI 边界 + API 边界」双闭环：UI 删 grok 选项 + API 不返 grok 选项
+3. BUGS.md 状态字段统一在 Commit 11，避免多 commit 重复维护
+4. coordinator.py last_run bug：在 elapsed 计算后无条件更新 state["last_run"]，不依赖 if bid 分支
+
+---
+
 ## 2026-06-27 — PR-1 Data Truthification（cursor/pr-1-data-truthification，已合并）
 
 ### 实现的功能

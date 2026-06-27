@@ -64,6 +64,21 @@ def _setup_logging(verbose: bool = False) -> None:
     )
 
 
+def _apply_xai_model_override(xai_model: Optional[str]) -> None:
+    """运行时覆盖 lib.config.XAI_MODEL（research.py 通过 `from lib import config` 引用，故实时生效）。
+
+    Python 的 `from lib.config import XAI_MODEL` 是值拷贝；要让它动态生效必须改模块属性。
+    """
+    if not xai_model:
+        return
+    import lib.config as _cfg
+
+    old = getattr(_cfg, "XAI_MODEL", None)
+    if old != xai_model:
+        _cfg.XAI_MODEL = xai_model
+        logger.info("Overriding XAI_MODEL: %s -> %s", old, xai_model)
+
+
 def _load_state() -> PipelineState:
     return PipelineState(ARTICLE_PIPELINE_STATE).load()
 
@@ -223,6 +238,7 @@ def cmd_run_one(args: argparse.Namespace) -> int:
     tweet_id = args.id
     force = getattr(args, "force", False)
     model = getattr(args, "model", None)
+    _apply_xai_model_override(getattr(args, "xai_model", None))
 
     state = _load_state()
     logger.info("Processing tweet_id=%s", tweet_id)
@@ -277,6 +293,7 @@ def cmd_run_batch(args: argparse.Namespace) -> int:
     resume = args.resume
     force = getattr(args, "force", False)
     model = getattr(args, "model", None)
+    _apply_xai_model_override(getattr(args, "xai_model", None))
 
     state = _load_state()
     drafts = find_deep_drafts(OUTPUT_DIR)
@@ -349,6 +366,8 @@ def cmd_run_batch(args: argparse.Namespace) -> int:
 def cmd_research_only(args: argparse.Namespace) -> int:
     """Run only the research step."""
     tweet_id = args.id
+    _apply_xai_model_override(getattr(args, "xai_model", None))
+
     state = _load_state()
 
     draft_path = find_deep_draft_by_id(OUTPUT_DIR, tweet_id)
@@ -429,7 +448,8 @@ Examples:
     p_one = sub.add_parser("run-one", help="Process a single article")
     p_one.add_argument("--id", required=True, help="Tweet ID")
     p_one.add_argument("--force", action="store_true", help="Force re-run all steps")
-    p_one.add_argument("--model", default=None, help="Override rewrite model")
+    p_one.add_argument("--model", default=None, help="Override rewrite model (DeepSeek)")
+    p_one.add_argument("--xai-model", default=None, help="Override xAI research model (临时覆盖 .env XAI_MODEL)")
     p_one.add_argument("--no-research", action="store_true", help="Skip research step")
     p_one.add_argument("--no-write", action="store_true", help="Skip write step")
 
@@ -439,12 +459,14 @@ Examples:
     p_batch.add_argument("--resume", action="store_true", default=True, help="Skip already completed (default: True)")
     p_batch.add_argument("--no-resume", dest="resume", action="store_false", help="Do NOT skip completed articles")
     p_batch.add_argument("--force", action="store_true", help="Force re-run all steps")
-    p_batch.add_argument("--model", default=None, help="Override rewrite model")
+    p_batch.add_argument("--model", default=None, help="Override rewrite model (DeepSeek)")
+    p_batch.add_argument("--xai-model", default=None, help="Override xAI research model (临时覆盖 .env XAI_MODEL)")
 
     # research-only
     p_rsch = sub.add_parser("research-only", help="Run research step only")
     p_rsch.add_argument("--id", required=True, help="Tweet ID")
     p_rsch.add_argument("--force", action="store_true", help="Force re-run")
+    p_rsch.add_argument("--xai-model", default=None, help="Override xAI research model (临时覆盖 .env XAI_MODEL)")
 
     # write-only
     p_write = sub.add_parser("write-only", help="Run rewrite step only")

@@ -45,7 +45,7 @@ This project is indexed by GitNexus as **x-bookmark-reports** (2293 symbols, 382
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **x-bookmark-reports** (3094 symbols, 5381 relationships, 269 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **x-bookmark-reports** (3378 symbols, 6398 relationships, 296 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

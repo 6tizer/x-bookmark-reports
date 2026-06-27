@@ -121,57 +121,31 @@ function ApiKeyField({
   );
 }
 
-const PIPELINE_MODEL_STORAGE = "articlePipelineModel";
-
-const MODEL_OPTIONS: { value: string; label: string }[] = [
-  { value: "", label: "Default (env)" },
-  { value: "deepseek-chat", label: "DeepSeek Chat" },
-  { value: "deepseek-reasoner", label: "DeepSeek Reasoner" },
-  { value: "grok-2-latest", label: "xAI Grok" },
-];
-
 export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApiKey }: LLMSettingsProps) {
   const [deepseekBaseUrl, setDeepseekBaseUrl] = useState("https://api.deepseek.com/v1");
   const [deepseekModel, setDeepseekModel] = useState("deepseek-chat");
   const [xaiBaseUrl, setXaiBaseUrl] = useState("https://api.x.ai/v1");
+  const [xaiModel, setXaiModel] = useState("grok-4.3");
   const [exaBaseUrl, setExaBaseUrl] = useState("https://api.exa.ai");
-  const [pipelineModel, setPipelineModel] = useState("");
 
   useEffect(() => {
     if (settings) {
       setDeepseekBaseUrl(settings.deepseekBaseUrl || "https://api.deepseek.com/v1");
       setDeepseekModel(settings.deepseekModel || "deepseek-chat");
       setXaiBaseUrl(settings.xaiBaseUrl || "https://api.x.ai/v1");
+      setXaiModel(settings.xaiModel || "grok-4.3");
       setExaBaseUrl(settings.exaBaseUrl || "https://api.exa.ai");
     }
   }, [settings]);
-
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem(PIPELINE_MODEL_STORAGE);
-      if (v !== null) setPipelineModel(v);
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   const handleSave = () => {
     onSave({
       deepseekBaseUrl,
       deepseekModel,
       xaiBaseUrl,
+      xaiModel,
       exaBaseUrl,
     });
-  };
-
-  const persistPipelineModel = (v: string) => {
-    setPipelineModel(v);
-    try {
-      if (v) localStorage.setItem(PIPELINE_MODEL_STORAGE, v);
-      else localStorage.removeItem(PIPELINE_MODEL_STORAGE);
-    } catch {
-      /* ignore */
-    }
   };
 
   const handleApiKeySave = (keyName: ApiKeyName, encoded: string) => {
@@ -207,6 +181,10 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
             onChange={(e) => setDeepseekBaseUrl(e.target.value)}
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
+          {/* DeepSeek 双兼容提示：SDK 会自动拼接 /chat/completions */}
+          <p className="text-[10px] text-muted-foreground">
+            DeepSeek SDK 双兼容：用 <code>https://api.deepseek.com</code> 或 <code>.../v1</code> 均可；OpenAI SDK 会自动拼接 <code>/chat/completions</code>
+          </p>
         </div>
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">
@@ -244,6 +222,21 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">
+            Research Model
+            <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
+              持久化 → <code>.env XAI_MODEL</code>，研究步骤（responses.create + web_search + x_search）使用
+            </span>
+          </label>
+          <input
+            type="text"
+            value={xaiModel}
+            onChange={(e) => setXaiModel(e.target.value)}
+            placeholder="grok-4.3"
+            className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm font-mono outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
       </div>
 
       {/* Exa */}
@@ -264,33 +257,6 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
-      </div>
-
-      {/* Pipeline Default Model — 仅前端 UI 临时覆盖，不持久到 .env */}
-      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">
-          UI 临时模型覆盖
-          <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
-            (Pipeline Default Model)
-          </span>
-        </h3>
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
-          仅存浏览器 localStorage，<strong className="text-foreground">不写 .env</strong>。<br />
-          当你从 UI 点 Articles 页的 Run / Batch run 时，作为 <code>--model</code> 临时传给
-          <code> bin/article_pipeline.py</code>，<strong>本次运行内</strong>覆盖 DeepSeek &gt; Model。<br />
-          launchd / 命令行直接跑 backend 脚本时此设置不生效。
-        </p>
-        <select
-          value={pipelineModel}
-          onChange={(e) => persistPipelineModel(e.target.value)}
-          className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
-        >
-          {MODEL_OPTIONS.map((o) => (
-            <option key={o.value || "default"} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div className="flex items-center gap-2">

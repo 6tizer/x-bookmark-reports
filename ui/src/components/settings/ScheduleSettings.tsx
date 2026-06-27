@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * ScheduleSettings — Cron editor, built-in timer, launchd management, last run status
+ * ScheduleSettings — launchd management (presets + load/unload) and last run status
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { Save, Clock, Play, Square, Terminal, RefreshCw, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Clock, Play, Square, Terminal, RefreshCw, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import type { Settings, UpdateSettingsRequest } from "@/types/api";
 
 interface ScheduleSettingsProps {
@@ -19,8 +19,6 @@ interface ScheduleStatus {
   lastRunStatus: string | null;
   lastRunStep: string | null;
   lastRunError: string | null;
-  builtInTimerEnabled: boolean;
-  builtInTimerCron: string | null;
   launchdLoaded: boolean;
   launchdPlistPath: string | null;
 }
@@ -37,32 +35,44 @@ interface LaunchdScheduleInfo {
   };
 }
 
-const presetSchedules = [
-  { label: "Every 6 hours", value: "0 */6 * * *" },
-  { label: "Every 12 hours", value: "0 */12 * * *" },
-  { label: "Daily at midnight", value: "0 0 * * *" },
-  { label: "Daily at 8am", value: "0 8 * * *" },
-  { label: "Daily at 4pm", value: "0 16 * * *" },
-  { label: "Weekly (Sunday)", value: "0 0 * * 0" },
-];
+/** launchd 调度预设 — 与后端 PUT /api/schedule/launchd 一致 */
+const launchdPresets = [
+  { value: "3h", label: "Every 3 hours", intervals: [{ hour: 0, minute: 0 }, { hour: 3, minute: 0 }, { hour: 6, minute: 0 }, { hour: 9, minute: 0 }, { hour: 12, minute: 0 }, { hour: 15, minute: 0 }, { hour: 18, minute: 0 }, { hour: 21, minute: 0 }] },
+  { value: "6h", label: "Every 6 hours", intervals: [{ hour: 0, minute: 0 }, { hour: 6, minute: 0 }, { hour: 12, minute: 0 }, { hour: 18, minute: 0 }] },
+  { value: "12h", label: "Every 12 hours", intervals: [{ hour: 0, minute: 0 }, { hour: 12, minute: 0 }] },
+  { value: "daily-0", label: "Daily at midnight", intervals: [{ hour: 0, minute: 0 }] },
+  { value: "daily-8", label: "Daily at 8am", intervals: [{ hour: 8, minute: 0 }] },
+  { value: "daily-16", label: "Daily at 4pm", intervals: [{ hour: 16, minute: 0 }] },
+] as const;
+
+/** 判断某预设是否对应当前 plist 的 intervals（用于高亮） */
+function isPresetActive(info: LaunchdScheduleInfo | null, preset: typeof launchdPresets[number]): boolean {
+  if (!info || info.schedule.type !== "calendar" || !info.schedule.intervals) return false;
+  const cur = info.schedule.intervals.map((i) => `${i.hour ?? 0}:${i.minute ?? 0}`).sort().join("|");
+  const want = preset.intervals.map((i) => `${i.hour}:${i.minute}`).sort().join("|");
+  return cur === want;
+}
 
 export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSettingsProps) {
-  const [cron, setCron] = useState("0 */6 * * *");
-  const [isValid, setIsValid] = useState(true);
+  // 保留 settings/isSaving/onSave props（Commit 4 才会清理 GeneralSettings），本 commit 不使用
+  void settings;
+  void isSaving;
+  void onSave;
+
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
-  const [togglingTimer, setTogglingTimer] = useState(false);
-  const [timerEnabled, setTimerEnabled] = useState(false);
   const [launchdLoading, setLaunchdLoading] = useState(false);
   const [launchdSchedule, setLaunchdSchedule] = useState<LaunchdScheduleInfo | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // 调度预设切换状态：当前正在应用的 preset value（null = 空闲）
+  const [applyingPreset, setApplyingPreset] = useState<string | null>(null);
+  // 预设切换后展示的提示消息（成功 / 失败）
+  const [presetMessage, setPresetMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (settings?.cronExpression) {
-      setCron(settings.cronExpression);
-    }
     fetchStatus();
-  }, [settings?.cronExpression]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 拉取 launchd plist 调度配置（GET /api/schedule/launchd） */
   const fetchLaunchdSchedule = useCallback(async () => {
@@ -87,10 +97,6 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
       const data = await statusRes.json();
       if (data.success && data.data) {
         setScheduleStatus(data.data);
-        setTimerEnabled(data.data.builtInTimerEnabled);
-        if (data.data.builtInTimerCron) {
-          setCron(data.data.builtInTimerCron);
-        }
       }
     } catch {
       /* ignore */
@@ -98,43 +104,6 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
       setLoadingStatus(false);
     }
   }, [fetchLaunchdSchedule]);
-
-  const validateCron = (value: string): boolean => {
-    const parts = value.trim().split(/\s+/);
-    return parts.length === 5;
-  };
-
-  const handleChange = (value: string) => {
-    setCron(value);
-    setIsValid(validateCron(value));
-  };
-
-  const handleSaveCron = () => {
-    if (isValid) {
-      onSave({ cronExpression: cron });
-    }
-  };
-
-  const handleToggleTimer = async () => {
-    setTogglingTimer(true);
-    try {
-      const res = await fetch("/api/schedule/toggle", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: !timerEnabled, cronExpression: cron }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTimerEnabled(data.data.enabled);
-        setMessage(timerEnabled ? "Timer disabled" : `Timer enabled: ${cron}`);
-      }
-    } catch {
-      setMessage("Failed to toggle timer");
-    } finally {
-      setTogglingTimer(false);
-      setTimeout(() => setMessage(null), 3000);
-    }
-  };
 
   const handleLaunchd = async (action: "load" | "unload") => {
     setLaunchdLoading(true);
@@ -156,6 +125,34 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
     } finally {
       setLaunchdLoading(false);
       setTimeout(() => setMessage(null), 4000);
+    }
+  };
+
+  /** 应用调度预设（PUT /api/schedule/launchd），成功后刷新 schedule 显示 */
+  const handleApplyPreset = async (preset: string) => {
+    setApplyingPreset(preset);
+    setPresetMessage(null);
+    try {
+      const res = await fetch("/api/schedule/launchd", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setLaunchdSchedule(data.data);
+        const label = launchdPresets.find((p) => p.value === preset)?.label ?? preset;
+        setPresetMessage(`调度已切换：${label}`);
+        // 同步刷新 status（loaded 状态可能因 reload 变化）
+        void fetchStatus();
+      } else {
+        setPresetMessage(`切换失败：${data.error?.message ?? "未知错误"}`);
+      }
+    } catch (err) {
+      setPresetMessage(`切换异常：${err instanceof Error ? err.message : "unknown"}`);
+    } finally {
+      setApplyingPreset(null);
+      setTimeout(() => setPresetMessage(null), 4000);
     }
   };
 
@@ -243,121 +240,59 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
         )}
       </div>
 
-      {/* Built-in Timer */}
-      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Built-in Timer</h3>
-            <p className="text-[11px] text-muted-foreground">
-              Runs the full pipeline (sync → articles → Notion) when the dashboard is open
-            </p>
-          </div>
-          <button
-            onClick={handleToggleTimer}
-            disabled={togglingTimer}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              timerEnabled
-                ? "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-950 dark:text-red-400"
-                : "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-950 dark:text-green-400"
-            }`}
-          >
-            {togglingTimer ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : timerEnabled ? (
-              <Square size={12} />
-            ) : (
-              <Play size={12} />
-            )}
-            {timerEnabled ? "Disable" : "Enable"}
-          </button>
-        </div>
-
-        {/* Presets */}
-        <div className="flex flex-wrap gap-2">
-          {presetSchedules.map((preset) => (
-            <button
-              key={preset.value}
-              onClick={() => handleChange(preset.value)}
-              className={`rounded-md border border-border px-2.5 py-1 text-[11px] transition-colors ${
-                cron === preset.value
-                  ? "bg-twitter-blue text-white border-twitter-blue"
-                  : "hover:bg-muted"
-              }`}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Cron input */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Cron Expression</label>
-          <input
-            type="text"
-            value={cron}
-            onChange={(e) => handleChange(e.target.value)}
-            className={`w-full rounded-md border px-3 py-2 text-sm font-mono outline-none focus:ring-1 focus:ring-ring ${
-              isValid
-                ? "border-border bg-muted"
-                : "border-red-300 bg-red-50 dark:bg-red-950/30"
-            }`}
-            placeholder="0 */6 * * *"
-          />
-          {!isValid && (
-            <p className="text-[11px] text-red-500">Invalid cron expression. Must have 5 fields.</p>
-          )}
-        </div>
-
-        {/* Visual breakdown */}
-        {isValid && (
-          <div className="rounded-md bg-muted p-3">
-            <div className="grid grid-cols-5 gap-2 text-center">
-              {cron.split(/\s+/).map((part, i) => (
-                <div key={i}>
-                  <p className="text-[10px] text-muted-foreground uppercase">
-                    {["min", "hour", "day", "month", "weekday"][i]}
-                  </p>
-                  <p className="text-sm font-mono font-medium text-foreground">{part}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSaveCron}
-            disabled={isSaving || !isValid}
-            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            <Save size={14} />
-            {isSaving ? "Saving..." : "Save Schedule"}
-          </button>
-        </div>
-      </div>
-
       {/* launchd Management */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div className="flex items-center gap-2">
           <Terminal size={16} className="text-twitter-blue" />
-          <h3 className="text-sm font-semibold text-foreground">macOS launchd</h3>
+          <h3 className="text-sm font-semibold text-foreground">macOS launchd 调度</h3>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Manage the system-level scheduled task. This runs even when the dashboard is closed.
+          系统级定时任务，dashboard 关闭时也运行。当前 plist 中配置的触发时间见下表。
         </p>
 
+        {/* 当前调度（只读） */}
         {(launchdSchedule?.plistPath || scheduleStatus?.launchdPlistPath) && (
           <div className="text-[11px] text-muted-foreground font-mono">
             Plist: {launchdSchedule?.plistPath ?? scheduleStatus?.launchdPlistPath}
           </div>
         )}
-
-        {/* 当前 plist 中的调度配置（只读，编辑留 PR-3） */}
         <div className="text-[11px]">
           <span className="text-muted-foreground">当前调度：</span>
           <span className="text-foreground">{formatLaunchdSchedule(launchdSchedule)}</span>
         </div>
 
+        {/* 6 个预设按钮 — 调用 PUT /api/schedule/launchd 切换调度 */}
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">切换调度</p>
+          <div className="flex flex-wrap gap-2">
+            {launchdPresets.map((preset) => {
+              const isActive = isPresetActive(launchdSchedule, preset);
+              const isApplyingThis = applyingPreset === preset.value;
+              return (
+                <button
+                  key={preset.value}
+                  type="button"
+                  disabled={applyingPreset !== null}
+                  onClick={() => handleApplyPreset(preset.value)}
+                  title={`切换到 ${preset.label}`}
+                  className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] transition-colors disabled:opacity-50 ${
+                    isActive
+                      ? "bg-twitter-blue text-white border-twitter-blue"
+                      : "border-border hover:bg-muted"
+                  }`}
+                >
+                  {isApplyingThis && <Loader2 size={10} className="animate-spin" />}
+                  {isApplyingThis ? "应用中…" : preset.label}
+                </button>
+              );
+            })}
+          </div>
+          {presetMessage && (
+            <p className="text-[11px] text-muted-foreground mt-1">{presetMessage}</p>
+          )}
+        </div>
+
+        {/* Status + Load/Unload */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-muted-foreground">Status:</span>
@@ -365,7 +300,6 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
               {scheduleStatus?.launchdLoaded ? "Loaded" : "Not loaded"}
             </span>
           </div>
-
           <div className="flex gap-2">
             <button
               onClick={() => handleLaunchd("load")}
@@ -390,10 +324,10 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
         <div className="rounded-md bg-muted p-3">
           <p className="text-[10px] text-muted-foreground mb-2 font-medium">Pipeline steps executed (auto_run.sh):</p>
           <ol className="text-[11px] text-muted-foreground space-y-1 font-mono">
-            <li>1. sync_bookmarks.sh                       <span className="text-muted-foreground/70">// 拉取新的 Twitter 书签</span></li>
-            <li>2. coordinator.py --deep-batch             <span className="text-muted-foreground/70">// 生成深度报告</span></li>
-            <li>3. article_pipeline.py run-batch --resume  <span className="text-muted-foreground/70">// 报告改写为成品文章</span></li>
-            <li>4. upload_to_notion.py --mode finished --live <span className="text-muted-foreground/70">// 上传到 Notion</span></li>
+            <li>1. sync_bookmarks.sh // 拉取新的 Twitter 书签</li>
+            <li>2. coordinator.py --deep-batch // 生成深度报告</li>
+            <li>3. article_pipeline.py run-batch --resume // 报告改写为成品文章</li>
+            <li>4. upload_to_notion.py --mode finished --live // 上传到 Notion</li>
           </ol>
         </div>
       </div>

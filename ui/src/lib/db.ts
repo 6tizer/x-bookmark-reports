@@ -16,7 +16,6 @@ import type {
   SyncStatus,
   Report,
   ReportType,
-  ReportVersion,
   Article,
   ArticleStatus,
   ArticleVersion,
@@ -634,116 +633,6 @@ export function getReportById(id: string): Report | null {
   return row ? rowToReport(row) : null;
 }
 
-export function updateReportContent(
-  id: string,
-  content: string,
-  saveMode: "overwrite" | "version"
-): { id: string; version: number; updatedAt: string } | null {
-  const db = getDb();
-  const existing = getReportById(id);
-  if (!existing) return null;
-
-  const wordCount = content.trim().split(/\s+/).length;
-  const updatedAt = nowIso();
-
-  if (saveMode === "version") {
-    db.prepare(
-      `INSERT INTO report_versions (id, report_id, content, word_count, created_at)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(generateId("ver"), id, existing.content, existing.wordCount, updatedAt);
-  }
-
-  db.prepare(
-    `UPDATE reports SET content = ?, word_count = ?, updated_at = ? WHERE id = ?`
-  ).run(content, wordCount, updatedAt, id);
-
-  const versionCount = Number(
-    (
-      db
-        .prepare("SELECT COUNT(*) as c FROM report_versions WHERE report_id = ?")
-        .get(id) as { c: number }
-    ).c
-  );
-
-  return { id, version: versionCount + 1, updatedAt };
-}
-
-export function listReports(
-  page: number,
-  limit: number,
-  bookmarkId?: string,
-  _author?: string,
-  type?: ReportType,
-  search?: string
-): PaginatedResponse<Report> {
-  const db = getDb();
-  const offset = (page - 1) * limit;
-  const conditions: string[] = [];
-  const params: Array<string> = [];
-
-  if (bookmarkId) {
-    conditions.push("bookmark_id = ?");
-    params.push(bookmarkId);
-  }
-  if (type) {
-    conditions.push("type = ?");
-    params.push(type);
-  }
-  if (search) {
-    conditions.push("(title LIKE ? OR content LIKE ?)");
-    const like = `%${search}%`;
-    params.push(like, like);
-  }
-
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const total = Number(
-    (db.prepare(`SELECT COUNT(*) as c FROM reports ${where}`).get(...params) as { c: number }).c
-  );
-
-  const rows = db
-    .prepare(`SELECT * FROM reports ${where} ORDER BY generated_at DESC LIMIT ? OFFSET ?`)
-    .all(...params, limit, offset) as Array<Record<string, unknown>>;
-
-  return {
-    items: rows.map(rowToReport),
-    total,
-    page,
-    limit,
-    hasMore: page * limit < total,
-  };
-}
-
-export function getReportVersions(reportId: string): ReportVersion[] {
-  const db = getDb();
-  const rows = db
-    .prepare("SELECT * FROM report_versions WHERE report_id = ? ORDER BY created_at DESC")
-    .all(reportId) as Array<Record<string, unknown>>;
-
-  return rows.map((r) => ({
-    id: String(r.id),
-    reportId: String(r.report_id),
-    content: String(r.content),
-    wordCount: Number(r.word_count),
-    createdAt: String(r.created_at),
-    createdBy: r.created_by ? String(r.created_by) : undefined,
-  }));
-}
-
-export function getReportsForBookmark(
-  bookmarkId: string
-): { basic?: Report; enhanced?: Report } {
-  const db = getDb();
-  const rows = db
-    .prepare("SELECT * FROM reports WHERE bookmark_id = ?")
-    .all(bookmarkId) as Array<Record<string, unknown>>;
-  const basic = rows.find((r) => r.type === "basic");
-  const enhanced = rows.find((r) => r.type === "enhanced");
-  return {
-    basic: basic ? rowToReport(basic) : undefined,
-    enhanced: enhanced ? rowToReport(enhanced) : undefined,
-  };
-}
-
 function rowToReport(row: Record<string, unknown>): Report {
   return {
     id: String(row.id),
@@ -1083,6 +972,7 @@ export function getSettings(): Settings {
       deepseekModel: "deepseek-chat",
       xaiApiKey: "****",
       xaiBaseUrl: "https://api.x.ai/v1",
+      xaiModel: "grok-4.3",
       exaApiKey: "****",
       exaBaseUrl: "https://api.exa.ai",
       bookmarksPath: "",
@@ -1104,6 +994,7 @@ export function getSettings(): Settings {
     deepseekModel: String(row.deepseek_model ?? "deepseek-chat"),
     xaiApiKey: maskApiKey(row.xai_api_key ? String(row.xai_api_key) : null),
     xaiBaseUrl: String(row.xai_base_url ?? "https://api.x.ai/v1"),
+    xaiModel: String(row.xai_model ?? "grok-4.3"),
     exaApiKey: maskApiKey(row.exa_api_key ? String(row.exa_api_key) : null),
     exaBaseUrl: String(row.exa_base_url ?? "https://api.exa.ai"),
     bookmarksPath: row.bookmarks_path ? String(row.bookmarks_path) : "",

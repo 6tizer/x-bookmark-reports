@@ -168,7 +168,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
   const [dataPath, setDataPath] = useState("");
   const [bookmarksPath, setBookmarksPath] = useState("");
   const [articlesDir, setArticlesDir] = useState("");
-  const [autoSync, setAutoSync] = useState(false);
+  const [notionDbId, setNotionDbId] = useState("");
   const [notionUploadLive, setNotionUploadLive] = useState(false);
 
   useEffect(() => {
@@ -177,7 +177,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
       setDataPath(settings.dataPath || "./data");
       setBookmarksPath(settings.bookmarksPath || "");
       setArticlesDir(settings.articlesDir || "");
-      setAutoSync(settings.autoSync);
+      setNotionDbId(settings.notionDbId || "");
       setNotionUploadLive(settings.notionUploadLive);
     }
   }, [settings]);
@@ -190,7 +190,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
         dataPath,
         bookmarksPath,
         articlesDir,
-        autoSync,
+        notionDbId,
         notionUploadLive,
       }),
       new Promise((r) => setTimeout(r, 350)),
@@ -235,8 +235,8 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
           <label className="text-xs font-medium text-muted-foreground">Notion Database ID</label>
           <input
             type="text"
-            value={settings?.notionDbId || ""}
-            onChange={(e) => onSave({ notionDbId: e.target.value })}
+            value={notionDbId}
+            onChange={(e) => setNotionDbId(e.target.value)}
             placeholder="notion-database-id"
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm font-mono outline-none focus:ring-1 focus:ring-ring"
           />
@@ -253,7 +253,10 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
 
       {/* Paths Section */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Paths</h3>
+        <div className="flex items-baseline justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Paths</h3>
+          <span className="text-[10px] text-muted-foreground/70">Use absolute path</span>
+        </div>
 
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Bookmarks Path</label>
@@ -261,7 +264,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
             type="text"
             value={bookmarksPath}
             onChange={(e) => setBookmarksPath(e.target.value)}
-            placeholder="~/Library/Application Support/..."
+            placeholder="/Users/<user>/Library/Application Support/.../Bookmarks"
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
@@ -272,7 +275,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
             type="text"
             value={articlesDir}
             onChange={(e) => setArticlesDir(e.target.value)}
-            placeholder="output/article-final"
+            placeholder="/Users/<user>/work/.../x-bookmark-reports/output/article-final"
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
@@ -283,7 +286,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
             type="text"
             value={dataPath}
             onChange={(e) => setDataPath(e.target.value)}
-            placeholder="./data"
+            placeholder="/Users/<user>/work/.../x-bookmark-reports/data"
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
@@ -303,14 +306,6 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
-
-        {/* Auto Sync */}
-        <ToggleRow
-          label="Auto Sync"
-          description="Automatically sync bookmarks on schedule"
-          checked={autoSync}
-          onChange={setAutoSync}
-        />
       </div>
 
       <div className="flex items-center gap-2">

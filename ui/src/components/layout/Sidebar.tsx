@@ -11,7 +11,6 @@ import {
   LayoutDashboard,
   Bookmark,
   RefreshCw,
-  // FileText,
   Newspaper,
   Settings,
   ChevronLeft,
@@ -42,7 +41,6 @@ const navItems: NavItem[] = [
     badgeFrom: "bookmarks",
   },
   { href: "/sync", label: "Sync", icon: <RefreshCw size={18} /> },
-  // { href: "/reports", label: "Reports", icon: <FileText size={18} /> },
   {
     href: "/articles",
     label: "Articles",

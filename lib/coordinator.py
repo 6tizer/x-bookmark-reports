@@ -1068,6 +1068,9 @@ class BookmarkCoordinator:
             self.include_replies = prev_replies
 
         elapsed = time.time() - start_time
+        # PR-3：无论本次是否有新增 deep report，都更新 last_run（B-SYNC-DEEP-TIMESTAMP-MISLEADING）
+        state["last_run"] = datetime.now(timezone.utc).isoformat()
+        self._save_deep_state_file(state, resume_path)
         logger.info("Deep batch complete in %.1fs", elapsed)
         logger.info("Stats: %s", self._stats)
         return {

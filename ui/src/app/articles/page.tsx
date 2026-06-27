@@ -31,9 +31,6 @@ function statusLabel(s: ArticleStatus): string {
     written: "Written",
     uploaded: "Uploaded",
     failed: "Failed",
-    editing: "Editing",
-    reviewing: "Reviewing",
-    published: "Published",
   };
   return map[s] ?? s.replace(/_/g, " ");
 }
@@ -117,9 +114,6 @@ export default function ArticlesPage() {
     written: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
     uploaded: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
     failed: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
-    editing: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
-    reviewing: "bg-yellow-50 text-yellow-600 dark:bg-yellow-950 dark:text-yellow-400",
-    published: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400",
   };
 
   const executeRun = async (article: Article) => {

@@ -8,13 +8,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from lib import config
 from lib.config import (
     ARTICLE_RESEARCH_DIR,
     EXA_API_KEY,
     EXA_BASE_URL,
     XAI_API_KEY,
     XAI_BASE_URL,
-    XAI_MODEL,
 )
 
 logger = logging.getLogger(__name__)
@@ -214,12 +214,12 @@ class Researcher:
         xai_sources: List[str] = []
         try:
             client = self._get_xai_client()
-            logger.info("x.ai research: querying '%s' (model=%s)", topic[:60], XAI_MODEL)
+            logger.info("x.ai research: querying '%s' (model=%s)", topic[:60], config.XAI_MODEL)
 
             # Try Responses API first (supports web_search + x_search)
             try:
                 response = client.responses.create(
-                    model=XAI_MODEL,
+                    model=config.XAI_MODEL,
                     input=[
                         {"role": "system", "content": self._system_prompt},
                         {"role": "user", "content": query},
@@ -238,7 +238,7 @@ class Researcher:
                     resp_err,
                 )
                 resp = client.chat.completions.create(
-                    model=XAI_MODEL,
+                    model=config.XAI_MODEL,
                     messages=[
                         {"role": "system", "content": self._system_prompt},
                         {"role": "user", "content": query},

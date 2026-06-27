@@ -13,21 +13,19 @@ import {
   LayoutDashboard,
   Bookmark,
   RefreshCw,
-  FileText,
   Newspaper,
   Settings,
   Search,
 } from "lucide-react";
 import { useBookmarkStore } from "@/store/useBookmarkStore";
-import { useReportStore } from "@/store/useReportStore";
-import { mockBookmarks, mockReports, mockArticles } from "@/db/mock";
+import { mockBookmarks, mockArticles } from "@/db/mock";
 import { cn } from "@/lib/utils";
 
+// /reports 路由已删除（PR-3 死代码清理），导航条不再展示 Reports
 const pageNavItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Bookmarks", href: "/bookmarks", icon: Bookmark },
   { label: "Sync", href: "/sync", icon: RefreshCw },
-  { label: "Reports", href: "/reports", icon: FileText },
   { label: "Articles", href: "/articles", icon: Newspaper },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
@@ -37,15 +35,11 @@ export function CommandPalette() {
   const [search, setSearch] = useState("");
   const router = useRouter();
   const bookmarkStore = useBookmarkStore();
-  const reportStore = useReportStore();
 
   // Load mock data into stores if empty
   useEffect(() => {
     if (bookmarkStore.bookmarks.length === 0) {
       bookmarkStore.setBookmarks(mockBookmarks);
-    }
-    if (reportStore.reports.length === 0) {
-      reportStore.setReports(mockReports);
     }
   }, []);
 
@@ -74,14 +68,6 @@ export function CommandPalette() {
           b.author.name.toLowerCase().includes(q) ||
           b.tags.some((t) => t.toLowerCase().includes(q))
       )
-      .slice(0, 5);
-  }, [search]);
-
-  const filteredReports = useMemo(() => {
-    if (!search.trim()) return mockReports.slice(0, 5);
-    const q = search.toLowerCase();
-    return mockReports
-      .filter((r) => r.title.toLowerCase().includes(q))
       .slice(0, 5);
   }, [search]);
 
@@ -116,7 +102,7 @@ export function CommandPalette() {
             <Command.Input
               value={search}
               onValueChange={setSearch}
-              placeholder="Search bookmarks, reports, articles, or navigate..."
+              placeholder="Search bookmarks, articles, or navigate..."
               className="flex-1 h-11 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               autoFocus
             />
@@ -161,25 +147,6 @@ export function CommandPalette() {
                     <Bookmark size={14} className="shrink-0 text-twitter-blue" />
                     <span className="flex-1 truncate">{b.text.slice(0, 60)}...</span>
                     <span className="text-xs text-muted-foreground">{b.author.name}</span>
-                  </Command.Item>
-                ))}
-              </Command.Group>
-            )}
-
-            {/* Reports */}
-            {filteredReports.length > 0 && (
-              <Command.Group heading="Reports">
-                {filteredReports.map((r) => (
-                  <Command.Item
-                    key={r.id}
-                    onSelect={() => handleSelect(`/reports/${r.id}`)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer",
-                      "data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
-                    )}
-                  >
-                    <FileText size={14} className="shrink-0 text-muted-foreground" />
-                    <span className="truncate">{r.title}</span>
                   </Command.Item>
                 ))}
               </Command.Group>

@@ -338,54 +338,22 @@ export interface Report {
   urlSummary: UrlSummary[];
 }
 
-export interface ReportListQuery extends PaginationQuery {
-  bookmarkId?: string;
-  author?: string;
-  type?: ReportType;
-  search?: string;
-}
-
-export interface ReportVersion {
-  id: string;
-  reportId: string;
-  content: string;
-  wordCount: number;
-  createdAt: string;
-  createdBy?: string;
-}
-
-export interface UpdateReportRequest {
-  content: string;
-  saveMode: "overwrite" | "version";
-}
-
-export interface DiffResult {
-  additions: number;
-  deletions: number;
-  hunks: Array<{
-    oldStart: number;
-    oldLines: number;
-    newStart: number;
-    newLines: number;
-    lines: string[];
-  }>;
-}
+// 以下类型已随 /reports 路由删除（PR-3 死代码清理）一并移除：
+//   ReportListQuery / ReportVersion / UpdateReportRequest / DiffResult
+// 如需恢复，请回滚此 commit。
 
 // ─────────────────────────────────────────────
 // Articles
 // ─────────────────────────────────────────────
 
-/** Article pipeline statuses + DB/editor legacy (editing/reviewing/published) */
+/** Article pipeline 状态（fs 数据层支持的 6 种；editing/reviewing/published 在 fs-only 模式下不产生） */
 export type ArticleStatus =
   | "draft"
   | "metadata_done"
   | "researched"
   | "written"
   | "uploaded"
-  | "failed"
-  | "editing"
-  | "reviewing"
-  | "published";
+  | "failed";
 export type ExportFormat = "markdown" | "html" | "wechat";
 
 export interface Article {
@@ -492,6 +460,7 @@ export interface Settings {
   deepseekModel: string;
   xaiApiKey: string;
   xaiBaseUrl: string;
+  xaiModel: string;
   exaApiKey: string;
   exaBaseUrl: string;
   // Paths
@@ -500,8 +469,10 @@ export interface Settings {
   dataPath: string;
   proxy: string | null;
   // Toggles
+  /** @deprecated Auto Sync 已删除（PR-3），保留字段供旧 UI 兼容，后端恒返回 false */
   autoSync: boolean;
   notionUploadLive: boolean;
+  /** @deprecated cron env 已删除（PR-3），保留字段供旧 UI 兼容，后端恒返回 null */
   cronExpression: string | null;
 }
 
@@ -510,13 +481,16 @@ export interface UpdateSettingsRequest {
   dataPath?: string;
   articlesDir?: string;
   bookmarksPath?: string;
+  /** @deprecated Auto Sync 已删除（PR-3），后端忽略该字段 */
   autoSync?: boolean;
   notionUploadLive?: boolean;
+  /** @deprecated cron env 已删除（PR-3），后端忽略该字段 */
   cronExpression?: string | null;
   notionDbId?: string;
   deepseekBaseUrl?: string;
   deepseekModel?: string;
   xaiBaseUrl?: string;
+  xaiModel?: string;
   exaBaseUrl?: string;
 }
 
