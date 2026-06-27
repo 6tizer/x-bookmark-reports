@@ -12,7 +12,7 @@ import { useBookmarks } from "@/hooks/useBookmarks";
 import { useBookmarkStore } from "@/store/useBookmarkStore";
 import { startRead } from "@/lib/api";
 import { LayoutGrid, Table2, Search, RefreshCw } from "lucide-react";
-import type { BookmarkStatus } from "@/types/api";
+import type { BookmarkLifecycle } from "@/types/api";
 
 export default function BookmarksPage() {
   const {
@@ -55,12 +55,13 @@ export default function BookmarksPage() {
     setFilters({ ...filters, search: searchValue || undefined });
   };
 
-  const statusOptions: { label: string; value: BookmarkStatus | undefined }[] = [
+  // Stage 3: lifecycle 过滤器替代 V1 status 过滤
+  const lifecycleOptions: { label: string; value: BookmarkLifecycle | undefined }[] = [
     { label: "All", value: undefined },
-    { label: "Synced", value: "synced" },
-    { label: "Read", value: "read" },
-    { label: "Reported", value: "reported" },
-    { label: "Articled", value: "articled" },
+    { label: "待生成报告", value: "pending" },
+    { label: "已生成报告", value: "drafted" },
+    { label: "已成文", value: "written" },
+    { label: "已上传 Notion", value: "uploaded" },
   ];
 
   return (
@@ -94,18 +95,18 @@ export default function BookmarksPage() {
               </button>
             </div>
 
-            {/* Status filter */}
+            {/* Lifecycle filter（替代 V1 status） */}
             <select
-              value={filters.status || ""}
+              value={filters.lifecycle || ""}
               onChange={(e) =>
                 setFilters({
                   ...filters,
-                  status: (e.target.value as BookmarkStatus) || undefined,
+                  lifecycle: (e.target.value as BookmarkLifecycle) || undefined,
                 })
               }
               className="h-8 rounded-md border border-border bg-muted px-2 text-sm outline-none"
             >
-              {statusOptions.map((opt) => (
+              {lifecycleOptions.map((opt) => (
                 <option key={opt.label} value={opt.value || ""}>
                   {opt.label}
                 </option>

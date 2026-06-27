@@ -163,6 +163,13 @@ export interface Bookmark {
   stats: TweetStats;
   reportPath?: string;
   enhancedReportPath?: string;
+  // V2 可选扩展（API 返回 BookmarkV2 时填，V1 mock/DB 模式可留空）
+  tweetId?: string;
+  lifecycle?: BookmarkLifecycle;
+  hasDeepDraft?: boolean;
+  hasArticle?: boolean;
+  inNotion?: boolean;
+  articleTags?: string[];
 }
 
 export interface ReplyThread {
@@ -195,6 +202,11 @@ export interface BookmarkDetail extends Bookmark {
     basic?: ReportSummary;
     enhanced?: ReportSummary;
   };
+  // V2 扩展（详情专用，fs-data 路径下填充）
+  deepDraftPath?: string;
+  articlePath?: string;
+  notionPageUrl?: string;
+  deepDraftBody?: string;
 }
 
 export interface BookmarkListQuery extends PaginationQuery {
@@ -203,6 +215,7 @@ export interface BookmarkListQuery extends PaginationQuery {
   tag?: string;
   urlCategory?: UrlCategory;
   author?: string;
+  lifecycle?: BookmarkLifecycle;   // Stage 3: V2 lifecycle 过滤（仅 fs 分支生效）
 }
 
 export interface BatchReadRequest {
