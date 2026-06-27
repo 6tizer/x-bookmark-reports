@@ -68,6 +68,56 @@ log() {
     echo "[$ts] $*" | tee -a "$LOG_FILE"
 }
 
+# ========== 历史记录（PR-3 Commit 5）==========
+# 每次运行结束追加一行 JSON 到 output/auto_run_history.jsonl
+# 旋转保留最近 100 条
+append_history() {
+    # append_history STATUS STEP SYNC_NEW PROCESS_NEW ARTICLE_NEW UPLOAD_NEW ERROR_MSG
+    local status="$1"
+    local step="$2"
+    local sync_new="${3:-0}"
+    local process_new="${4:-0}"
+    local article_new="${5:-0}"
+    local upload_new="${6:-0}"
+    local error_msg="${7:-}"
+    local end_ts
+    end_ts="$(date +%s)"
+    local duration=$((end_ts - START_TS))
+    local history_file="$SCRIPT_DIR/output/auto_run_history.jsonl"
+
+    mkdir -p "$(dirname "$history_file")"
+
+    local record
+    record=$("$PYTHON3" - "$status" "$step" "$sync_new" "$process_new" "$article_new" "$upload_new" "$error_msg" "$duration" <<'PYEOF'
+import sys, json, datetime
+status, step, sync_new, process_new, article_new, upload_new, error_msg, duration = sys.argv[1:]
+record = {
+    "last_run": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "status": status,
+    "step": step,
+    "sync_new_count": int(sync_new),
+    "process_new_count": int(process_new),
+    "article_new_count": int(article_new),
+    "upload_new_count": int(upload_new),
+    "error": error_msg if error_msg else None,
+    "duration_sec": int(duration),
+}
+print(json.dumps(record, ensure_ascii=False))
+PYEOF
+)
+
+    # append（写入失败不影响主流程）
+    if printf '%s\n' "$record" >> "$history_file" 2>/dev/null; then
+        # 旋转保留最近 100 行
+        local total
+        total=$(wc -l < "$history_file" 2>/dev/null || echo 0)
+        if [ "$total" -gt 100 ]; then
+            # macOS sed 用 -i ''
+            sed -i '' "100,\$d" "$history_file" 2>/dev/null || true
+        fi
+    fi
+}
+
 # ========== 主流程 ==========
 
 # 确保日志目录存在
@@ -79,6 +129,8 @@ if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE")" -gt $((5 * 1024 * 1024)) ]; 
 fi
 
 log "===== 书签自动化流水线启动 ====="
+# 记录开始时间用于历史 duration（PR-3 Commit 5）
+START_TS=$(date +%s)
 write_state "running" "init" 0 0 0 0 ""
 
 # ========== Step 0: 代理检测 ==========
@@ -100,6 +152,7 @@ if [ "$FORCE_MODE" = false ]; then
         ERR="代理不可达（$PROXY_URL），请确认 Clash Verge 已启动后手动执行"
         log "ERROR: $ERR"
         write_state "failed" "proxy_check" 0 0 0 0 "$ERR"
+        append_history "failed" "proxy_check" 0 0 0 0 "$ERR"
         exit 1
     fi
     log "Step 0: 代理正常"
@@ -120,6 +173,7 @@ if ! bash "$PROJECT_ROOT/sync_bookmarks.sh" >> "$LOG_FILE" 2>&1; then
     ERR="sync_bookmarks.sh 执行失败，查看日志: $LOG_FILE"
     log "ERROR: $ERR"
     write_state "failed" "sync" 0 0 0 0 "$ERR"
+    append_history "failed" "sync" "$SYNC_NEW" 0 0 0 "$ERR"
     exit 1
 fi
 
@@ -158,6 +212,7 @@ if ! "$PYTHON3" bin/coordinator.py --deep-batch >> "$LOG_FILE" 2>&1; then
     ERR="coordinator.py --deep-batch 执行失败，查看日志: $LOG_FILE"
     log "ERROR: $ERR"
     write_state "failed" "process" "$SYNC_NEW" 0 0 0 "$ERR"
+    append_history "failed" "process" "$SYNC_NEW" 0 0 0 "$ERR"
     exit 1
 fi
 
@@ -198,6 +253,7 @@ if ! "$VENV_PYTHON3" bin/article_pipeline.py run-batch >> "$LOG_FILE" 2>&1; then
     ERR="article_pipeline.py run-batch 执行失败，查看日志: $LOG_FILE"
     log "ERROR: $ERR"
     write_state "failed" "article" "$SYNC_NEW" "$PROCESS_NEW" 0 0 "$ERR"
+    append_history "failed" "article" "$SYNC_NEW" "$PROCESS_NEW" 0 0 "$ERR"
     exit 1
 fi
 
@@ -239,11 +295,13 @@ if [ "$UPLOAD_EXIT" -ne 0 ] && [ "$UPLOAD_NEW" -eq 0 ]; then
     ERR="upload_to_notion.py 全部失败（errors: $UPLOAD_ERRORS），查看日志: $LOG_FILE"
     log "ERROR: $ERR"
     write_state "failed" "upload" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" 0 "$ERR"
+    append_history "failed" "upload" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" 0 "$ERR"
     exit 1
 elif [ "$UPLOAD_EXIT" -ne 0 ] && [ "$UPLOAD_NEW" -gt 0 ]; then
     WARN="Notion 上传部分完成（新增 $UPLOAD_NEW 篇，告警 $UPLOAD_ERRORS 篇；partial 文件已写入 state 不会重试）"
     log "WARN: $WARN"
     write_state "partial" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" "$WARN"
+    append_history "partial" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" "$WARN"
     log "===== 流水线完成（同步 +$SYNC_NEW 条，报告 +$PROCESS_NEW 篇，成品 +$ARTICLE_NEW 篇，Notion +$UPLOAD_NEW 篇，失败 $UPLOAD_ERRORS 篇）====="
     exit 0
 fi
@@ -252,4 +310,5 @@ log "Step 4: Notion 上传完成，本次新增 $UPLOAD_NEW 篇"
 
 # ========== 写入成功状态 ==========
 write_state "success" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" ""
+append_history "success" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" ""
 log "===== 流水线完成（同步 +$SYNC_NEW 条，报告 +$PROCESS_NEW 篇，成品 +$ARTICLE_NEW 篇，Notion +$UPLOAD_NEW 篇）====="
