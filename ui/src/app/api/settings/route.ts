@@ -31,9 +31,10 @@ function buildSettingsFromEnv(): Settings {
     articlesDir: env.ARTICLES_DIR || getArticlesDir(),
     dataPath: env.DATA_PATH || "./data",
     proxy: env.PROXY || null,
-    autoSync: env.AUTO_SYNC === "true" || env.AUTO_SYNC === "1",
+    // @deprecated：Auto Sync + cron env 已删除（PR-3），字段保留供旧 UI 兼容，恒返回 false/null
+    autoSync: false,
     notionUploadLive: env.NOTION_UPLOAD_LIVE === "true" || env.NOTION_UPLOAD_LIVE === "1",
-    cronExpression: env.CRON_EXPRESSION || "0 */6 * * *",
+    cronExpression: null,
   };
 }
 
@@ -77,14 +78,8 @@ export async function PUT(
     if (body.bookmarksPath !== undefined) {
       envUpdates.BOOKMARKS_PATH = body.bookmarksPath;
     }
-    if (body.autoSync !== undefined) {
-      envUpdates.AUTO_SYNC = body.autoSync ? "true" : "false";
-    }
     if (body.notionUploadLive !== undefined) {
       envUpdates.NOTION_UPLOAD_LIVE = body.notionUploadLive ? "true" : "false";
-    }
-    if (body.cronExpression !== undefined) {
-      envUpdates.CRON_EXPRESSION = body.cronExpression || "";
     }
     if (body.notionDbId !== undefined) {
       envUpdates.NOTION_DB_ID = body.notionDbId;

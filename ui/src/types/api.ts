@@ -500,8 +500,10 @@ export interface Settings {
   dataPath: string;
   proxy: string | null;
   // Toggles
+  /** @deprecated Auto Sync 已删除（PR-3），保留字段供旧 UI 兼容，后端恒返回 false */
   autoSync: boolean;
   notionUploadLive: boolean;
+  /** @deprecated cron env 已删除（PR-3），保留字段供旧 UI 兼容，后端恒返回 null */
   cronExpression: string | null;
 }
 
@@ -510,8 +512,10 @@ export interface UpdateSettingsRequest {
   dataPath?: string;
   articlesDir?: string;
   bookmarksPath?: string;
+  /** @deprecated Auto Sync 已删除（PR-3），后端忽略该字段 */
   autoSync?: boolean;
   notionUploadLive?: boolean;
+  /** @deprecated cron env 已删除（PR-3），后端忽略该字段 */
   cronExpression?: string | null;
   notionDbId?: string;
   deepseekBaseUrl?: string;

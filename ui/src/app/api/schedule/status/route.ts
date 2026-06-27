@@ -8,7 +8,6 @@ import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
 import { getRepoRoot } from "@/lib/repo-root";
-import { getTimerState } from "@/lib/scheduler-state";
 import type { ApiResponse } from "@/types/api";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +17,9 @@ interface ScheduleStatus {
   lastRunStatus: string | null;
   lastRunStep: string | null;
   lastRunError: string | null;
+  /** @deprecated Built-in timer 已删除，保留字段供旧 UI 兼容，恒为 false/null */
   builtInTimerEnabled: boolean;
+  /** @deprecated Built-in timer 已删除，保留字段供旧 UI 兼容，恒为 null */
   builtInTimerCron: string | null;
   launchdLoaded: boolean;
   launchdPlistPath: string | null;
@@ -75,15 +76,15 @@ export async function GET(): Promise<NextResponse<ApiResponse<ScheduleStatus>>> 
   try {
     const auto = readAutoRunState();
     const launchd = checkLaunchdStatus();
-    const timer = getTimerState();
 
     const status: ScheduleStatus = {
       lastRun: typeof auto.last_run === "string" ? auto.last_run : null,
       lastRunStatus: typeof auto.status === "string" ? auto.status : null,
       lastRunStep: typeof auto.step === "string" ? auto.step : null,
       lastRunError: typeof auto.error === "string" ? auto.error : null,
-      builtInTimerEnabled: timer.enabled,
-      builtInTimerCron: timer.cron,
+      // Built-in timer 已删除（PR-3）：字段保留供旧 UI 兼容，恒为关
+      builtInTimerEnabled: false,
+      builtInTimerCron: null,
       launchdLoaded: launchd.loaded,
       launchdPlistPath: launchd.plistPath,
     };

@@ -28,9 +28,7 @@ export interface RawEnvConfig {
   DATA_PATH?: string;
   PROXY?: string;
   // Toggles
-  AUTO_SYNC?: string;
   NOTION_UPLOAD_LIVE?: string;
-  CRON_EXPRESSION?: string;
   // Legacy
   API_KEY?: string;
 }
