@@ -6,7 +6,7 @@
 #   bash auto_run.sh          # 正常运行（代理检测 + 增量同步 + 深度报告 + 成品文章 + Notion 上传）
 #   bash auto_run.sh --force  # 跳过代理检测，直接运行
 #
-# 被 launchd 定时调用。运行状态写入 output/auto_run_state.json，日志写入 /tmp/bookmark-auto.log。
+# 被 launchd 定时调用。运行状态写入 output/auto_run_state.json，日志写入 logs/bookmark-auto.log。
 #
 # 新管线流程（5 步）:
 #   Step 0: 代理检测
@@ -22,7 +22,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STATE_FILE="$SCRIPT_DIR/output/auto_run_state.json"
-LOG_FILE="/tmp/bookmark-auto.log"
+LOG_FILE="$SCRIPT_DIR/logs/bookmark-auto.log"
 SYNC_LOG="$PROJECT_ROOT/twitter_data/sync_log.txt"
 PROXY_URL="http://127.0.0.1:7897"
 PYTHON3="/usr/bin/python3"
@@ -69,6 +69,9 @@ log() {
 }
 
 # ========== 主流程 ==========
+
+# 确保日志目录存在
+mkdir -p "$(dirname "$LOG_FILE")"
 
 # 日志轮转（超过 5MB 清空）
 if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE")" -gt $((5 * 1024 * 1024)) ]; then
