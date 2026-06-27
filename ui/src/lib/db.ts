@@ -1036,6 +1036,33 @@ export function listLogs(
   };
 }
 
+/**
+ * 查询自指定时间以来的日志（供 Stage 3 SSE endpoint 使用）。
+ * 按 id 倒序返回最近 limit 条，component 必填。
+ * 本 stage 仅准备 db 函数，不创建 endpoint。
+ */
+export function listLogsSince(
+  component: LogComponent,
+  sinceIso: string,
+  limit = 200
+): LogEntry[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT * FROM logs WHERE component = ? AND timestamp > ? ORDER BY id DESC LIMIT ?`
+    )
+    .all(component, sinceIso, limit) as Array<Record<string, unknown>>;
+
+  return rows.map((r) => ({
+    id: String(r.id),
+    component: String(r.component) as LogComponent,
+    level: String(r.level) as LogLevel,
+    message: String(r.message),
+    detail: r.detail ? String(r.detail) : undefined,
+    timestamp: String(r.timestamp),
+  }));
+}
+
 // ─────────────────────────────────────────────
 // Settings CRUD
 // ─────────────────────────────────────────────
@@ -1146,10 +1173,17 @@ export function getRawApiKey(): string | null {
 }
 
 // ─────────────────────────────────────────────
-// DB Empty Check
+// DB 状态检测（拆分自原 isDbEmpty）
 // ─────────────────────────────────────────────
 
-export function isDbEmpty(): boolean {
+/**
+ * 检查是否应优先使用 fs 而非 DB 读取 bookmarks/articles。
+ * 原 isDbEmpty() 的完整逻辑：
+ *   - 若 output/*.md 存在 → true（fs 模式）
+ *   - 若 bookmarks 表为空 → true
+ * 仅用于 bookmarks/articles 业务决定走 fs 还是 DB，不应用于 logs/activities 判定。
+ */
+export function prefersFsForBookmarks(): boolean {
   const outDir = path.join(PARENT_DIR, "output");
   try {
     if (fs.existsSync(outDir)) {
@@ -1164,4 +1198,36 @@ export function isDbEmpty(): boolean {
     (db.prepare("SELECT COUNT(*) as c FROM bookmarks").get() as { c: number }).c
   );
   return count === 0;
+}
+
+/**
+ * 检查 logs 表是否有数据。
+ * 用于 Logs Viewer 决定是否走 DB 真值（而非 mockLogs）。
+ */
+export function hasDbLogs(): boolean {
+  const db = getDb();
+  const count = Number(
+    (db.prepare("SELECT COUNT(*) as c FROM logs").get() as { c: number }).c
+  );
+  return count > 0;
+}
+
+/**
+ * 检查 activities 表是否有数据。
+ * 用于 Dashboard Activity Feed 决定是否走 DB 真值。
+ */
+export function hasDbActivities(): boolean {
+  const db = getDb();
+  const count = Number(
+    (db.prepare("SELECT COUNT(*) as c FROM activities").get() as { c: number }).c
+  );
+  return count > 0;
+}
+
+/**
+ * 兼容别名：保留 isDbEmpty() 旧调用方不破坏（约 18 个文件仍引用）。
+ * 新代码请使用 prefersFsForBookmarks() / hasDbLogs() / hasDbActivities()。
+ */
+export function isDbEmpty(): boolean {
+  return prefersFsForBookmarks();
 }

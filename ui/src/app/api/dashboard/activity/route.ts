@@ -1,10 +1,10 @@
 /**
  * GET /api/dashboard/activity
- * CONTRACT v1.0 — returns empty when no DB data (filesystem mode)
+ * CONTRACT v1.0 — DB 真值化：直接读取 activities 表
  */
 
 import { NextResponse } from "next/server";
-import { isDbEmpty, listActivities } from "@/lib/db";
+import { listActivities } from "@/lib/db";
 import type { ApiResponse, ActivityItem } from "@/types/api";
 
 interface ActivityResponse {
@@ -19,14 +19,7 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10), 100);
 
-    if (isDbEmpty()) {
-      // No activity log in filesystem mode
-      return NextResponse.json({
-        success: true,
-        data: { items: [], total: 0 },
-      });
-    }
-
+    // 直接读 DB：DB 真为空时 listActivities 自然返回 items: [], total: 0
     const result = listActivities(limit);
     return NextResponse.json({ success: true, data: result });
   } catch (err) {
