@@ -391,7 +391,13 @@ export function listDraftBookmarks(
 // Articles — all deep drafts + pipeline / article-final
 // ─────────────────────────────────────────────
 
-function buildFsArticleForTweetId(tweetId: string): FsArticle | null {
+// notionSet 可选参：listArticles 在循环外读一次共享，避免 642 次重复 IO；
+// 外部 getArticleById 不传时回落到 getNotionFinishedSet() 默认实现
+function buildFsArticleForTweetId(
+  tweetId: string,
+  notionSet?: Set<string>,
+): FsArticle | null {
+  const _notionSet = notionSet ?? getNotionFinishedSet();
   const pipeline = readPipelineArticles();
   const entry = pipeline[tweetId];
   const st = normalizePipelineStatus(entry?.status as string | undefined);
@@ -452,6 +458,12 @@ function buildFsArticleForTweetId(tweetId: string): FsArticle | null {
     statusOut = "researched";
   }
 
+  // Stage 4：fs 数据层没有 pipeline 写入 uploaded，靠 notion-finished-state 升级
+  // B-ARTC-UPLOADED-NEVER-WRITTEN：pipeline state 永远停在 "written"，但 Notion 已上传
+  if (statusOut === "written" && _notionSet.has(tweetId)) {
+    statusOut = "uploaded";
+  }
+
   return {
     id: tweetId,
     fileName: `${tweetId}.md`,
@@ -483,9 +495,12 @@ export function listArticles(
   }
 
   const idList = Array.from(tweetIds);
+  // Stage 4：循环外读一次 notion finished set，共享给 buildFsArticleForTweetId，
+  // 避免 642 次重复读文件 + JSON parse + filter 的 perf hit
+  const notionSet = getNotionFinishedSet();
   let articles: FsArticle[] = [];
   for (const tid of idList) {
-    const a = buildFsArticleForTweetId(tid);
+    const a = buildFsArticleForTweetId(tid, notionSet);
     if (a) articles.push(a);
   }
 

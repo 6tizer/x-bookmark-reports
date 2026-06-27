@@ -55,6 +55,10 @@ export default function ArticlesPage() {
   const [runBusyId, setRunBusyId] = useState<string | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Stage 4：翻页状态
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const LIMIT = 20;
 
   useEffect(() => {
     try {
@@ -74,12 +78,14 @@ export default function ArticlesPage() {
     }
   };
 
-  const fetchData = useCallback(async (status?: ArticleStatus, s?: string) => {
+  const fetchData = useCallback(async (status?: ArticleStatus, s?: string, pg: number = 1) => {
     setIsLoading(true);
     try {
-      const res: PaginatedResponse<Article> = await getArticles(status, s);
+      const res: PaginatedResponse<Article> = await getArticles(status, s, pg, LIMIT);
       setArticles(res.items);
       setTotal(res.total);
+      setHasMore(res.hasMore);
+      setPage(res.page);
     } finally {
       setIsLoading(false);
     }
@@ -104,6 +110,13 @@ export default function ArticlesPage() {
   const onRunOne = async (e: React.MouseEvent, article: Article) => {
     e.preventDefault();
     e.stopPropagation();
+    // Stage 4：written/uploaded 状态二次确认，避免覆盖现有文章/Notion 上传
+    if (article.status === "written" || article.status === "uploaded") {
+      const confirmed = window.confirm(
+        `「${article.title.slice(0, 40)}」 已${article.status === "uploaded" ? "上传 Notion" : "成文"}。\n再次运行会覆盖现有结果。确认继续？`,
+      );
+      if (!confirmed) return;
+    }
     setRunBusyId(article.id);
     setToast(null);
     try {
@@ -292,6 +305,32 @@ export default function ArticlesPage() {
             ))}
           </div>
         )}
+
+        {/* Stage 4：翻页控件 — 列表底部 Previous / Page N / Next */}
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-xs text-muted-foreground">
+            Showing {articles.length} of {total}
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void fetchData(statusFilter, search, Math.max(1, page - 1))}
+              disabled={page <= 1}
+              className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50 transition-colors"
+            >
+              Previous
+            </button>
+            <span className="px-2 text-xs text-muted-foreground">Page {page}</span>
+            <button
+              type="button"
+              onClick={() => void fetchData(statusFilter, search, page + 1)}
+              disabled={!hasMore}
+              className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50 transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
     </ClientLayout>
   );

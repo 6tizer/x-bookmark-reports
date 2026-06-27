@@ -180,6 +180,23 @@ export default function ArticleDetailPage() {
   return (
     <ClientLayout>
       <div className="h-[calc(100vh-6rem)] max-w-5xl">
+        {/* Stage 4：面包屑导航 Home › Articles › {title} */}
+        <nav className="text-xs text-muted-foreground mb-3" aria-label="breadcrumb">
+          <ol className="flex items-center gap-1 flex-wrap">
+            <li>
+              <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
+            </li>
+            <li className="opacity-50">›</li>
+            <li>
+              <Link href="/articles" className="hover:text-foreground transition-colors">Articles</Link>
+            </li>
+            <li className="opacity-50">›</li>
+            <li className="text-foreground font-medium truncate max-w-md">
+              {(title || article.title).slice(0, 40)}{(title || article.title).length > 40 ? "…" : ""}
+            </li>
+          </ol>
+        </nav>
+
         {toast && (
           <p className="text-xs text-muted-foreground mb-2 rounded-md border border-border bg-card px-3 py-2">
             {toast}
@@ -319,6 +336,11 @@ export default function ArticleDetailPage() {
               <Save size={12} />
               {isSaving ? "Saving..." : "Save"}
             </button>
+
+            {/* Stage 4：文章修改组（Save）与管线操作组（Upload to Notion）之间的视觉分隔 */}
+            {showNotion && (
+              <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+            )}
 
             {showNotion && (
               <button
