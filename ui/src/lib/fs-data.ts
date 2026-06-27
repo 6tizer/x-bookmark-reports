@@ -26,6 +26,20 @@ const NOTION_FINISHED_STATE = path.join(OUTPUT_DIR, ".notion-finished-state.json
 
 const DEEP_DRAFT_PREFIX = "bookmark-deep-";
 
+// twitter_data/bookmarks.json — 数据真相源（1584 条）
+const BOOKMARKS_JSON = path.join(REPO_ROOT, "..", "twitter_data", "bookmarks.json");
+
+// deep draft 中需要被 extractTitle 跳过的 section header（H2）
+const DEEP_DRAFT_SECTION_HEADERS = new Set([
+  "主推文",
+  "媒体",
+  "回复",
+  "回复线程",
+  "外部链接",
+  "深度报告",
+  "成品文章",
+]);
+
 /** Article pipeline output dir (replaces Hermes iCloud path). */
 export function getArticlesDir(): string {
   return ARTICLE_FINAL_DIR;
@@ -93,10 +107,11 @@ export function readPipelineArticles(): Record<string, PipelineArticleEntry> {
 // ─────────────────────────────────────────────
 
 /**
- * Draft bookmark title: **bold** line → `#` H1 → `##` H2 → first non-empty (80 chars) → basename.
+ * Draft bookmark title: **bold** line → `#` H1 → `##` H2 (跳过 section headers) → first non-empty (80 chars) → basename.
  */
 export function extractTitle(body: string, filename: string): string {
   const lines = body.split("\n");
+  // 1) **bold** line (保持现状)
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -108,6 +123,7 @@ export function extractTitle(body: string, filename: string): string {
       return trimmed.replace(/\*\*/g, "").trim();
     }
   }
+  // 2) # H1 (保持现状)
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -115,16 +131,22 @@ export function extractTitle(body: string, filename: string): string {
       return trimmed.replace(/^#\s+/, "").trim();
     }
   }
+  // 3) ## H2 — 跳过 section headers (新增过滤)
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     if (/^##\s+/.test(trimmed)) {
-      return trimmed.replace(/^##\s+/, "").trim();
+      const title = trimmed.replace(/^##\s+/, "").trim();
+      if (DEEP_DRAFT_SECTION_HEADERS.has(title)) continue;
+      return title;
     }
   }
+  // 4) first non-empty line, 但跳过 section headers (新增过滤)
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed) return trimmed.slice(0, 80);
+    if (!trimmed) continue;
+    if (DEEP_DRAFT_SECTION_HEADERS.has(trimmed.replace(/^##?\s+/, ""))) continue;
+    return trimmed.slice(0, 80);
   }
   return filename.replace(/\.md$/i, "");
 }
@@ -863,6 +885,287 @@ export function getBatchProgress(): BatchProgress {
     estimatedEnd,
     items: items.slice(0, 100),
   };
+}
+
+// ─────────────────────────────────────────────
+// Raw bookmarks (twitter_data/bookmarks.json)
+// ─────────────────────────────────────────────
+
+// 单条 bookmark 原始结构（仅标注本任务用到的字段，其余按 unknown 透传）
+export interface RawBookmark {
+  id: string;
+  createdAt: string;
+  fullText?: string;
+  lang?: string;
+  tweetBy?: {
+    userName?: string;
+    fullName?: string;
+    profileImage?: string;
+    [k: string]: unknown;
+  };
+  likeCount?: number;
+  retweetCount?: number;
+  replyCount?: number;
+  quoteCount?: number;
+  viewCount?: number;
+  bookmarkCount?: number;
+  url?: string;
+  media?: unknown[];
+  entities?: { urls?: unknown[]; [k: string]: unknown };
+  [k: string]: unknown;
+}
+
+// bookmarks.json 内存缓存（按 mtime 失效，避免每次 list 都重读 3.8MB）
+let _rawBookmarksCache: { mtime: number; data: RawBookmark[] } | null = null;
+
+// 加载 bookmarks.json；文件不存在 / 解析失败 / 非 array 时返回 []
+export function loadRawBookmarks(): RawBookmark[] {
+  if (!fs.existsSync(BOOKMARKS_JSON)) return [];
+  try {
+    const st = fs.statSync(BOOKMARKS_JSON);
+    if (_rawBookmarksCache && _rawBookmarksCache.mtime === st.mtimeMs) {
+      return _rawBookmarksCache.data;
+    }
+    const raw = fs.readFileSync(BOOKMARKS_JSON, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const data = parsed as RawBookmark[];
+    _rawBookmarksCache = { mtime: st.mtimeMs, data };
+    return data;
+  } catch {
+    return [];
+  }
+}
+
+// 总书签数（= bookmarks.json 长度，期望 1584）
+export function countTotalBookmarks(): number {
+  return loadRawBookmarks().length;
+}
+
+// ─────────────────────────────────────────────
+// Lifecycle joining sets (deep drafts / articles / notion)
+// ─────────────────────────────────────────────
+
+// 已生成 deep draft 的 tweet id 集合
+export function getDeepDraftSet(): Set<string> {
+  return new Set(listDeepDraftTweetIds());
+}
+
+// 已写成品文章的 tweet id 集合（output/article-final/*.md，文件名纯数字）
+export function getArticleWrittenSet(): Set<string> {
+  if (!fs.existsSync(ARTICLE_FINAL_DIR)) return new Set();
+  const set = new Set<string>();
+  try {
+    for (const f of fs.readdirSync(ARTICLE_FINAL_DIR)) {
+      if (!f.endsWith(".md")) continue;
+      const id = f.replace(/\.md$/, "");
+      if (/^\d+$/.test(id)) set.add(id);
+    }
+  } catch {
+    /* ignore */
+  }
+  return set;
+}
+
+// 已上传 Notion 的 tweet id 集合（output/.notion-finished-state.json uploaded 数组）
+// 实际数据格式为 ["{tweetId}.md", ...]，需先 strip `.md` 后缀再过滤纯数字
+export function getNotionFinishedSet(): Set<string> {
+  if (!fs.existsSync(NOTION_FINISHED_STATE)) return new Set();
+  try {
+    const raw = JSON.parse(fs.readFileSync(NOTION_FINISHED_STATE, "utf-8")) as { uploaded?: unknown };
+    if (!Array.isArray(raw.uploaded)) return new Set();
+    return new Set(
+      raw.uploaded
+        .map((x) => String(x).replace(/\.md$/i, ""))
+        .filter((x) => /^\d+$/.test(x))
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+// ─────────────────────────────────────────────
+// FsBookmarkV2 — bookmarks.json as source of truth
+// ─────────────────────────────────────────────
+
+// 生命周期：pending（仅 sync）→ drafted（有 deep）→ written（有 article）→ uploaded（在 Notion）
+export type FsBookmarkLifecycle = "pending" | "drafted" | "written" | "uploaded";
+
+// V2 bookmark 视图（基于 bookmarks.json 为真相源）
+export interface FsBookmarkV2 {
+  id: string;            // tweet id（与 tweetId 同值）
+  tweetId: string;
+  url: string;
+  author: { name: string; handle: string; avatar?: string };
+  text: string;          // 截断预览（fullText 前 160 字符）
+  fullText: string;
+  bookmarkedAt: string;  // = raw.createdAt（保留原字符串，不解析为 Date）
+  stats: { likes: number; retweets: number; replies: number; quotes: number; views: number; bookmarks: number };
+  tags: string[];        // 来自 article-final frontmatter（无文章则为空）
+  lifecycle: FsBookmarkLifecycle;
+  hasDeepDraft: boolean;
+  hasArticle: boolean;
+  inNotion: boolean;
+}
+
+// raw → FsBookmarkV2 转换（合并 lifecycle 三集合 + tags map）
+function rawToFsBookmarkV2(
+  raw: RawBookmark,
+  deepSet: Set<string>,
+  articleSet: Set<string>,
+  notionSet: Set<string>,
+  articleTagsMap: Map<string, string[]>,
+): FsBookmarkV2 {
+  const tid = String(raw.id || "");
+  const fullText = String(raw.fullText || "");
+  const tb = raw.tweetBy || {};
+  const handle = String(tb.userName || "unknown");
+  const inNotion = notionSet.has(tid);
+  const hasArticle = articleSet.has(tid);
+  const hasDeepDraft = deepSet.has(tid);
+  // 生命周期优先级：uploaded > written > drafted > pending
+  let lifecycle: FsBookmarkLifecycle;
+  if (inNotion) lifecycle = "uploaded";
+  else if (hasArticle) lifecycle = "written";
+  else if (hasDeepDraft) lifecycle = "drafted";
+  else lifecycle = "pending";
+
+  return {
+    id: tid,
+    tweetId: tid,
+    url: String(raw.url || `https://x.com/${handle}/status/${tid}`),
+    author: {
+      name: String(tb.fullName || tb.userName || "Unknown"),
+      handle: handle.startsWith("@") ? handle.slice(1) : handle,
+      avatar: tb.profileImage ? String(tb.profileImage) : undefined,
+    },
+    text: fullText.slice(0, 160),
+    fullText,
+    bookmarkedAt: String(raw.createdAt || ""),
+    stats: {
+      likes: Number(raw.likeCount || 0),
+      retweets: Number(raw.retweetCount || 0),
+      replies: Number(raw.replyCount || 0),
+      quotes: Number(raw.quoteCount || 0),
+      views: Number(raw.viewCount || 0),
+      bookmarks: Number(raw.bookmarkCount || 0),
+    },
+    tags: articleTagsMap.get(tid) || [],
+    lifecycle,
+    hasDeepDraft,
+    hasArticle,
+    inNotion,
+  };
+}
+
+// 为已写文章的 tweet 构造 tags 映射（读 article-final frontmatter）
+function buildArticleTagsMap(articleSet: Set<string>): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  // 用 Array.from 规避 tsconfig target < es2015 下 `for...of` Set 报错
+  for (const tid of Array.from(articleSet)) {
+    const p = path.join(ARTICLE_FINAL_DIR, `${tid}.md`);
+    try {
+      const raw = fs.readFileSync(p, "utf-8");
+      const fm = parseArticlePipelineFrontmatter(raw);
+      if (fm.tags && fm.tags.length > 0) map.set(tid, fm.tags);
+    } catch {
+      /* ignore */
+    }
+  }
+  return map;
+}
+
+// 列出所有 bookmarks（分页 + 搜索 + lifecycle 过滤），保持 bookmarks.json 原顺序（前=新）
+export function listAllBookmarks(
+  page: number = 1,
+  limit: number = 20,
+  search?: string,
+  lifecycle?: FsBookmarkLifecycle,
+): { items: FsBookmarkV2[]; total: number; hasMore: boolean } {
+  const raws = loadRawBookmarks();
+  const deepSet = getDeepDraftSet();
+  const articleSet = getArticleWrittenSet();
+  const notionSet = getNotionFinishedSet();
+  const tagsMap = buildArticleTagsMap(articleSet);
+
+  let items = raws.map((r) => rawToFsBookmarkV2(r, deepSet, articleSet, notionSet, tagsMap));
+
+  if (lifecycle) {
+    items = items.filter((b) => b.lifecycle === lifecycle);
+  }
+  if (search) {
+    const s = search.toLowerCase();
+    items = items.filter(
+      (b) =>
+        b.author.name.toLowerCase().includes(s) ||
+        b.author.handle.toLowerCase().includes(s) ||
+        b.fullText.toLowerCase().includes(s) ||
+        b.tags.some((t) => t.toLowerCase().includes(s)),
+    );
+  }
+
+  // 不重排：bookmarks.json 前面=新，保持原顺序稳定
+  const total = items.length;
+  const offset = (page - 1) * limit;
+  const sliced = items.slice(offset, offset + limit);
+  return { items: sliced, total, hasMore: page * limit < total };
+}
+
+// 详情视图：在 V2 基础上补充 deepDraftPath / articlePath / notionPageUrl / deepDraftBody
+export interface FsBookmarkV2Detail extends FsBookmarkV2 {
+  deepDraftPath?: string;
+  articlePath?: string;
+  notionPageUrl?: string;       // 留空，Notion page URL 留 PR-3 处理；本 Stage 仅占位
+  deepDraftBody?: string;       // 完整 deep draft markdown body（含 frontmatter 后的内容）
+}
+
+// 按 tweet id 取单条 bookmark 详情；兼容旧 basename id（bookmark-deep-{tweetId}-{ts}）
+export function getBookmarkByTweetId(id: string): FsBookmarkV2Detail | null {
+  // 兼容旧 basename id：bookmark-deep-{tweetId}-{ts}
+  let tweetId = id;
+  const m = id.match(/bookmark-deep-(\d+)/);
+  if (m) tweetId = m[1];
+  // 仅接受 19 位左右纯数字
+  if (!/^\d+$/.test(tweetId)) return null;
+
+  const raws = loadRawBookmarks();
+  const raw = raws.find((r) => String(r.id) === tweetId);
+  if (!raw) return null;
+
+  const deepSet = getDeepDraftSet();
+  const articleSet = getArticleWrittenSet();
+  const notionSet = getNotionFinishedSet();
+  const tagsMap = buildArticleTagsMap(articleSet);
+  const base = rawToFsBookmarkV2(raw, deepSet, articleSet, notionSet, tagsMap);
+
+  const draftPath = findDeepDraftPathByTweetId(tweetId);
+  const articlePath = articleSet.has(tweetId)
+    ? path.join(ARTICLE_FINAL_DIR, `${tweetId}.md`)
+    : undefined;
+
+  let deepDraftBody: string | undefined;
+  if (draftPath) {
+    try {
+      const raw2 = fs.readFileSync(draftPath, "utf-8");
+      const { body } = parseFrontmatter(raw2);
+      deepDraftBody = body;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return {
+    ...base,
+    deepDraftPath: draftPath || undefined,
+    articlePath,
+    notionPageUrl: undefined,
+    deepDraftBody,
+  };
+}
+
+// extractDeepDraftTitle — extractTitle 的语义别名（用于 deep draft title 提取）
+export function extractDeepDraftTitle(body: string, filename: string): string {
+  return extractTitle(body, filename);
 }
 
 // ─────────────────────────────────────────────

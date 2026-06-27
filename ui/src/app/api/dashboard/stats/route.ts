@@ -41,6 +41,11 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
         articlesWritten: notionStats?.articlesWritten ?? fsStats.totalArticles,
         notionTotalUploaded: notionStats?.totalRecords ?? fsStats.notionFinishedUploaded,
         pendingRewrite: notionStats?.pendingRewrite ?? fsStats.pendingRewrite,
+        // Stage 2 之前临时补 0，真实逻辑留 Stage 2
+        totalArticlesLocal: 0,
+        totalArticlesNotion: 0,
+        pendingRewriteLocal: 0,
+        pendingRewriteGlobal: 0,
         pipeline,
       };
 
@@ -126,6 +131,11 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
       articlesWritten: totalArticles,
       notionTotalUploaded: 0,
       pendingRewrite,
+      // Stage 2 之前临时补 0，真实逻辑留 Stage 2
+      totalArticlesLocal: 0,
+      totalArticlesNotion: 0,
+      pendingRewriteLocal: 0,
+      pendingRewriteGlobal: 0,
       pipeline,
     };
 
@@ -143,6 +153,11 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
           articlesWritten: 0,
           notionTotalUploaded: 0,
           pendingRewrite: 0,
+          // Stage 2 之前临时补 0，真实逻辑留 Stage 2
+          totalArticlesLocal: 0,
+          totalArticlesNotion: 0,
+          pendingRewriteLocal: 0,
+          pendingRewriteGlobal: 0,
           pipeline: emptyPipeline(),
         },
         error: { code: "INTERNAL_ERROR", message, detail: String(err) },

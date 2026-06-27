@@ -669,6 +669,11 @@ export const mockDashboardStats: DashboardStats = {
   articlesWritten: 932,
   notionTotalUploaded: 946,
   pendingRewrite: 14,
+  // Stage 2 之前临时补 0，真实逻辑留 Stage 2
+  totalArticlesLocal: 0,
+  totalArticlesNotion: 0,
+  pendingRewriteLocal: 0,
+  pendingRewriteGlobal: 0,
   pipeline: {
     twitterSync: { status: "completed", lastRun: "2026-04-28T08:30:00.000Z" },
     deepReports: { status: "completed", lastRun: "2026-04-28T08:30:00.000Z", progress: 100 },

@@ -43,6 +43,7 @@ export interface PipelineNode {
   status: PipelineStatus;
   lastRun?: string;
   progress?: number;
+  progressGlobal?: number;            // 新增：全局进度（相对 1584 的百分比）
   error?: { code: string; message: string };
 }
 
@@ -73,14 +74,19 @@ export interface DashboardPipelineThree {
 
 export interface DashboardStats {
   lastSyncAt: string | null;
-  totalDrafts: number;
-  totalBookmarks: number;
+  totalBookmarks: number;             // 1584 (bookmarks.json length)
+  totalDrafts: number;                // 642 (deep drafts)
+  totalArticlesLocal: number;         // 642 (article-final/*.md)
+  totalArticlesNotion: number;        // Notion DB total
+  pendingRewriteLocal: number;        // max(0, drafts - articlesLocal)
+  pendingRewriteGlobal: number;       // max(0, bookmarks - drafts)
   newThisWeek: number;
-  articlesWritten: number;
-  notionTotalUploaded: number;
-  pendingRewrite: number;
   pipeline: DashboardPipelineFour;
   rettiwt?: RettiwtStatus | null;
+  // 旧字段保留兼容（同义别名）
+  articlesWritten: number;            // = totalArticlesLocal
+  notionTotalUploaded: number;        // = totalArticlesNotion
+  pendingRewrite: number;             // = pendingRewriteGlobal
 }
 
 export interface RettiwtStatus {
@@ -109,6 +115,27 @@ export interface ActivityItem {
 
 export type BookmarkStatus = "synced" | "read" | "reported" | "articled";
 export type UrlCategory = "article" | "code" | "social" | "media" | "other" | "tweet";
+
+// V2 lifecycle（基于 bookmarks.json 真相源 + 三集合 join）
+export type BookmarkLifecycle = "pending" | "drafted" | "written" | "uploaded";
+
+// V2 bookmark：在 V1 之上加 lifecycle / tweetId / 三态标记 / 文章 tags
+export interface BookmarkV2 extends Bookmark {
+  tweetId: string;
+  lifecycle: BookmarkLifecycle;
+  hasDeepDraft: boolean;
+  hasArticle: boolean;
+  inNotion: boolean;
+  articleTags?: string[];
+}
+
+// V2 bookmark 详情：补充 fullText / 三态文件路径 / Notion page URL
+export interface BookmarkDetailV2 extends BookmarkV2 {
+  fullText: string;
+  deepDraftPath?: string;
+  articlePath?: string;
+  notionPageUrl?: string;
+}
 
 export interface Author {
   name: string;
