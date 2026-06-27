@@ -21,13 +21,6 @@ const PIPELINE_FILTER_STATUSES: ArticleStatus[] = [
   "failed",
 ];
 
-const MODEL_OPTIONS: { value: string; label: string }[] = [
-  { value: "", label: "Default (env)" },
-  { value: "deepseek-chat", label: "DeepSeek Chat" },
-  { value: "deepseek-reasoner", label: "DeepSeek Reasoner" },
-  { value: "grok-2-latest", label: "xAI Grok" },
-];
-
 const PIPELINE_MODEL_STORAGE = "articlePipelineModel";
 
 function statusLabel(s: ArticleStatus): string {
@@ -52,6 +45,8 @@ export default function ArticlesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ArticleStatus | undefined>(undefined);
   const [pipelineModel, setPipelineModel] = useState("");
+  // 从 API 动态加载模型下拉选项（替代硬编码 MODEL_OPTIONS）
+  const [modelOptions, setModelOptions] = useState<{ value: string; label: string }[]>([]);
   const [runBusyId, setRunBusyId] = useState<string | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -68,6 +63,25 @@ export default function ArticlesPage() {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  // 拉取 /api/settings/model-options 填充模型下拉
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/settings/model-options");
+        const json = await res.json();
+        if (!cancelled && json.success && Array.isArray(json.data?.options)) {
+          setModelOptions(json.data.options);
+        }
+      } catch {
+        /* 加载失败时保持空数组，下拉显示 Loading... */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const persistModel = (v: string) => {
@@ -204,11 +218,17 @@ export default function ArticlesPage() {
               title="Rewrite model for article_pipeline.py"
               className="h-8 rounded-md border border-border bg-muted px-2 text-xs outline-none max-w-[140px]"
             >
-              {MODEL_OPTIONS.map((o) => (
-                <option key={o.value || "default"} value={o.value}>
-                  {o.label}
+              {modelOptions.length === 0 ? (
+                <option disabled value="">
+                  Loading...
                 </option>
-              ))}
+              ) : (
+                modelOptions.map((o) => (
+                  <option key={o.value || "default"} value={o.value}>
+                    {o.label}
+                  </option>
+                ))
+              )}
             </select>
 
             <button
