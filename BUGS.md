@@ -13,10 +13,6 @@
 | ID   | 文件     | 问题描述                                                                                                                                                           | 严重性    | 发现日期       | 状态       |
 | ---- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | -------- |
 | B026 | app.py | `_run_deep_batch_inner`（L363-555）完整复制了 `BookmarkCoordinator.run_deep` 的核心逻辑，任何 bug 修复需同步两处，维护风险高。**暂缓**：建议后续改为 `run_deep` 注入进度/stop 回调，一次性重构并配合 Streamlit 回归测试。**注：app.py 已于 2026-06-27 删除，本条作废** | MEDIUM | 2026-04-28 | deferred-obsolete |
-| B052 | ui/src/app/api/logs/route.ts | Logs Viewer 在 DB 模式下仍返回 mock 数据，未读取 SQLite `logs` 表。注：PR-1 已用 fs 真值源替换 isDbEmpty() 分支，但 Logs 路由仍走旧逻辑，需 PR-2 解锁 DB 日志写入路径并接真值。 | MEDIUM | 2026-06-27 | 待修复 |
-| B053 | ui/src/app/sync/page.tsx | Sync Terminal 依赖 SSE 流，但后端 `child_process.spawn` 未做 stdout 转发，UI 看不到实时输出 | MEDIUM | 2026-06-27 | 待修复 |
-| B054 | ui/src/app/api/schedule/launchd/route.ts | 缺 GET 方法，前端无法读取当前 launchd 调度详情（频率/下次触发时间），Settings Schedule Tab 显示空白 | MEDIUM | 2026-06-27 | 待修复 |
-| B055 | ui/src/app/articles/page.tsx | 模型列表硬编码且过期，未从 `/api/settings` 动态读取当前可用模型 | MEDIUM | 2026-06-27 | 待修复 |
 | B056 | ui/src/components/settings/ScheduleSettings.tsx | Schedule Tab 「Pipeline steps executed」显示 3 步过时清单（缺 `sync_bookmarks.sh`），与 auto_run.sh 实际 4 步不一致 | LOW | 2026-06-27 | 待修复 |
 | B057 | ui/src/components/settings/LLMSettings.tsx | DeepSeek > Model 与 Pipeline Default Model 两个下拉缺少文案区分，用户混淆持久化 .env 与浏览器临时覆盖 | LOW | 2026-06-27 | 待修复 |
 | B058 | ui/src/components/settings/GeneralSettings.tsx | Notion Upload Live / Auto Sync 两个 toggle 视觉错位（thumb 16×16 在 36×20 椭圆里 ON 距右沿仅 4px，shadow 散开后视觉「贴边/挤出」） | LOW | 2026-06-27 | 待修复 |
@@ -87,6 +83,10 @@
 | B059 | ui/src/components/settings/GeneralSettings.tsx | Save Changes 反馈不可见 | LOW | 2026-06-27 | 2026-06-27 | PR-1：handleSave 加 350ms minimum delay |
 | B060 | ui/src/components/settings/LogViewer.tsx | Logs 筛选条 Component + Level 挤在同一行 | LOW | 2026-06-27 | 2026-06-27 | PR-1：分两个 flex-wrap 容器 space-y-2 |
 | B061 | ui/src/lib/notion-stats.ts | parseEnv 不剥离 .env 值首尾引号，NOTION_TOKEN 带引号发给 Notion API 导致 401，totalArticlesNotion=0 静默兜底；catch 吞错无日志 | HIGH | 2026-06-27 | 2026-06-27 | parseEnv 剥离单/双引号；catch 加 console.error 输出错误消息 |
+| B052 | ui/src/app/api/logs/route.ts | Logs Viewer 在 DB 模式下仍返回 mock 数据，未读取 SQLite `logs` 表 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-2 Stage 1：拆 isDbEmpty + logs route 直接读 DB（7447 条），新增 /api/logs/components |
+| B053 | ui/src/app/sync/page.tsx | Sync Terminal 依赖 SSE 流，但后端 `child_process.spawn` 未做 stdout 转发，UI 看不到实时输出 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-2 Stage 3：新增 /api/logs/stream SSE + SyncTerminal EventSource 订阅 + currentOperation 生命周期 |
+| B054 | ui/src/app/api/schedule/launchd/route.ts | 缺 GET 方法，前端无法读取当前 launchd 调度详情（频率/下次触发时间），Settings Schedule Tab 显示空白 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-2 Stage 5：launchd GET 用 plutil 解析 8 个日历触发点（每 3h） |
+| B055 | ui/src/app/articles/page.tsx | 模型列表硬编码且过期，未从 `/api/settings` 动态读取当前可用模型 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-2 Stage 6：新增 /api/settings/model-options；Articles 删 MODEL_OPTIONS，每行 Run 旁加模型下拉 |
 
 
 ---
@@ -144,6 +144,7 @@
 
 ## 更新日志
 
+- **2026-06-27**: PR-2 (DB Truth + Stream) 合并 — 修复 B052–B055（Logs API 真值化 + SyncTerminal SSE + launchd GET + Articles 模型动态化）；新增 4 项验收修复（pipeline-log 共享模块避免 Python `[INFO]` 行被误判 Error、Stop 按钮红框高亮、Activity DB+fs 合并排序、Articles 每行 Run 旁加模型下拉）；GitNexus 索引待重建
 - **2026-06-27**: PR-1 (Data Truthification) 合并 — 修复 B046–B051 + B056–B061（Dashboard 6 卡 + bookmarks.json 真值源 + lifecycle join + Articles uploaded 状态 + 翻页 + Run modal + 双进度条默认显示 + Settings 5 项 UX 修复 + notion-stats .env 引号 bug）；新增 B052–B055 留 PR-2 处理；GitNexus 重建索引 3254 nodes / 6147 edges / 285 flows
 - **2026-06-27**: UI 全面审计 — 新增 B046–B055（4 P0 + 6 P1，详见 `docs/UI_AUDIT_2026-06-27.md`）；B026 标记 obsolete（`app.py` 已删除）
 - **2026-05-05**: 修复 B037–B045（管线全面稳定化：--resume 默认、Notion 去重、Exa bug、并发保护、auto_run.sh 更新等）
