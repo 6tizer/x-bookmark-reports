@@ -33,13 +33,6 @@ const DEEPSEEK_WHITELIST: ModelOption[] = [
   { value: "deepseek-reasoner", label: "DeepSeek Reasoner" },
 ];
 
-const XAI_WHITELIST: ModelOption[] = [
-  { value: "grok-4.3", label: "xAI Grok 4.3" },
-  { value: "grok-4.3-mini", label: "xAI Grok 4.3 Mini" },
-  // 保留旧值兼容
-  { value: "grok-2-latest", label: "xAI Grok 2 Latest" },
-];
-
 const DEFAULT_DEEPSEEK = "deepseek-chat";
 const DEFAULT_XAI = "grok-4.3";
 
@@ -78,7 +71,7 @@ function parseEnv(): { deepseekModel: string; xaiModel: string } | null {
   }
 }
 
-/** 组装下拉选项：默认项 + DeepSeek 分组 + xAI 分组 */
+/** 组装下拉选项：默认项 + DeepSeek 分组（Run dropdown 仅暴露 DeepSeek，xAI 走 LLMSettings） */
 function buildOptions(current: { deepseek: string; xai: string }): ModelOption[] {
   const options: ModelOption[] = [
     { value: "", label: `Default (env: ${current.deepseek})` },
@@ -91,18 +84,9 @@ function buildOptions(current: { deepseek: string; xai: string }): ModelOption[]
   }
   options.push(...DEEPSEEK_WHITELIST);
 
-  const xaiValues = new Set(XAI_WHITELIST.map((o) => o.value));
-  // env 值不在白名单时，在 xAI 分组顶部插入
-  if (!xaiValues.has(current.xai)) {
-    options.push({ value: current.xai, label: `${current.xai} (env)` });
-  }
-  // 白名单项：与 env 当前值匹配则追加 (env) 标注
-  for (const item of XAI_WHITELIST) {
-    options.push({
-      value: item.value,
-      label: item.value === current.xai ? `${item.label} (env)` : item.label,
-    });
-  }
+  // 注意：xAI 模型不再出现在 Run 下拉里——它们会传给 --model → DeepSeek 客户端，
+  // 导致 "model not found"（B-PIPELINE-MODEL-CROSS-PROVIDER）。
+  // xAI 模型仅通过 LLMSettings 的 xAI Model 输入框 → .env XAI_MODEL 配置。
 
   return options;
 }

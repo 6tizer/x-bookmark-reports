@@ -492,6 +492,7 @@ export interface Settings {
   deepseekModel: string;
   xaiApiKey: string;
   xaiBaseUrl: string;
+  xaiModel: string;
   exaApiKey: string;
   exaBaseUrl: string;
   // Paths
@@ -521,6 +522,7 @@ export interface UpdateSettingsRequest {
   deepseekBaseUrl?: string;
   deepseekModel?: string;
   xaiBaseUrl?: string;
+  xaiModel?: string;
   exaBaseUrl?: string;
 }
 

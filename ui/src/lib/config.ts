@@ -20,6 +20,7 @@ export interface RawEnvConfig {
   DEEPSEEK_MODEL?: string;
   XAI_API_KEY?: string;
   XAI_BASE_URL?: string;
+  XAI_MODEL?: string;
   EXA_API_KEY?: string;
   EXA_BASE_URL?: string;
   // Paths

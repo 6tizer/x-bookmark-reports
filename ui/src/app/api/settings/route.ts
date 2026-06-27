@@ -25,6 +25,7 @@ function buildSettingsFromEnv(): Settings {
     deepseekModel: env.DEEPSEEK_MODEL || "deepseek-chat",
     xaiApiKey: maskApiKey(env.XAI_API_KEY),
     xaiBaseUrl: env.XAI_BASE_URL || "https://api.x.ai/v1",
+    xaiModel: env.XAI_MODEL || "grok-4.3",
     exaApiKey: maskApiKey(env.EXA_API_KEY),
     exaBaseUrl: env.EXA_BASE_URL || "https://api.exa.ai",
     bookmarksPath: env.BOOKMARKS_PATH || "",
@@ -92,6 +93,9 @@ export async function PUT(
     }
     if (body.xaiBaseUrl !== undefined) {
       envUpdates.XAI_BASE_URL = body.xaiBaseUrl;
+    }
+    if (body.xaiModel !== undefined) {
+      envUpdates.XAI_MODEL = body.xaiModel;
     }
     if (body.exaBaseUrl !== undefined) {
       envUpdates.EXA_BASE_URL = body.exaBaseUrl;

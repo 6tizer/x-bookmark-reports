@@ -731,6 +731,7 @@ export const mockSettings: Settings = {
   deepseekModel: "deepseek-chat",
   xaiApiKey: "xai****xyz",
   xaiBaseUrl: "https://api.x.ai/v1",
+  xaiModel: "grok-4.3",
   exaApiKey: "exa****xyz",
   exaBaseUrl: "https://api.exa.ai",
   bookmarksPath: "~/Library/Application Support/Google/Chrome/Default/Bookmarks",
