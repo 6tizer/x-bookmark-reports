@@ -33,13 +33,6 @@ import type { Article, ArticleStatus, ArticleVersion } from "@/types/api";
 
 const ReactMarkdown = dynamic(() => import("react-markdown"), { ssr: false });
 
-const MODEL_OPTIONS: { value: string; label: string }[] = [
-  { value: "", label: "Default (env)" },
-  { value: "deepseek-chat", label: "DeepSeek Chat" },
-  { value: "deepseek-reasoner", label: "DeepSeek Reasoner" },
-  { value: "grok-2-latest", label: "xAI Grok" },
-];
-
 const PIPELINE_MODEL_STORAGE = "articlePipelineModel";
 
 function statusLabel(s: ArticleStatus): string {
@@ -66,6 +59,8 @@ export default function ArticleDetailPage() {
   const [versions, setVersions] = useState<ArticleVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const [pipelineModel, setPipelineModel] = useState("");
+  // 从 API 动态加载模型下拉选项（替代硬编码 MODEL_OPTIONS）
+  const [modelOptions, setModelOptions] = useState<{ value: string; label: string }[]>([]);
   const [pipelineBusy, setPipelineBusy] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -77,6 +72,25 @@ export default function ArticleDetailPage() {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  // 拉取 /api/settings/model-options 填充模型下拉
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/settings/model-options");
+        const json = await res.json();
+        if (!cancelled && json.success && Array.isArray(json.data?.options)) {
+          setModelOptions(json.data.options);
+        }
+      } catch {
+        /* 加载失败时保持空数组，下拉显示 Loading... */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const persistModel = (v: string) => {
@@ -254,11 +268,15 @@ export default function ArticleDetailPage() {
               onChange={(e) => persistModel(e.target.value)}
               className="h-7 rounded-md border border-border bg-background px-2 text-[11px] outline-none"
             >
-              {MODEL_OPTIONS.map((o) => (
-                <option key={o.value || "default"} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
+              {modelOptions.length === 0 ? (
+                <option disabled value="">Loading...</option>
+              ) : (
+                modelOptions.map((o) => (
+                  <option key={o.value || "default"} value={o.value}>
+                    {o.label}
+                  </option>
+                ))
+              )}
             </select>
             <button
               type="button"
