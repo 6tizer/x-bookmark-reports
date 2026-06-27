@@ -12,13 +12,7 @@
 
 | ID   | 文件     | 问题描述                                                                                                                                                           | 严重性    | 发现日期       | 状态       |
 | ---- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | -------- |
-| B026 | app.py | `_run_deep_batch_inner`（L363-555）完整复制了 `BookmarkCoordinator.run_deep` 的核心逻辑，任何 bug 修复需同步两处，维护风险高。**暂缓**：建议后续改为 `run_deep` 注入进度/stop 回调，一次性重构并配合 Streamlit 回归测试。**注：app.py 已于 2026-06-27 删除，本条作废** | MEDIUM | 2026-04-28 | deferred-obsolete |
-| B056 | ui/src/components/settings/ScheduleSettings.tsx | Schedule Tab 「Pipeline steps executed」显示 3 步过时清单（缺 `sync_bookmarks.sh`），与 auto_run.sh 实际 4 步不一致 | LOW | 2026-06-27 | 待修复 |
-| B057 | ui/src/components/settings/LLMSettings.tsx | DeepSeek > Model 与 Pipeline Default Model 两个下拉缺少文案区分，用户混淆持久化 .env 与浏览器临时覆盖 | LOW | 2026-06-27 | 待修复 |
-| B058 | ui/src/components/settings/GeneralSettings.tsx | Notion Upload Live / Auto Sync 两个 toggle 视觉错位（thumb 16×16 在 36×20 椭圆里 ON 距右沿仅 4px，shadow 散开后视觉「贴边/挤出」） | LOW | 2026-06-27 | 待修复 |
-| B059 | ui/src/components/settings/GeneralSettings.tsx | Save Changes 反馈不可见：后端响应 <100ms 时「Saving...」一闪而过 | LOW | 2026-06-27 | 待修复 |
-| B060 | ui/src/components/settings/LogViewer.tsx | Logs 筛选条 Component + Level 挤在同一 flex-wrap 容器，宽度足够时不换行，视觉拥挤 | LOW | 2026-06-27 | 待修复 |
-| B061 | ui/src/lib/notion-stats.ts | parseEnv 不剥离 .env 值的首尾引号，NOTION_TOKEN="ntn_xxx" 被带引号发送给 Notion API 导致 401，Dashboard totalArticlesNotion=0 静默兜底；catch 块吞错无日志 | HIGH | 2026-06-27 | 待修复 |
+| B026 | app.py | `_run_deep_batch_inner` 完整复制了 `BookmarkCoordinator.run_deep` 的核心逻辑。**注：app.py 已于 2026-06-27 删除，本条作废** | MEDIUM | 2026-04-28 | obsolete |
 
 
 ---
@@ -87,6 +81,21 @@
 | B053 | ui/src/app/sync/page.tsx | Sync Terminal 依赖 SSE 流，但后端 `child_process.spawn` 未做 stdout 转发，UI 看不到实时输出 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-2 Stage 3：新增 /api/logs/stream SSE + SyncTerminal EventSource 订阅 + currentOperation 生命周期 |
 | B054 | ui/src/app/api/schedule/launchd/route.ts | 缺 GET 方法，前端无法读取当前 launchd 调度详情（频率/下次触发时间），Settings Schedule Tab 显示空白 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-2 Stage 5：launchd GET 用 plutil 解析 8 个日历触发点（每 3h） |
 | B055 | ui/src/app/articles/page.tsx | 模型列表硬编码且过期，未从 `/api/settings` 动态读取当前可用模型 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-2 Stage 6：新增 /api/settings/model-options；Articles 删 MODEL_OPTIONS，每行 Run 旁加模型下拉 |
+| B-CRON-DEAD | ui/src/components/settings/ScheduleSettings.tsx + api/schedule/* | Schedule 三套并行死配置（cron env / Built-in Timer / launchd plist）互不通；用户改 cron 不生效 | HIGH | 2026-06-27 | 2026-06-27 | PR-3：删 Built-in Timer + Auto Sync + cron env，仅保留 launchd 为单一真相，新增 6 预设按钮 + PUT 编辑 plist |
+| B-BUILTIN-TIMER-CONFUSING | ui/src/components/settings/ScheduleSettings.tsx | Built-in Timer 区域与 launchd 并行存在让用户困惑 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-3 Commit 2：删除整个 Built-in Timer UI 区块 |
+| B-AUTO-SYNC-DEAD | ui/src/components/settings/GeneralSettings.tsx | AutoSync 写 .env 但无人读，dead config | MEDIUM | 2026-06-27 | 2026-06-27 | PR-3 Commit 1+4：UI + .env 双删 |
+| B-SYNC-HISTORY-NO-PERSISTENCE | ui/src/components/sync/PipelineHistory.tsx + auto_run.sh | History 仅 localStorage，重启丢失 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-3 Commit 5+6：auto_run.sh append auto_run_history.jsonl + GET /api/pipeline/history + usePipelineHistory hook |
+| B-PIPELINE-MODEL-CROSS-PROVIDER | lib/article_pipeline/rewrite.py + LLMSettings.tsx | UI 选 grok 后被塞进 DeepSeek 客户端导致 rewrite 失败 | HIGH | 2026-06-27 | 2026-06-27 | PR-3 Commit 7：model-options API 仅返回 DeepSeek；LLMSettings 删 UI 临时覆盖区块；xAI Model 拆出独立输入框写 .env XAI_MODEL |
+| B-NOTION-DBID-NO-SAVE-BTN | ui/src/components/settings/GeneralSettings.tsx | Notion DB ID onChange 每字符 PUT | MEDIUM | 2026-06-27 | 2026-06-27 | PR-3 Commit 4：改本地 state，由 Save Changes 按钮统一提交 |
+| B-XAI-MODEL-MISSING | ui/src/components/settings/LLMSettings.tsx | xAI Model 无 UI 输入框 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-3 Commit 7：xAI 区块新增 Research Model input |
+| B-SYNC-RESUME | ui/src/components/sync/PipelineActions.tsx | Sync Bookmarks 卡 Resume 选项语义错乱 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-3 Commit 6：删除（sync_bookmarks.sh 本身增量，无 --resume） |
+| B-DEEPSEEK-BASE | ui/src/components/settings/LLMSettings.tsx | DeepSeek baseUrl 默认值不一致 + 用户混淆是否需 /v1 | LOW | 2026-06-27 | 2026-06-27 | PR-3 Commit 8：保留默认 /v1，新增 helper text 说明 SDK 双兼容 |
+| B-PATH-STYLE-INCONSISTENT | ui/src/components/settings/GeneralSettings.tsx | 三路径风格不一（相对/绝对/家目录） | LOW | 2026-06-27 | 2026-06-27 | PR-3 Commit 8：GET 时 toAbsolutePath 兜底；UI placeholder 全绝对路径风格 |
+| B-PUB-STATUS | ui/src/types/api.ts + ui/src/app/articles/page.tsx | editing/reviewing/published 在 fs 数据层根本不存在 | LOW | 2026-06-27 | 2026-06-27 | PR-3 Commit 9：ArticleStatus 收敛为 6 项 |
+| B-ARTC-UPLOADED-NEVER-WRITTEN | ui/src/lib/fs-data.ts | uploaded 状态在 fs 不产出 | LOW | 2026-06-27 | 2026-06-27 | PR-1 Stage 4 已修复（fs-data 整合 .notion-finished-state.json）；PR-3 Commit 9 实测验证 642 条 uploaded 真实可达 |
+| B-ARTC-RUN-CONFIRM | ui/src/app/articles/page.tsx | Written 状态点 Run 不弹确认，可能覆盖 | LOW | 2026-06-27 | 2026-06-27 | PR-2 已实现 confirmingArticle modal；PR-3 Commit 9 沿用 |
+| B-NAV-REPORTS | ui/src/app/reports/* + ui/src/app/api/reports/* + ui/src/hooks/useReports.ts + ui/src/components/reports/* | Reports 入口已删但代码大量残留（10+ 文件） | LOW | 2026-06-27 | 2026-06-27 | PR-3 Commit 10：批量删除 11 个文件 + 6 个文件清理引用，净减 1525 行；/reports HTTP 404 |
+| B-REPORTS-PAGE | ui/src/app/reports/page.tsx | /reports 僵尸路由可访问 | LOW | 2026-06-27 | 2026-06-27 | PR-3 Commit 10：路由删除 |
 
 
 ---
@@ -144,6 +153,7 @@
 
 ## 更新日志
 
+- **2026-06-27**: PR-3 (Schedule 单一真相 + History 持久化 + Settings/Articles/Reports 加固) 合并 — 修复 18 项 P0/P1/P2：B-CRON-DEAD / B-BUILTIN-TIMER-CONFUSING / B-AUTO-SYNC-DEAD / B-SYNC-HISTORY-NO-PERSISTENCE / B-PIPELINE-MODEL-CROSS-PROVIDER (P0) / B-NOTION-DBID-NO-SAVE-BTN / B-XAI-MODEL-MISSING / B-SYNC-RESUME / B-DEEPSEEK-BASE / B-PATH-STYLE-INCONSISTENT / B-PUB-STATUS / B-ARTC-UPLOADED-NEVER-WRITTEN / B-ARTC-RUN-CONFIRM / B-NAV-REPORTS / B-REPORTS-PAGE / B-SYNC-DEEP-TIMESTAMP-MISLEADING。BUGS.md 待修复表现在仅 B026 obsolete 标记；P3 留作后续。GitNexus 索引待重建。
 - **2026-06-27**: PR-2 (DB Truth + Stream) 合并 — 修复 B052–B055（Logs API 真值化 + SyncTerminal SSE + launchd GET + Articles 模型动态化）；新增 4 项验收修复（pipeline-log 共享模块避免 Python `[INFO]` 行被误判 Error、Stop 按钮红框高亮、Activity DB+fs 合并排序、Articles 每行 Run 旁加模型下拉）；GitNexus 索引待重建
 - **2026-06-27**: PR-1 (Data Truthification) 合并 — 修复 B046–B051 + B056–B061（Dashboard 6 卡 + bookmarks.json 真值源 + lifecycle join + Articles uploaded 状态 + 翻页 + Run modal + 双进度条默认显示 + Settings 5 项 UX 修复 + notion-stats .env 引号 bug）；新增 B052–B055 留 PR-2 处理；GitNexus 重建索引 3254 nodes / 6147 edges / 285 flows
 - **2026-06-27**: UI 全面审计 — 新增 B046–B055（4 P0 + 6 P1，详见 `docs/UI_AUDIT_2026-06-27.md`）；B026 标记 obsolete（`app.py` 已删除）
