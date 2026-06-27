@@ -565,5 +565,7 @@ export interface PipelineOperation {
   command: string[];
   completedAt?: string;
   error?: string;
+  /** SSE 订阅的 component 名（spawn 时根据 type 设置，用于 SyncTerminal 订阅 /api/logs/stream） */
+  component?: LogComponent;
 }
 

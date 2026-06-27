@@ -28,6 +28,9 @@ interface UsePipelineReturn {
     limit?: number;
   }) => Promise<void>;
   clearHistory: () => void;
+  // spawn 后保留 currentOperation 让 SyncTerminal 持续订阅 SSE；
+  // 用户手动 clear 或新 trigger 时才清空
+  clearCurrentOperation: () => void;
 }
 
 function loadHistory(): PipelineOperation[] {
@@ -81,6 +84,12 @@ export function usePipeline(): UsePipelineReturn {
     }
   }, []);
 
+  // 手动清除 currentOperation（让 SyncTerminal 关闭 SSE）。
+  // 不影响 history（spawn 时已 addToHistory）。
+  const clearCurrentOperation = useCallback(() => {
+    setCurrentOperation(null);
+  }, []);
+
   const triggerSyncBookmarks = useCallback(
     async (opts?: { limit?: number; resume?: boolean }) => {
       const op: PipelineOperation = {
@@ -88,6 +97,7 @@ export function usePipeline(): UsePipelineReturn {
         startedAt: new Date().toISOString(),
         status: "running",
         command: [],
+        component: "coordinator",
       };
       setCurrentOperation(op);
 
@@ -116,15 +126,15 @@ export function usePipeline(): UsePipelineReturn {
           pid: json.data?.pid,
           command: json.data?.command ?? [],
         };
+        // 保留 currentOperation 让 SyncTerminal 持续订阅 SSE 直到用户手动 clear
         setCurrentOperation(updated);
 
-        // Treat spawn as completed (process runs detached)
+        // spawn 成功即记入 history（保留原语义，但 currentOperation 不清空）
         const completed: PipelineOperation = {
           ...updated,
           status: "completed",
           completedAt: new Date().toISOString(),
         };
-        setCurrentOperation(null);
         addToHistory(completed);
       } catch (err) {
         const failed: PipelineOperation = {
@@ -153,6 +163,7 @@ export function usePipeline(): UsePipelineReturn {
         startedAt: new Date().toISOString(),
         status: "running",
         command: [],
+        component: "article_pipeline",
       };
       setCurrentOperation(op);
 
@@ -187,6 +198,7 @@ export function usePipeline(): UsePipelineReturn {
           pid: json.data?.pid,
           command: json.data?.command ?? [],
         };
+        // 保留 currentOperation 让 SyncTerminal 持续订阅 SSE
         setCurrentOperation(updated);
 
         const completed: PipelineOperation = {
@@ -194,7 +206,6 @@ export function usePipeline(): UsePipelineReturn {
           status: "completed",
           completedAt: new Date().toISOString(),
         };
-        setCurrentOperation(null);
         addToHistory(completed);
       } catch (err) {
         const failed: PipelineOperation = {
@@ -217,6 +228,7 @@ export function usePipeline(): UsePipelineReturn {
         startedAt: new Date().toISOString(),
         status: "running",
         command: [],
+        component: "notion_upload",
       };
       setCurrentOperation(op);
 
@@ -249,6 +261,7 @@ export function usePipeline(): UsePipelineReturn {
           pid: json.data?.pid,
           command: json.data?.command ?? [],
         };
+        // 保留 currentOperation 让 SyncTerminal 持续订阅 SSE
         setCurrentOperation(updated);
 
         const completed: PipelineOperation = {
@@ -256,7 +269,6 @@ export function usePipeline(): UsePipelineReturn {
           status: "completed",
           completedAt: new Date().toISOString(),
         };
-        setCurrentOperation(null);
         addToHistory(completed);
       } catch (err) {
         const failed: PipelineOperation = {
@@ -280,5 +292,6 @@ export function usePipeline(): UsePipelineReturn {
     triggerArticlePipeline,
     triggerNotionUpload,
     clearHistory,
+    clearCurrentOperation,
   };
 }
