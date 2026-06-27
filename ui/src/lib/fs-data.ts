@@ -7,6 +7,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type {
+  ActivityItem,
   BatchProgress,
   BatchProgressItem,
   DashboardPipelineFour,
@@ -23,6 +24,10 @@ const OUTPUT_DIR = path.join(REPO_ROOT, "output");
 const ARTICLE_FINAL_DIR = path.join(OUTPUT_DIR, "article-final");
 const PIPELINE_STATE_FILE = path.join(OUTPUT_DIR, ".article-pipeline-state.json");
 const NOTION_FINISHED_STATE = path.join(OUTPUT_DIR, ".notion-finished-state.json");
+// Stage 4：coordinator 跑批状态文件（spawn 时写 last_run_started，exit 时写 last_run_finished）
+const DEEP_RUN_STATE_FILE = path.join(OUTPUT_DIR, ".deep-run-state.json");
+// Stage 4：auto_run.sh 全流程状态文件（已有 last_run/status/step 字段）
+const AUTO_RUN_STATE_FILE = path.join(OUTPUT_DIR, "auto_run_state.json");
 
 const DEEP_DRAFT_PREFIX = "bookmark-deep-";
 
@@ -1196,6 +1201,201 @@ export function getBookmarkByTweetId(id: string): FsBookmarkV2Detail | null {
 // extractDeepDraftTitle — extractTitle 的语义别名（用于 deep draft title 提取）
 export function extractDeepDraftTitle(body: string, filename: string): string {
   return extractTitle(body, filename);
+}
+
+// ─────────────────────────────────────────────
+// Stage 4：Pipeline state 文件写入 + Activities fs 派生
+// ─────────────────────────────────────────────
+
+// 三个 pipeline route 共享的 state 文件 last_run_* 字段集合
+export interface RunStateFields {
+  last_run_started?: string;
+  last_run_finished?: string;
+  last_run_status?: "success" | "failed" | "running";
+  last_run_error?: string;
+  last_run_step?: string;
+}
+
+/**
+ * Stage 4：pipeline route spawn / exit / error 时更新 state 文件的 last_run_* 字段。
+ * 保留原文件其他字段（completed_ids / articles / uploaded 等）不变，仅合并 last_run_*。
+ *
+ * 用途：解决 B-SYNC-DEEP-TIMESTAMP-MISLEADING（coordinator 跑完不更新 last_run）。
+ *
+ * 设计要点：
+ *   - 文件不存在时创建默认结构 + 写入 last_run_* 字段
+ *   - 文件存在但解析失败时，**不破坏原内容**，仅追加 last_run_* 字段
+ *   - 用 try/catch 包裹，避免 Next.js 进程因 state 文件 IO 异常崩溃
+ */
+export function updateRunState(stateFilePath: string, updates: RunStateFields): void {
+  try {
+    let current: Record<string, unknown> = {};
+    if (fs.existsSync(stateFilePath)) {
+      try {
+        const raw = fs.readFileSync(stateFilePath, "utf-8");
+        const parsed = JSON.parse(raw) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          current = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // 解析失败：保留原文件备份，从空对象开始追加 last_run_*
+        // 不抛错——pipeline 不应因 state 文件损坏而中断
+      }
+    }
+    const merged: Record<string, unknown> = { ...current };
+    if (updates.last_run_started !== undefined) {
+      merged.last_run_started = updates.last_run_started;
+    }
+    if (updates.last_run_finished !== undefined) {
+      merged.last_run_finished = updates.last_run_finished;
+    }
+    if (updates.last_run_status !== undefined) {
+      merged.last_run_status = updates.last_run_status;
+    }
+    if (updates.last_run_error !== undefined) {
+      merged.last_run_error = updates.last_run_error;
+    }
+    if (updates.last_run_step !== undefined) {
+      merged.last_run_step = updates.last_run_step;
+    }
+    fs.writeFileSync(stateFilePath, JSON.stringify(merged, null, 2), "utf-8");
+  } catch {
+    // 全部异常吞掉：state 文件写入失败不应阻塞 pipeline spawn / API 响应
+  }
+}
+
+// 4 个 state 文件 → ActivityItem.type 映射
+const STATE_FILE_TO_TYPE = {
+  [DEEP_RUN_STATE_FILE]: "coordinator",
+  [PIPELINE_STATE_FILE]: "article_pipeline",
+  [NOTION_FINISHED_STATE]: "notion_upload",
+  [AUTO_RUN_STATE_FILE]: "auto_run",
+} as const;
+
+// 每个 type 对应的人类可读标题
+const ACTIVITY_TITLE: Record<string, string> = {
+  coordinator: "Coordinator deep-batch run",
+  article_pipeline: "Article pipeline run",
+  notion_upload: "Notion upload run",
+  auto_run: "Auto pipeline run",
+};
+
+// 从 state 文件 record 中提取 last_run_finished / last_run / status / step / error
+function extractRunStateFields(
+  raw: Record<string, unknown>,
+): {
+  timestamp: string | null;
+  status: string | null;
+  step: string | null;
+  error: string | null;
+} {
+  // 优先用 last_run_finished（Stage 4 新增字段）；fallback 顺序：
+  //   .deep-run-state.json 有 last_run（旧字段）
+  //   auto_run_state.json 有 last_run
+  const finished = typeof raw.last_run_finished === "string" ? raw.last_run_finished : null;
+  const lastRun = typeof raw.last_run === "string" ? raw.last_run : null;
+  const started = typeof raw.last_run_started === "string" ? raw.last_run_started : null;
+  // 时间戳选取优先级：finished > last_run > started
+  const timestamp = finished || lastRun || started;
+
+  // status 字段名可能为 last_run_status（新）或 status（auto_run 旧字段）
+  const status =
+    typeof raw.last_run_status === "string"
+      ? raw.last_run_status
+      : typeof raw.status === "string"
+        ? raw.status
+        : null;
+
+  const step =
+    typeof raw.last_run_step === "string"
+      ? raw.last_run_step
+      : typeof raw.step === "string"
+        ? raw.step
+        : null;
+
+  const error =
+    typeof raw.last_run_error === "string"
+      ? raw.last_run_error
+      : typeof raw.error === "string"
+        ? raw.error
+        : null;
+
+  return { timestamp, status, step, error };
+}
+
+// 将 status 字符串映射为 ActivityAction（DB 真值 schema 仍用 action 字段）
+function statusToAction(status: string | null): "started" | "completed" | "failed" | "updated" {
+  if (!status) return "updated";
+  const s = status.toLowerCase();
+  if (s === "success" || s === "completed" || s === "done") return "completed";
+  if (s === "failed" || s === "error") return "failed";
+  if (s === "running") return "started";
+  return "updated";
+}
+
+/**
+ * Stage 4：fs 模式下从 4 个 state 文件派生 Activity 列表，解决 B-ACT-001。
+ *
+ * 每个 state 文件提取 last_run_finished（或 fallback last_run / last_run_started）
+ * + last_run_status + step，合并成 ActivityItem[]，按 timestamp 倒序排序，取前 limit 条。
+ *
+ * 找不到字段时跳过该文件，不抛错。
+ */
+export function listFsActivities(limit: number = 20): { items: ActivityItem[]; total: number } {
+  const items: ActivityItem[] = [];
+
+  for (const [filePath, type] of Object.entries(STATE_FILE_TO_TYPE)) {
+    try {
+      if (!fs.existsSync(filePath)) continue;
+      const raw = JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+      const record = raw as Record<string, unknown>;
+      const extracted = extractRunStateFields(record);
+      if (!extracted.timestamp) continue;
+
+      const action = statusToAction(extracted.status);
+      const title = ACTIVITY_TITLE[type] || String(type);
+
+      // 错误信息拼到 message 里方便 UI 直接展示
+      const message = extracted.error
+        ? `${title} — ${action} (${extracted.error.slice(0, 80)})`
+        : `${title} — ${action}`;
+
+      items.push({
+        id: `fs_${type}_${extracted.timestamp}`,
+        type: type as ActivityItem["type"],
+        action,
+        message,
+        timestamp: extracted.timestamp,
+        // Stage 4 新增字段：方便 UI / 测试脚本直接读 status / title / step
+        status: extracted.status || undefined,
+        title,
+        step: extracted.step || undefined,
+        metadata: {
+          source: "fs-state",
+          file: path.basename(filePath),
+          error: extracted.error || undefined,
+          step: extracted.step || undefined,
+        },
+      });
+    } catch {
+      // 单个文件异常不影响其他文件派生
+      continue;
+    }
+  }
+
+  // 按时间戳倒序（新的在前）；非法时间戳排末尾
+  items.sort((a, b) => {
+    const ta = new Date(a.timestamp).getTime();
+    const tb = new Date(b.timestamp).getTime();
+    if (isNaN(ta) && isNaN(tb)) return 0;
+    if (isNaN(ta)) return 1;
+    if (isNaN(tb)) return -1;
+    return tb - ta;
+  });
+
+  const total = items.length;
+  return { items: items.slice(0, limit), total };
 }
 
 // ─────────────────────────────────────────────

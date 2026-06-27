@@ -97,7 +97,18 @@ export interface RettiwtStatus {
   checkedAt: string;
 }
 
-export type ActivityType = "sync" | "read" | "report" | "article" | "setting";
+// Stage 4：fs 派生活动事件新增 4 种 type（来自 state 文件 last_run_* 字段）
+// 原 5 种 type（sync/read/report/article/setting）保留，DB 真值模式仍使用
+export type ActivityType =
+  | "sync"
+  | "read"
+  | "report"
+  | "article"
+  | "setting"
+  | "coordinator"
+  | "article_pipeline"
+  | "notion_upload"
+  | "auto_run";
 export type ActivityAction = "started" | "completed" | "failed" | "updated";
 
 export interface ActivityItem {
@@ -107,6 +118,10 @@ export interface ActivityItem {
   message: string;
   metadata?: Record<string, unknown>;
   timestamp: string;
+  // Stage 4：fs 派生活动事件附加字段（DB 模式可留空）
+  step?: string;                       // auto_run_state 的 step（sync/process/upload/done）
+  status?: string;                     // last_run_status 原值（success/failed/running）
+  title?: string;                      // 人类可读标题（如 "Coordinator deep-batch run"）
 }
 
 // ─────────────────────────────────────────────

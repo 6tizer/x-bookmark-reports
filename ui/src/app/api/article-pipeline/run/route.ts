@@ -10,6 +10,7 @@ import * as path from "path";
 import { createInterface } from "readline";
 import { getRepoRoot } from "@/lib/repo-root";
 import { createLog } from "@/lib/db";
+import { updateRunState } from "@/lib/fs-data";
 import type { ApiResponse } from "@/types/api";
 
 export interface PipelineRunResponse {
@@ -140,6 +141,13 @@ export async function POST(
     }
 
     const startedAt = new Date().toISOString();
+    // Stage 4：spawn 后立即写 last_run_started
+    const articlePipelineStatePath = path.join(repoRoot, "output", ".article-pipeline-state.json");
+    updateRunState(articlePipelineStatePath, {
+      last_run_started: startedAt,
+      last_run_status: "running",
+    });
+
     const child = spawn(py, args, {
       cwd: repoRoot,
       detached: true,
@@ -148,6 +156,24 @@ export async function POST(
     });
 
     pipeOutputToLogger(child, "article_pipeline");
+
+    // Stage 4：监听 exit / error 事件，写 last_run_finished + last_run_status
+    child.on("exit", (code: number | null) => {
+      const finishedAt = new Date().toISOString();
+      updateRunState(articlePipelineStatePath, {
+        last_run_finished: finishedAt,
+        last_run_status: code === 0 ? "success" : "failed",
+      });
+    });
+    child.on("error", (err: Error) => {
+      const finishedAt = new Date().toISOString();
+      updateRunState(articlePipelineStatePath, {
+        last_run_finished: finishedAt,
+        last_run_status: "failed",
+        last_run_error: err.message,
+      });
+    });
+
     child.unref();
 
     return NextResponse.json({
