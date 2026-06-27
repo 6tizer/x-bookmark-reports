@@ -14,12 +14,10 @@ import { usePipeline } from "@/hooks/usePipeline";
 export default function SyncPage() {
   const {
     currentOperation,
-    history,
     isRunning,
     triggerSyncBookmarks,
     triggerArticlePipeline,
     triggerNotionUpload,
-    clearHistory,
     clearCurrentOperation,
   } = usePipeline();
 
@@ -49,7 +47,7 @@ export default function SyncPage() {
           onStop={clearCurrentOperation}
         />
 
-        <PipelineHistory history={history} onClear={clearHistory} />
+        <PipelineHistory />
       </div>
     </ClientLayout>
   );

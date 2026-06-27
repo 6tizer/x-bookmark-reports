@@ -95,7 +95,6 @@ export function PipelineActions({
   currentType,
 }: PipelineActionsProps) {
   const [syncLimit, setSyncLimit] = useState("");
-  const [syncResume, setSyncResume] = useState(false);
 
   const [pipelineLimit, setPipelineLimit] = useState("");
   const [pipelineResume, setPipelineResume] = useState(true);
@@ -117,7 +116,6 @@ export function PipelineActions({
           onTrigger={() =>
             onTriggerSyncBookmarks({
               limit: syncLimit ? Number(syncLimit) : undefined,
-              resume: syncResume || undefined,
             })
           }
         >
@@ -132,15 +130,6 @@ export function PipelineActions({
                 placeholder="all"
                 className="w-20 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
               />
-            </label>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={syncResume}
-                onChange={(e) => setSyncResume(e.target.checked)}
-                className="rounded"
-              />
-              Resume
             </label>
           </div>
         </ActionCard>

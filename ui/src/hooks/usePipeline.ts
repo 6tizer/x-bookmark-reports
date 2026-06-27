@@ -1,14 +1,10 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useState } from "react";
 import type { PipelineOperation } from "@/types/api";
-
-const HISTORY_KEY = "pipeline-operation-history";
-const MAX_HISTORY = 50;
 
 interface UsePipelineReturn {
   currentOperation: PipelineOperation | null;
-  history: PipelineOperation[];
   isRunning: boolean;
 
   triggerSyncBookmarks: (opts?: {
@@ -27,65 +23,16 @@ interface UsePipelineReturn {
     file?: string;
     limit?: number;
   }) => Promise<void>;
-  clearHistory: () => void;
   // spawn 后保留 currentOperation 让 SyncTerminal 持续订阅 SSE；
   // 用户手动 clear 或新 trigger 时才清空
   clearCurrentOperation: () => void;
 }
 
-function loadHistory(): PipelineOperation[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as PipelineOperation[];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(items: PipelineOperation[]) {
-  try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY)));
-  } catch {
-    // localStorage full or unavailable — ignore
-  }
-}
-
 export function usePipeline(): UsePipelineReturn {
   const [currentOperation, setCurrentOperation] =
     useState<PipelineOperation | null>(null);
-  const [history, setHistory] = useState<PipelineOperation[]>([]);
-  const mounted = useRef(false);
 
-  // Load history from localStorage on mount
-  useEffect(() => {
-    setHistory(loadHistory());
-    mounted.current = true;
-  }, []);
-
-  const addToHistory = useCallback(
-    (op: PipelineOperation) => {
-      setHistory((prev) => {
-        const next = [op, ...prev].slice(0, MAX_HISTORY);
-        saveHistory(next);
-        return next;
-      });
-    },
-    []
-  );
-
-  const clearHistory = useCallback(() => {
-    setHistory([]);
-    try {
-      localStorage.removeItem(HISTORY_KEY);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // 手动清除 currentOperation（让 SyncTerminal 关闭 SSE）。
-  // 不影响 history（spawn 时已 addToHistory）。
+  // 手动清除 currentOperation（让 SyncTerminal 关闭 SSE）
   const clearCurrentOperation = useCallback(() => {
     setCurrentOperation(null);
   }, []);
@@ -110,44 +57,22 @@ export function usePipeline(): UsePipelineReturn {
         const json = await res.json();
 
         if (!json.success) {
-          const failed: PipelineOperation = {
-            ...op,
-            status: "failed",
-            completedAt: new Date().toISOString(),
-            error: json.error?.message ?? "Unknown error",
-          };
           setCurrentOperation(null);
-          addToHistory(failed);
           return;
         }
 
+        // 保留 currentOperation 让 SyncTerminal 持续订阅 SSE 直到用户手动 clear
         const updated: PipelineOperation = {
           ...op,
           pid: json.data?.pid,
           command: json.data?.command ?? [],
         };
-        // 保留 currentOperation 让 SyncTerminal 持续订阅 SSE 直到用户手动 clear
         setCurrentOperation(updated);
-
-        // spawn 成功即记入 history（保留原语义，但 currentOperation 不清空）
-        const completed: PipelineOperation = {
-          ...updated,
-          status: "completed",
-          completedAt: new Date().toISOString(),
-        };
-        addToHistory(completed);
-      } catch (err) {
-        const failed: PipelineOperation = {
-          ...op,
-          status: "failed",
-          completedAt: new Date().toISOString(),
-          error: err instanceof Error ? err.message : "Unknown error",
-        };
+      } catch {
         setCurrentOperation(null);
-        addToHistory(failed);
       }
     },
-    [addToHistory]
+    []
   );
 
   const triggerArticlePipeline = useCallback(
@@ -182,14 +107,7 @@ export function usePipeline(): UsePipelineReturn {
         const json = await res.json();
 
         if (!json.success) {
-          const failed: PipelineOperation = {
-            ...op,
-            status: "failed",
-            completedAt: new Date().toISOString(),
-            error: json.error?.message ?? "Unknown error",
-          };
           setCurrentOperation(null);
-          addToHistory(failed);
           return;
         }
 
@@ -198,27 +116,12 @@ export function usePipeline(): UsePipelineReturn {
           pid: json.data?.pid,
           command: json.data?.command ?? [],
         };
-        // 保留 currentOperation 让 SyncTerminal 持续订阅 SSE
         setCurrentOperation(updated);
-
-        const completed: PipelineOperation = {
-          ...updated,
-          status: "completed",
-          completedAt: new Date().toISOString(),
-        };
-        addToHistory(completed);
-      } catch (err) {
-        const failed: PipelineOperation = {
-          ...op,
-          status: "failed",
-          completedAt: new Date().toISOString(),
-          error: err instanceof Error ? err.message : "Unknown error",
-        };
+      } catch {
         setCurrentOperation(null);
-        addToHistory(failed);
       }
     },
-    [addToHistory]
+    []
   );
 
   const triggerNotionUpload = useCallback(
@@ -245,14 +148,7 @@ export function usePipeline(): UsePipelineReturn {
         const json = await res.json();
 
         if (!json.success) {
-          const failed: PipelineOperation = {
-            ...op,
-            status: "failed",
-            completedAt: new Date().toISOString(),
-            error: json.error?.message ?? "Unknown error",
-          };
           setCurrentOperation(null);
-          addToHistory(failed);
           return;
         }
 
@@ -261,37 +157,20 @@ export function usePipeline(): UsePipelineReturn {
           pid: json.data?.pid,
           command: json.data?.command ?? [],
         };
-        // 保留 currentOperation 让 SyncTerminal 持续订阅 SSE
         setCurrentOperation(updated);
-
-        const completed: PipelineOperation = {
-          ...updated,
-          status: "completed",
-          completedAt: new Date().toISOString(),
-        };
-        addToHistory(completed);
-      } catch (err) {
-        const failed: PipelineOperation = {
-          ...op,
-          status: "failed",
-          completedAt: new Date().toISOString(),
-          error: err instanceof Error ? err.message : "Unknown error",
-        };
+      } catch {
         setCurrentOperation(null);
-        addToHistory(failed);
       }
     },
-    [addToHistory]
+    []
   );
 
   return {
     currentOperation,
-    history,
     isRunning: currentOperation !== null,
     triggerSyncBookmarks,
     triggerArticlePipeline,
     triggerNotionUpload,
-    clearHistory,
     clearCurrentOperation,
   };
 }
