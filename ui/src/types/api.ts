@@ -338,38 +338,9 @@ export interface Report {
   urlSummary: UrlSummary[];
 }
 
-export interface ReportListQuery extends PaginationQuery {
-  bookmarkId?: string;
-  author?: string;
-  type?: ReportType;
-  search?: string;
-}
-
-export interface ReportVersion {
-  id: string;
-  reportId: string;
-  content: string;
-  wordCount: number;
-  createdAt: string;
-  createdBy?: string;
-}
-
-export interface UpdateReportRequest {
-  content: string;
-  saveMode: "overwrite" | "version";
-}
-
-export interface DiffResult {
-  additions: number;
-  deletions: number;
-  hunks: Array<{
-    oldStart: number;
-    oldLines: number;
-    newStart: number;
-    newLines: number;
-    lines: string[];
-  }>;
-}
+// 以下类型已随 /reports 路由删除（PR-3 死代码清理）一并移除：
+//   ReportListQuery / ReportVersion / UpdateReportRequest / DiffResult
+// 如需恢复，请回滚此 commit。
 
 // ─────────────────────────────────────────────
 // Articles

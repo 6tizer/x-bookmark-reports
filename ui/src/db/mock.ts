@@ -10,14 +10,12 @@ import {
   Bookmark,
   BookmarkDetail,
   SyncJob,
-  Report,
   Article,
   ActivityItem,
   LogEntry,
   Settings,
   DashboardStats,
   ArticleVersion,
-  ReportVersion,
 } from "@/types/api";
 
 // ─────────────────────────────────────────────
@@ -435,162 +433,6 @@ export const mockSyncJobs: SyncJob[] = [
 ];
 
 // ─────────────────────────────────────────────
-// Reports (6 items)
-// ─────────────────────────────────────────────
-
-const markdownReportBasic = `# 推文深度分析报告
-
-## 原文信息
-- **作者**: Yann LeCun (@ylecun)
-- **发布时间**: 2026-04-25
-- **原文链接**: https://x.com/ylecun/status/1892543876123456789
-
-## 互动数据
-| 指标 | 数值 |
-|------|------|
-| 点赞 | 4,523 |
-| 回复 | 389 |
-| 收藏 | 892 |
-| 浏览 | 234,000 |
-
-## 内容摘要
-Yann LeCun 阐述了为什么 LLM 不是通往人类水平智能的路径。核心观点：
-1. LLM 仅处理文本，缺乏对物理现实的 grounding
-2. 没有持久记忆或世界模型
-3. 无法规划或推理长期后果
-4. 因缺乏因果理解而产生幻觉
-
-## 外部链接
-- [Meta AI: Learning World Models](https://ai.meta.com/research/publications/learning-world-models)
-- [JEPA GitHub](https://github.com/facebookresearch/jepa)
-
-## 关键标签
-#LLM #WorldModels #AGI #MetaAI`;
-
-const markdownReportEnhanced = `# 推文深度分析报告（增强版）
-
-## 原文信息
-- **作者**: Yann LeCun (@ylecun)
-- **发布时间**: 2026-04-25
-- **原文链接**: https://x.com/ylecun/status/1892543876123456789
-- **作者背景**: Meta 首席 AI 科学家，图灵奖得主，深度学习先驱
-
-## 互动数据
-| 指标 | 数值 | 趋势 |
-|------|------|------|
-| 点赞 | 4,523 | ▲ 12% |
-| 回复 | 389 | ▲ 8% |
-| 收藏 | 892 | ▲ 23% |
-| 浏览 | 234,000 | ▲ 45% |
-
-## 内容深度分析
-
-### 核心论点
-LeCun 认为当前 LLM 存在四大根本局限：
-
-1. **缺乏物理 grounding**: 纯文本训练无法建立对物理世界的直觉理解
-2. **无持久世界模型**: 上下文窗口是临时记忆，非结构化知识存储
-3. **规划能力缺失**: 无法像人类一样进行多步前瞻规划
-4. **因果推理薄弱**: 相关不等于因果，导致系统性幻觉
-
-### 提出的解决方案
-- **JEPA 架构**: Joint Embedding Predictive Architecture
-- **目标驱动 AI**: 基于内在目标的自主系统
-- **分层规划**: 多时间尺度的决策机制
-
-## 社区反应分析
-- **支持方**: 78% 的回复认同需要新架构
-- **质疑方**: 15% 认为工具增强的 LLM 已足够
-- **中间派**: 7% 认为两者可互补
-
-## 技术影响评估
-- **短期**: 对当前 LLM 产品路线影响有限
-- **中期**: 可能推动多模态模型研发加速
-- **长期**: 若 JEPA 路线成功，可能重新定义 AGI 路径
-
-## 相关论文
-1. LeCun, Y. (2022). "A Path Towards Autonomous Machine Intelligence"
-2. Assran et al. (2023). "Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture"
-
-## 外部链接详情
-| URL | 标题 | 类型 | 摘要 |
-|-----|------|------|------|
-| ai.meta.com/... | Learning World Models | 研究文章 | Meta AI 世界模型研究项目介绍 |
-| github.com/... | JEPA | 代码仓库 | JEPA 开源实现，含训练脚本和预训练模型 |
-| arxiv.org/... | ArXiv Paper | 学术论文 | JEPA 架构的完整技术描述和实验结果 |
-
----
-*报告生成时间*: 2026-04-25 08:40:00
-*分析引擎*: x-tweet-reader v2.1 (Camoufox + x-tweet-fetcher)`;
-
-export const mockReports: Report[] = [
-  {
-    id: "rep_basic_001",
-    bookmarkId: "1892543876123456789",
-    type: "basic",
-    title: "Yann LeCun: LLM 局限性分析",
-    content: markdownReportBasic,
-    generatedAt: "2026-04-25T08:35:00.000Z",
-    wordCount: 1245,
-    urlSummary: [
-      { url: "https://ai.meta.com/research/publications/learning-world-models", title: "Meta AI: Learning World Models", category: "article" },
-      { url: "https://github.com/facebookresearch/jepa", title: "JEPA GitHub Repository", category: "code" },
-    ],
-  },
-  {
-    id: "rep_enhanced_001",
-    bookmarkId: "1892543876123456789",
-    type: "enhanced",
-    title: "Yann LeCun: LLM 不是 AGI 路径（增强分析）",
-    content: markdownReportEnhanced,
-    generatedAt: "2026-04-25T08:40:00.000Z",
-    wordCount: 3420,
-    urlSummary: [
-      { url: "https://ai.meta.com/research/publications/learning-world-models", title: "Meta AI: Learning World Models", category: "article" },
-      { url: "https://github.com/facebookresearch/jepa", title: "JEPA GitHub Repository", category: "code" },
-      { url: "https://arxiv.org/abs/2401.12345", title: "ArXiv: JEPA Paper", category: "article" },
-    ],
-  },
-  {
-    id: "rep_basic_002",
-    bookmarkId: "1893001122334455667",
-    type: "basic",
-    title: "Andrej Karpathy: 计算机视觉现状",
-    content: "# 计算机视觉现状 2026\n\n## 原文信息\n- **作者**: Andrej Karpathy\n- **发布时间**: 2026-04-24\n\n## 互动数据\n| 指标 | 数值 |\n|------|------|\n| 点赞 | 8,901 |\n| 回复 | 567 |\n| 收藏 | 2,103 |\n| 浏览 | 567,000 |\n\n## 核心内容\nKarpathy 深入分析了多模态学习、实时 3D 重建和神经渲染的最新进展...",
-    generatedAt: "2026-04-24T14:20:00.000Z",
-    wordCount: 2100,
-    urlSummary: [
-      { url: "https://karpathy.ai/blog/cv-2026", title: "The State of CV 2026", category: "article" },
-    ],
-  },
-  {
-    id: "rep_enhanced_002",
-    bookmarkId: "1893001122334455667",
-    type: "enhanced",
-    title: "Andrej Karpathy: CV 2026 增强分析",
-    content: "# 计算机视觉现状 2026（增强版）\n\n## 多模态学习进展\n...详细技术分析...",
-    generatedAt: "2026-04-24T14:25:00.000Z",
-    wordCount: 5600,
-    urlSummary: [
-      { url: "https://karpathy.ai/blog/cv-2026", title: "The State of CV 2026", category: "article" },
-      { url: "https://github.com/karpathy/minbpe", title: "minbpe", category: "code" },
-    ],
-  },
-  {
-    id: "rep_basic_003",
-    bookmarkId: "1890888777666555444",
-    type: "basic",
-    title: "Lilian Weng: RL 奖励破解综述",
-    content: "# Reward Hacking in RL\n\n## 核心概念\n奖励破解指智能体找到非预期的方式最大化奖励信号...",
-    generatedAt: "2026-04-19T12:35:00.000Z",
-    wordCount: 3200,
-    urlSummary: [
-      { url: "https://lilianweng.github.io/posts/2026-04-19-reward-hacking", title: "Reward Hacking Survey", category: "article" },
-    ],
-  },
-];
-
-// ─────────────────────────────────────────────
 // Articles (4 items)
 // ─────────────────────────────────────────────
 
@@ -747,10 +589,7 @@ export const mockSettings: Settings = {
 // Versions
 // ─────────────────────────────────────────────
 
-export const mockReportVersions: ReportVersion[] = [
-  { id: "ver_001", reportId: "rep_basic_001", content: markdownReportBasic, wordCount: 1200, createdAt: "2026-04-25T08:35:00.000Z" },
-  { id: "ver_002", reportId: "rep_basic_001", content: markdownReportBasic + "\n\n## 新增: 社区反馈\n...", wordCount: 1245, createdAt: "2026-04-25T10:00:00.000Z" },
-];
+// mockReportVersions 已随 /reports 路由删除（PR-3 死代码清理）移除。
 
 export const mockArticleVersions: ArticleVersion[] = [
   { id: "ver_001", articleId: "art_001", title: "LLM 局限性初稿", content: "...初稿内容...", wordCount: 2000, createdAt: "2026-04-25T10:00:00.000Z", author: "AI Agent" },
@@ -765,22 +604,8 @@ export const mockArticleVersions: ArticleVersion[] = [
 export const getBookmarkById = (id: string): Bookmark | undefined =>
   mockBookmarks.find((b) => b.id === id);
 
-export const getReportById = (id: string): Report | undefined =>
-  mockReports.find((r) => r.id === id);
-
 export const getArticleById = (id: string): Article | undefined =>
   mockArticles.find((a) => a.id === id);
 
 export const getSyncJobById = (id: string): SyncJob | undefined =>
   mockSyncJobs.find((s) => s.id === id);
-
-export const getBookmarkReports = (bookmarkId: string): Report[] =>
-  mockReports.filter((r) => r.bookmarkId === bookmarkId);
-
-export const getReportsForBookmark = (bookmarkId: string): { basic?: Report; enhanced?: Report } => {
-  const reports = getBookmarkReports(bookmarkId);
-  return {
-    basic: reports.find((r) => r.type === "basic"),
-    enhanced: reports.find((r) => r.type === "enhanced"),
-  };
-};

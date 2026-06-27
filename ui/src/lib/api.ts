@@ -16,10 +16,6 @@ import type {
   SyncStartRequest,
   SyncStartResponse,
   SyncJob,
-  Report,
-  ReportListQuery,
-  UpdateReportRequest,
-  ReportVersion,
   Article,
   ArticleVersion,
   CreateArticleRequest,
@@ -43,19 +39,15 @@ import {
   mockBookmarks,
   mockBookmarkDetail,
   mockSyncJobs,
-  mockReports,
   mockArticles,
   mockActivities,
   mockLogs,
   mockSettings,
   mockDashboardStats,
-  mockReportVersions,
   mockArticleVersions,
   getBookmarkById,
-  getReportById,
   getArticleById,
   getSyncJobById,
-  getBookmarkReports,
 } from "@/db/mock";
 
 // ─────────────────────────────────────────────
@@ -266,16 +258,13 @@ export async function getBookmarkByIdAPI(id: string): Promise<BookmarkDetail> {
     await mockDelay(300);
     const bookmark = getBookmarkById(id);
     if (!bookmark) throw new ApiError("Bookmark not found", "NOT_FOUND", 404);
-    const reports = getBookmarkReports(id);
     return {
       ...bookmark,
       fullText: mockBookmarkDetail.fullText,
       replies: mockBookmarkDetail.replies,
       externalLinks: mockBookmarkDetail.externalLinks,
-      reports: {
-        basic: reports.find((r) => r.type === "basic"),
-        enhanced: reports.find((r) => r.type === "enhanced"),
-      },
+      // 旧 /reports 路由已废弃（PR-3 死代码清理），mock 分支不再回填 reports 字段
+      reports: {},
     };
   }
   return api.get<BookmarkDetail>(`/bookmarks/${id}`);
@@ -423,65 +412,6 @@ export function connectSyncSSE(jobId: string, onEvent: (event: SSEEvent) => void
     es.close();
   });
   return () => es.close();
-}
-
-// ─────────────────────────────────────────────
-// Reports
-// ─────────────────────────────────────────────
-
-export async function getReports(query?: ReportListQuery): Promise<PaginatedResponse<Report>> {
-  if (USE_MOCK) {
-    await mockDelay(300);
-    let items = [...mockReports];
-    if (query?.bookmarkId) items = items.filter((r) => r.bookmarkId === query.bookmarkId);
-    if (query?.author) items = items.filter((r) => r.title.toLowerCase().includes(query.author!.toLowerCase()));
-    if (query?.type) items = items.filter((r) => r.type === query.type);
-    if (query?.search) {
-      const q = query.search.toLowerCase();
-      items = items.filter((r) => r.title.toLowerCase().includes(q) || r.content.toLowerCase().includes(q));
-    }
-    return paginate(items, query?.page ?? 1, query?.limit ?? 20);
-  }
-  return api.get<PaginatedResponse<Report>>("/reports", query as Record<string, string | number>);
-}
-
-export async function getReportByIdAPI(id: string): Promise<Report> {
-  if (USE_MOCK) {
-    await mockDelay(300);
-    const report = getReportById(id);
-    if (!report) throw new ApiError("Report not found", "NOT_FOUND", 404);
-    return report;
-  }
-  return api.get<Report>(`/reports/${id}`);
-}
-
-export async function saveReport(id: string, request: UpdateReportRequest): Promise<{ id: string; version: number; updatedAt: string }> {
-  if (USE_MOCK) {
-    await mockDelay(400);
-    const report = getReportById(id);
-    if (report) report.content = request.content;
-    return { id, version: 1, updatedAt: new Date().toISOString() };
-  }
-  return api.put<{ id: string; version: number; updatedAt: string }>(`/reports/${id}`, request);
-}
-
-export async function getReportVersions(reportId: string): Promise<ReportVersion[]> {
-  if (USE_MOCK) {
-    await mockDelay(200);
-    return mockReportVersions.filter((v) => v.reportId === reportId);
-  }
-  return api.get<ReportVersion[]>(`/reports/${reportId}/versions`);
-}
-
-export async function exportReport(reportId: string, format: "md" | "pdf"): Promise<Blob> {
-  if (USE_MOCK) {
-    await mockDelay(500);
-    const report = getReportById(reportId);
-    if (!report) throw new ApiError("Report not found", "NOT_FOUND", 404);
-    return new Blob([report.content], { type: format === "md" ? "text/markdown" : "application/pdf" });
-  }
-  const res = await fetch(`${BASE_URL}/reports/${reportId}/export?format=${format}`);
-  return res.blob();
 }
 
 // ─────────────────────────────────────────────
