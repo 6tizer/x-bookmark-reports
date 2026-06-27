@@ -50,9 +50,6 @@ function statusLabel(s: ArticleStatus): string {
     written: "Written",
     uploaded: "Uploaded",
     failed: "Failed",
-    editing: "Editing",
-    reviewing: "Reviewing",
-    published: "Published",
   };
   return map[s] ?? s.replace(/_/g, " ");
 }

@@ -622,7 +622,8 @@ export async function publishArticle(id: string, format: "markdown" | "html" | "
     await mockDelay(500);
     const article = getArticleById(id);
     if (article) {
-      article.status = "published";
+      // fs-only 模式下不支持 published 状态，mock 路径标记为 uploaded（已上传 Notion）
+      article.status = "uploaded";
       article.publishedAt = new Date().toISOString();
     }
     return { url: `/articles/${id}.${format === "wechat" ? "html" : format}` };

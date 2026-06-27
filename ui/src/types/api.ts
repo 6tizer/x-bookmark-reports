@@ -375,17 +375,14 @@ export interface DiffResult {
 // Articles
 // ─────────────────────────────────────────────
 
-/** Article pipeline statuses + DB/editor legacy (editing/reviewing/published) */
+/** Article pipeline 状态（fs 数据层支持的 6 种；editing/reviewing/published 在 fs-only 模式下不产生） */
 export type ArticleStatus =
   | "draft"
   | "metadata_done"
   | "researched"
   | "written"
   | "uploaded"
-  | "failed"
-  | "editing"
-  | "reviewing"
-  | "published";
+  | "failed";
 export type ExportFormat = "markdown" | "html" | "wechat";
 
 export interface Article {

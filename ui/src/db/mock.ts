@@ -616,7 +616,7 @@ LLM 仅在文本上训练，从未接触过物理世界...
 ## 结论
 AGI 的实现需要新的架构范式，而非简单地扩大现有模型规模。
 `,
-    status: "published",
+    status: "uploaded",
     createdAt: "2026-04-25T10:00:00.000Z",
     updatedAt: "2026-04-26T14:30:00.000Z",
     publishedAt: "2026-04-26T15:00:00.000Z",
@@ -628,7 +628,7 @@ AGI 的实现需要新的架构范式，而非简单地扩大现有模型规模�
     reportId: "rep_enhanced_002",
     title: "2026 计算机视觉全景：多模态与实时 3D 重建",
     content: "# 2026 计算机视觉全景\n\n## 多模态学习的突破...",
-    status: "editing",
+    status: "written",
     createdAt: "2026-04-24T16:00:00.000Z",
     updatedAt: "2026-04-25T09:00:00.000Z",
     tags: ["cv", "multimodal", "3d"],
@@ -649,7 +649,7 @@ AGI 的实现需要新的架构范式，而非简单地扩大现有模型规模�
     reportId: "rep_enhanced_001",
     title: "Meta AI 世界模型研究：JEPA 架构技术解析",
     content: "# JEPA 架构技术解析\n\n## 背景...",
-    status: "reviewing",
+    status: "researched",
     createdAt: "2026-04-26T10:00:00.000Z",
     updatedAt: "2026-04-27T11:00:00.000Z",
     tags: ["jepa", "meta", "world-models"],
