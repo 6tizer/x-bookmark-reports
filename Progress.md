@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-06-27 — PR-1 Data Truthification（cursor/pr-1-data-truthification，已合并）
+
+### 实现的功能
+
+1. **数据契约 v3**：`twitter_data/bookmarks.json`（1584 条）作为书签真值源；fs-data join deep drafts（642）+ article-final（642）+ notion-finished（~642）派生 4 段生命周期 `pending / drafted / written / uploaded`。
+2. **Dashboard 6 卡 + 双进度条**：Bookmarks / Deep Drafts / Articles (Local) / In Notion / Pending Rewrite / Last Sync；rewrite + notionUpload 显示「本批 + 全局」双进度条，**默认展开**不再藏在节点详情后。
+3. **Bookmarks 列表 lifecycle**：5 选项过滤（All / 待生成报告 / 已生成报告 / 已成文 / 已上传 Notion）；Tweet 列消除「主推文/媒体」section header 占位；Tags 显示 article-final frontmatter 的 `tags`，最多 3 个 + 「+N」溢出。
+4. **Bookmark 详情**：纯 tweet ID URL（兼容旧 basename）；面包屑 + 主推文卡片 + 可折叠深度报告 + 3 跳转（Open on X / 查看成品文章 / Notion 已上传）。
+5. **Articles uploaded 状态升级**：fs-data 用 `notion-finished-state.json` 把 written → uploaded，642 篇 article 显示 Uploaded。
+6. **Articles 翻页 + Run 二次确认**：底部 Previous / Page N / Next；点 Written/Uploaded 状态的 Run 弹出 **in-page modal**（避开 Cursor 内置浏览器 `window.confirm` 拦截）。
+7. **Article 详情面包屑 + Toolbar 分组**：Save 与 Upload to Notion 之间加竖线 divider。
+8. **Settings 5 项 UX 修复**：Schedule 4 步管线清单（与 auto_run.sh 一致）+ LLM Tab 区分 .env 持久化与 localStorage 临时覆盖 + ToggleRow 统一组件 + Save 350ms min loading + Logs 筛选双行。
+9. **notion-stats .env 引号 bug 修复**：parseEnv 剥离首尾单/双引号，catch 加 console.error 暴露错误。
+10. **多代理工作流**：Commander/Reviewer (Claude 4.7 Opus) + Coder (GLM 5.2) + Tester (Composer 2.5 fast)，4 stage 每 stage Reviewer + Tester 双签。
+11. **PR-1 共 8 commits + 验收后 3 fix commits**：`e494381` Stage1 → `c699687` Stage2 → `fefafe7` Stage3 → `43e55b6` Stage4 → `29c217e` window.confirm→modal → `5e92cc6` 双进度条默认显示 → `5b16f74` Settings UX 5 项 → `6c0feaa` Toggle thumb 3px 内边距 → main 上 `notion-stats` 引号 fix。
+
+### 遇到的错误
+
+1. **Cursor 内置浏览器 window.confirm 不触发**：`window.confirm` 在 Cursor Simple Browser / 部分扩展环境下可能被静默拦截，导致 B-ARTC-RUN-CONFIRM 二次确认无法触发。改为受控 React modal + `data-testid="run-confirm-modal"`。
+2. **Dashboard 双进度条藏得太深**：原设计只在用户点节点圆形时才在详情面板展开，默认 4 节点全绿无法暴露「本批 100% / 全局 41%」差异。改为节点行下方加 always-visible 面板，仅渲染 `progressGlobal !== progress` 的阶段。
+3. **Toggle 视觉对齐问题**：thumb 16×16 在 36×20 椭圆里 ON 状态距右沿仅 4px，shadow 散开后视觉「贴边/挤出」。改为 14×14 + 上下左右 3px 对称内边距。
+4. **PR-1 merge 后 totalArticlesNotion=0 回归**：`.env` 用 `NOTION_TOKEN="ntn_xxx"`（带双引号），`notion-stats.ts` 的 `parseEnv` 直接取 `=` 之后字符串不去引号，发给 Notion API 是 `"ntn_xxx"`（含引号），401 unauthorized；catch 块静默吞错成 null，Dashboard 兜底为 0。修复 parseEnv 剥离首尾单/双引号 + catch 块加 console.error。
+5. **Schedule Tab pipeline steps 过时**：显示 3 步（缺 `sync_bookmarks.sh`），与 auto_run.sh 实际 4 步不一致。改为 4 步 + 中文注释。
+
+### 解决方案
+
+1. 不依赖浏览器全局 API，改用受控 React 组件；同时加 `data-run-button` / `data-article-status` 便于 e2e 排查。
+2. 默认渲染条件用 `progressGlobal !== progress` 过滤，避免 twitterSync / deepReports 无全局概念的两阶段冗余显示。
+3. 抽 `ToggleRow` 组件 + shrink-0 w-9 容器确保多处复用对齐严格一致；thumb 14×14 + 3px 对称内边距。
+4. parseEnv 与 dotenv/POSIX 习惯对齐；catch 块输出错误消息到 launchd stderr 日志，下次 Notion API 故障可直接 tail 看到。
+5. 与 `auto_run.sh` 实际执行顺序严格一致，每步加中文注释方便用户理解。
+
+---
+
 ## 2026-06-27 — 文档整理 PR（cursor/docs-cleanup-2026-06-27）
 
 ### 实现的功能

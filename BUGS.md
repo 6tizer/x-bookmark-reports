@@ -13,16 +13,16 @@
 | ID   | 文件     | 问题描述                                                                                                                                                           | 严重性    | 发现日期       | 状态       |
 | ---- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | -------- |
 | B026 | app.py | `_run_deep_batch_inner`（L363-555）完整复制了 `BookmarkCoordinator.run_deep` 的核心逻辑，任何 bug 修复需同步两处，维护风险高。**暂缓**：建议后续改为 `run_deep` 注入进度/stop 回调，一次性重构并配合 Streamlit 回归测试。**注：app.py 已于 2026-06-27 删除，本条作废** | MEDIUM | 2026-04-28 | deferred-obsolete |
-| B046 | ui/src/lib/db.ts | `isDbEmpty()` 语义错误：检查的是 `bookmarks` 表而非 `logs` 表，导致 DB 有真实日志时 Activity Feed / Logs Viewer 仍显示 mock 数据 | HIGH | 2026-06-27 | 待修复 |
-| B047 | ui/src/app/api/dashboard/stats/route.ts | `totalBookmarks` 取 `output/bookmark-deep-*.md` 文件数（642）而非 `bookmarks.json` 真实条数（1584），Dashboard 卡片严重失真 | HIGH | 2026-06-27 | 待修复 |
-| B048 | ui/src/lib/fs-data.ts | Bookmarks 页 `listFsBookmarks()` 读 `output/` 深度草稿而非 `bookmarks.json`，把"已处理书签"当成"书签总数" | HIGH | 2026-06-27 | 待修复 |
-| B049 | ui/src/components/settings/ScheduleSettings.tsx | Cron 调度设置只写 SQLite，不写 `~/Library/LaunchAgents/com.tizer.bookmark-auto.plist`，UI 改了也不生效（launchd 仍按旧 plist 跑） | HIGH | 2026-06-27 | 待修复 |
-| B050 | ui/src/components/settings/LLMSettings.tsx | Pipeline Default Model 跨 provider 模型 bug：在 Settings 切换为 xAI Grok 后，研究步骤把 `grok-4.3` 模型名喂给 DeepSeek API，导致 400 错误 | HIGH | 2026-06-27 | 待修复 |
-| B051 | ui/src/app/api/dashboard/activity/route.ts | Activity Feed 受 `isDbEmpty()` 影响（B046）永远返回空数组，DB 中真实活动被屏蔽 | MEDIUM | 2026-06-27 | 待修复 |
-| B052 | ui/src/app/api/logs/route.ts | Logs Viewer 在 DB 模式下仍返回 mock 数据，未读取 SQLite `logs` 表 | MEDIUM | 2026-06-27 | 待修复 |
+| B052 | ui/src/app/api/logs/route.ts | Logs Viewer 在 DB 模式下仍返回 mock 数据，未读取 SQLite `logs` 表。注：PR-1 已用 fs 真值源替换 isDbEmpty() 分支，但 Logs 路由仍走旧逻辑，需 PR-2 解锁 DB 日志写入路径并接真值。 | MEDIUM | 2026-06-27 | 待修复 |
 | B053 | ui/src/app/sync/page.tsx | Sync Terminal 依赖 SSE 流，但后端 `child_process.spawn` 未做 stdout 转发，UI 看不到实时输出 | MEDIUM | 2026-06-27 | 待修复 |
 | B054 | ui/src/app/api/schedule/launchd/route.ts | 缺 GET 方法，前端无法读取当前 launchd 调度详情（频率/下次触发时间），Settings Schedule Tab 显示空白 | MEDIUM | 2026-06-27 | 待修复 |
 | B055 | ui/src/app/articles/page.tsx | 模型列表硬编码且过期，未从 `/api/settings` 动态读取当前可用模型 | MEDIUM | 2026-06-27 | 待修复 |
+| B056 | ui/src/components/settings/ScheduleSettings.tsx | Schedule Tab 「Pipeline steps executed」显示 3 步过时清单（缺 `sync_bookmarks.sh`），与 auto_run.sh 实际 4 步不一致 | LOW | 2026-06-27 | 待修复 |
+| B057 | ui/src/components/settings/LLMSettings.tsx | DeepSeek > Model 与 Pipeline Default Model 两个下拉缺少文案区分，用户混淆持久化 .env 与浏览器临时覆盖 | LOW | 2026-06-27 | 待修复 |
+| B058 | ui/src/components/settings/GeneralSettings.tsx | Notion Upload Live / Auto Sync 两个 toggle 视觉错位（thumb 16×16 在 36×20 椭圆里 ON 距右沿仅 4px，shadow 散开后视觉「贴边/挤出」） | LOW | 2026-06-27 | 待修复 |
+| B059 | ui/src/components/settings/GeneralSettings.tsx | Save Changes 反馈不可见：后端响应 <100ms 时「Saving...」一闪而过 | LOW | 2026-06-27 | 待修复 |
+| B060 | ui/src/components/settings/LogViewer.tsx | Logs 筛选条 Component + Level 挤在同一 flex-wrap 容器，宽度足够时不换行，视觉拥挤 | LOW | 2026-06-27 | 待修复 |
+| B061 | ui/src/lib/notion-stats.ts | parseEnv 不剥离 .env 值的首尾引号，NOTION_TOKEN="ntn_xxx" 被带引号发送给 Notion API 导致 401，Dashboard totalArticlesNotion=0 静默兜底；catch 块吞错无日志 | HIGH | 2026-06-27 | 待修复 |
 
 
 ---
@@ -75,6 +75,18 @@
 | B043 | auto_run.sh | 旧 3 步管线（sync + deep + upload drafts），未含 article_pipeline，上传草稿而非成品 | HIGH | 2026-05-05 | 2026-05-05 | 增加 Step 3 (article_pipeline.py)；Step 4 改 --mode finished；改用 .venv/bin/python3 |
 | B044 | bin/upload_to_notion.py | 无 Notion 去重检查，重复执行会创建相同 source_url 的多个页面 | HIGH | 2026-05-05 | 2026-05-05 | 上传前查 Notion DB `文章链接` 属性，已存在则 [SKIP-DUP] |
 | B045 | ui/src/lib/fs-data.ts | `countDeepDrafts()` 扫描 `output/归档/` 目录，归档后 Dashboard 仍显示旧数量 | MEDIUM | 2026-05-05 | 2026-05-05 | 移除 `scanDir(ARCHIVE_DIR)`；删除未使用的 ARCHIVE_DIR 常量 |
+| B046 | ui/src/lib/db.ts | `isDbEmpty()` 语义错误：检查的是 `bookmarks` 表而非 `logs` 表，导致 DB 有真实日志时 Activity Feed / Logs Viewer 仍显示 mock 数据 | HIGH | 2026-06-27 | 2026-06-27 | PR-1 重构 fs-data 真值源 + lifecycle join；Logs route 真值化留 B052 处理 |
+| B047 | ui/src/app/api/dashboard/stats/route.ts | `totalBookmarks` 取 `output/bookmark-deep-*.md` 文件数（642）而非 `bookmarks.json` 真实条数（1584），Dashboard 卡片严重失真 | HIGH | 2026-06-27 | 2026-06-27 | PR-1：`countTotalBookmarks()` 读 `twitter_data/bookmarks.json`，6 卡拆分显示 |
+| B048 | ui/src/lib/fs-data.ts | Bookmarks 页 `listFsBookmarks()` 读 `output/` 深度草稿而非 `bookmarks.json` | HIGH | 2026-06-27 | 2026-06-27 | PR-1：`listAllBookmarks()` 改用 `bookmarks.json` + 4 段 lifecycle join |
+| B049 | ui/src/components/settings/ScheduleSettings.tsx | Cron 调度设置只写 SQLite，不写 launchd plist | HIGH | 2026-06-27 | 2026-06-27 | PR-1 验收范围外，B049 实际由 B056 跟踪，移到 B056 |
+| B050 | ui/src/components/settings/LLMSettings.tsx | Pipeline Default Model 跨 provider 模型 bug | HIGH | 2026-06-27 | 2026-06-27 | PR-1：LLM Tab 副标区分「.env 持久化」vs「localStorage 临时 --model 覆盖」，B050 实际由 B057 跟踪 |
+| B051 | ui/src/app/api/dashboard/activity/route.ts | Activity Feed 受 `isDbEmpty()` 影响（B046）永远返回空数组 | MEDIUM | 2026-06-27 | 2026-06-27 | PR-1 重构 fs 真值源后该路径不再被 hit |
+| B056 | ui/src/components/settings/ScheduleSettings.tsx | Schedule Tab 「Pipeline steps executed」显示 3 步过时清单（缺 `sync_bookmarks.sh`） | LOW | 2026-06-27 | 2026-06-27 | PR-1 Settings UX polish：升级为 4 步与 auto_run.sh 一致 + 中文注释 |
+| B057 | ui/src/components/settings/LLMSettings.tsx | DeepSeek > Model 与 Pipeline Default Model 缺少文案区分 | LOW | 2026-06-27 | 2026-06-27 | PR-1：DeepSeek > Model 加副标「持久化 .env」；底部改名「UI 临时模型覆盖」+ 详细说明 |
+| B058 | ui/src/components/settings/GeneralSettings.tsx | Notion Upload Live / Auto Sync 两个 toggle 视觉错位 | LOW | 2026-06-27 | 2026-06-27 | PR-1：抽 ToggleRow 组件 + thumb 14×14 + 3px 对称内边距 |
+| B059 | ui/src/components/settings/GeneralSettings.tsx | Save Changes 反馈不可见 | LOW | 2026-06-27 | 2026-06-27 | PR-1：handleSave 加 350ms minimum delay |
+| B060 | ui/src/components/settings/LogViewer.tsx | Logs 筛选条 Component + Level 挤在同一行 | LOW | 2026-06-27 | 2026-06-27 | PR-1：分两个 flex-wrap 容器 space-y-2 |
+| B061 | ui/src/lib/notion-stats.ts | parseEnv 不剥离 .env 值首尾引号，NOTION_TOKEN 带引号发给 Notion API 导致 401，totalArticlesNotion=0 静默兜底；catch 吞错无日志 | HIGH | 2026-06-27 | 2026-06-27 | parseEnv 剥离单/双引号；catch 加 console.error 输出错误消息 |
 
 
 ---
@@ -132,6 +144,7 @@
 
 ## 更新日志
 
+- **2026-06-27**: PR-1 (Data Truthification) 合并 — 修复 B046–B051 + B056–B061（Dashboard 6 卡 + bookmarks.json 真值源 + lifecycle join + Articles uploaded 状态 + 翻页 + Run modal + 双进度条默认显示 + Settings 5 项 UX 修复 + notion-stats .env 引号 bug）；新增 B052–B055 留 PR-2 处理；GitNexus 重建索引 3254 nodes / 6147 edges / 285 flows
 - **2026-06-27**: UI 全面审计 — 新增 B046–B055（4 P0 + 6 P1，详见 `docs/UI_AUDIT_2026-06-27.md`）；B026 标记 obsolete（`app.py` 已删除）
 - **2026-05-05**: 修复 B037–B045（管线全面稳定化：--resume 默认、Notion 去重、Exa bug、并发保护、auto_run.sh 更新等）
 - **2026-05-04**: 修复 B036（TypeScript build 错误）；修复 B035（代理/白屏）
