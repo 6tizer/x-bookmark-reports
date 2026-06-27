@@ -32,10 +32,14 @@ export default function SettingsPage() {
   const {
     logs,
     isLoading: logsLoading,
+    total: logsTotal,
+    page: logsPage,
+    hasMore: logsHasMore,
     component,
     level,
     setComponent,
     setLevel,
+    setPage: setLogsPage,
     refresh,
   } = useLogs();
 
@@ -97,10 +101,14 @@ export default function SettingsPage() {
             <LogViewer
               logs={logs}
               isLoading={logsLoading}
+              total={logsTotal}
+              page={logsPage}
+              hasMore={logsHasMore}
               component={component}
               level={level}
               onComponentChange={setComponent}
               onLevelChange={setLevel}
+              onPageChange={setLogsPage}
               onRefresh={refresh}
             />
           )}

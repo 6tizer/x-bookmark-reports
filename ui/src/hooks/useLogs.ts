@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * useLogs — Log streaming
+ * useLogs — Log 分页 + 筛选
+ * 翻页模式：每页替换（不 append），配合 LogViewer 底部 Previous / Page N / Next UI。
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -40,11 +41,8 @@ export function useLogs(): UseLogsReturn {
         if (c) query.component = c;
         if (l) query.level = l;
         const res: PaginatedResponse<LogEntry> = await getLogs(query);
-        if (p === 1) {
-          setLogs(res.items);
-        } else {
-          setLogs((prev) => [...prev, ...res.items]);
-        }
+        // 翻页模式：每页替换 logs，不再 append（与 Articles 页一致）
+        setLogs(res.items);
         setTotal(res.total);
         setHasMore(res.hasMore);
       } finally {

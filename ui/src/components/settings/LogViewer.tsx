@@ -1,35 +1,68 @@
 "use client";
 
 /**
- * LogViewer — Filterable log table
+ * LogViewer — Filterable log table with pagination
+ *
+ * 关键改动（PR-2 Stage 2）：
+ * - Component 列表改为动态拉取 /api/logs/components，删除硬编码 dead category
+ * - Time 列显示完整日期 (toLocaleString)，不再只显示 HH:MM:SS
+ * - 底部新增翻页 UI：Showing N of total · Previous / Page N / Next
  */
 
+import { useEffect, useState } from "react";
 import { Filter, RefreshCw } from "lucide-react";
+import { api } from "@/lib/api";
 import type { LogEntry, LogLevel, LogComponent } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 interface LogViewerProps {
   logs: LogEntry[];
   isLoading: boolean;
+  total: number;
+  page: number;
+  hasMore: boolean;
   component: LogComponent | undefined;
   level: LogLevel | undefined;
   onComponentChange: (c: LogComponent | undefined) => void;
   onLevelChange: (l: LogLevel | undefined) => void;
+  onPageChange: (page: number) => void;
   onRefresh: () => void;
 }
 
-const components: LogComponent[] = ["sync", "x-reader", "x-tweet-reader", "agent", "system", "coordinator", "article_pipeline", "notion_upload"];
 const levels: LogLevel[] = ["info", "warn", "error"];
 
 export function LogViewer({
   logs,
   isLoading,
+  total,
+  page,
+  hasMore,
   component,
   level,
   onComponentChange,
   onLevelChange,
+  onPageChange,
   onRefresh,
 }: LogViewerProps) {
+  // 动态 component 列表：从 DB distinct 读取，避免硬编码 dead category
+  const [availableComponents, setAvailableComponents] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.get<{ components: string[] }>("/logs/components");
+        if (!cancelled) setAvailableComponents(data.components);
+      } catch (err) {
+        // 拉取失败时保留空数组，过滤条仅显示 "All"，不影响 logs 表格
+        console.error("[LogViewer] fetch components failed:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (isLoading && logs.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
@@ -48,7 +81,7 @@ export function LogViewer({
     <div className="space-y-3">
       {/* Filters — 强制两行：Component 与 Level/Refresh 分两行，避免按钮过多挤一行 */}
       <div className="space-y-2">
-        {/* Row 1: Component */}
+        {/* Row 1: Component（动态来自 DB，不再硬编码） */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
             <Filter size={12} />
@@ -62,10 +95,10 @@ export function LogViewer({
           >
             All
           </button>
-          {components.map((c) => (
+          {availableComponents.map((c) => (
             <button
               key={c}
-              onClick={() => onComponentChange(c)}
+              onClick={() => onComponentChange(c as LogComponent)}
               className={`rounded-md border border-border px-2 py-0.5 text-[11px] transition-colors ${
                 component === c ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
               }`}
@@ -132,7 +165,7 @@ export function LogViewer({
               logs.map((log) => (
                 <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors">
                   <td className="px-3 py-2 whitespace-nowrap text-[11px] text-muted-foreground font-mono">
-                    {new Date(log.timestamp).toLocaleTimeString()}
+                    {new Date(log.timestamp).toLocaleString()}
                   </td>
                   <td className="px-3 py-2">
                     <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium">
@@ -153,6 +186,32 @@ export function LogViewer({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* 翻页控件 — 仿 Articles 页：Showing N of total · Previous / Page N / Next */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          Showing {logs.length} of {total}
+        </p>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onPageChange(Math.max(1, page - 1))}
+            disabled={page <= 1}
+            className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50 transition-colors"
+          >
+            Previous
+          </button>
+          <span className="px-2 text-xs text-muted-foreground">Page {page}</span>
+          <button
+            type="button"
+            onClick={() => onPageChange(page + 1)}
+            disabled={!hasMore}
+            className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50 transition-colors"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );
