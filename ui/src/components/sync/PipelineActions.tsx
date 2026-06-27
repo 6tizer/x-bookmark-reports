@@ -52,7 +52,7 @@ function ActionCard({
   onTrigger: () => void;
   children: React.ReactNode;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const active = isRunning && currentType === type;
 
   return (

@@ -33,13 +33,6 @@ import type { Article, ArticleStatus, ArticleVersion } from "@/types/api";
 
 const ReactMarkdown = dynamic(() => import("react-markdown"), { ssr: false });
 
-const MODEL_OPTIONS: { value: string; label: string }[] = [
-  { value: "", label: "Default (env)" },
-  { value: "deepseek-chat", label: "DeepSeek Chat" },
-  { value: "deepseek-reasoner", label: "DeepSeek Reasoner" },
-  { value: "grok-2-latest", label: "xAI Grok" },
-];
-
 const PIPELINE_MODEL_STORAGE = "articlePipelineModel";
 
 function statusLabel(s: ArticleStatus): string {
@@ -66,6 +59,8 @@ export default function ArticleDetailPage() {
   const [versions, setVersions] = useState<ArticleVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const [pipelineModel, setPipelineModel] = useState("");
+  // 从 API 动态加载模型下拉选项（替代硬编码 MODEL_OPTIONS）
+  const [modelOptions, setModelOptions] = useState<{ value: string; label: string }[]>([]);
   const [pipelineBusy, setPipelineBusy] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -77,6 +72,25 @@ export default function ArticleDetailPage() {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  // 拉取 /api/settings/model-options 填充模型下拉
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/settings/model-options");
+        const json = await res.json();
+        if (!cancelled && json.success && Array.isArray(json.data?.options)) {
+          setModelOptions(json.data.options);
+        }
+      } catch {
+        /* 加载失败时保持空数组，下拉显示 Loading... */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const persistModel = (v: string) => {
@@ -254,11 +268,15 @@ export default function ArticleDetailPage() {
               onChange={(e) => persistModel(e.target.value)}
               className="h-7 rounded-md border border-border bg-background px-2 text-[11px] outline-none"
             >
-              {MODEL_OPTIONS.map((o) => (
-                <option key={o.value || "default"} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
+              {modelOptions.length === 0 ? (
+                <option disabled value="">Loading...</option>
+              ) : (
+                modelOptions.map((o) => (
+                  <option key={o.value || "default"} value={o.value}>
+                    {o.label}
+                  </option>
+                ))
+              )}
             </select>
             <button
               type="button"
@@ -289,65 +307,74 @@ export default function ArticleDetailPage() {
           </div>
 
           <div className="flex items-center gap-1 flex-wrap justify-end">
-            <div className="flex items-center rounded-md border border-border overflow-hidden">
+            {/* View 组：编辑视图切换 + 历史版本 */}
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">View</span>
+              <div className="flex items-center rounded-md border border-border overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("edit")}
+                  className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "edit" ? "bg-muted font-medium" : ""}`}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("split")}
+                  className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "split" ? "bg-muted font-medium" : ""}`}
+                >
+                  Split
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("preview")}
+                  className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "preview" ? "bg-muted font-medium" : ""}`}
+                >
+                  <Eye size={12} /> Preview
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setViewMode("edit")}
-                className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "edit" ? "bg-muted font-medium" : ""}`}
+                onClick={() => setShowVersions(!showVersions)}
+                className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] hover:bg-muted transition-colors"
               >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("split")}
-                className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "split" ? "bg-muted font-medium" : ""}`}
-              >
-                Split
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("preview")}
-                className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "preview" ? "bg-muted font-medium" : ""}`}
-              >
-                <Eye size={12} /> Preview
+                <History size={12} />
+                {versions.length}
+                <ChevronDown size={10} />
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowVersions(!showVersions)}
-              className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] hover:bg-muted transition-colors"
-            >
-              <History size={12} />
-              {versions.length}
-              <ChevronDown size={10} />
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || !canEditFinal}
-              title={!canEditFinal ? "Save available when article-final exists (written/uploaded)" : undefined}
-              className="flex h-7 items-center gap-1 rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-            >
-              <Save size={12} />
-              {isSaving ? "Saving..." : "Save"}
-            </button>
-
-            {/* Stage 4：文章修改组（Save）与管线操作组（Upload to Notion）之间的视觉分隔 */}
-            {showNotion && (
-              <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
-            )}
-
-            {showNotion && (
+            {/* Article 组：文章修改操作 */}
+            <div className="flex items-center gap-1">
+              <span aria-hidden className="mx-1 h-5 w-px bg-border" />
+              <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">Article</span>
               <button
                 type="button"
-                onClick={() => void handleNotionUpload()}
-                disabled={publishBusy}
-                className="flex h-7 items-center gap-1 rounded-md bg-green-600 px-2 text-[11px] font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                onClick={handleSave}
+                disabled={isSaving || !canEditFinal}
+                title={!canEditFinal ? "Save available when article-final exists (written/uploaded)" : undefined}
+                className="flex h-7 items-center gap-1 rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
               >
-                <Send size={12} /> {publishBusy ? "…" : "Upload to Notion"}
+                <Save size={12} />
+                {isSaving ? "Saving..." : "Save"}
               </button>
+            </div>
+
+            {/* Pipeline 组：管线操作（仅 showNotion 时显示） */}
+            {showNotion && (
+              <div className="flex items-center gap-1">
+                <span aria-hidden className="mx-1 h-5 w-px bg-border" />
+                <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">Pipeline</span>
+                <button
+                  type="button"
+                  onClick={() => void handleNotionUpload()}
+                  disabled={publishBusy}
+                  className="flex h-7 items-center gap-1 rounded-md bg-green-600 px-2 text-[11px] font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                  <Send size={12} /> {publishBusy ? "…" : "Upload to Notion"}
+                </button>
+              </div>
             )}
           </div>
         </div>

@@ -16,8 +16,8 @@ __pycache__/
 # macOS
 .DS_Store
 
-# 运行时数据
-data/
+# 运行时数据（仅根目录 data/，避免误伤 ui/src/app/api/data/ 等 Next.js 路由目录）
+/data/
 .gitnexus
 
 # 运行日志（仅根目录 logs/，避免误伤 ui/src/app/api/logs/ 等 Next.js 路由目录）
