@@ -1,42 +1,64 @@
 # x-bookmark-reports UI
 
-Notion-style dashboard UI for managing Twitter/X bookmarks, reports, and articles.
+Next.js Dashboard UI for managing the Twitter/X bookmark → deep report → finished article → Notion pipeline.
 
 ## Overview
 
-This UI layer (`ui/`) provides a web-based interface for the `x-bookmark-reports` toolchain. It integrates with existing scripts without modifying them:
+The UI layer (`ui/`) provides a web-based control panel for the `x-bookmark-reports` Python toolchain. It does **not** modify the backend scripts — it triggers them via `child_process.spawn` and reads state from the filesystem + SQLite.
 
-- `sync_bookmarks.sh` — Bookmark synchronization (incremental/full)
-- `x-reader/scripts/x_reader.py` — Basic tweet reader
-- `x-tweet-reader/main.py` — Enhanced tweet reader
+5 main pages:
+
+| Page | Route | Purpose |
+|------|-------|---------|
+| Dashboard | `/` | Pipeline stats cards + 4-node pipeline status |
+| Bookmarks | `/bookmarks` | Bookmark list (author, title, engagement) |
+| Sync | `/sync` | Pipeline control center (trigger each stage, view logs) |
+| Articles | `/articles` | Finished articles list |
+| Settings | `/settings` | General / LLM & Web Search / Schedule / Logs / Data tabs |
+
+Settings page has 5 tabs (2026-06-27 overhaul):
+
+- **General** — Notion DB ID, Auto Sync toggle, proxy, data path
+- **LLM & Web Search** — DeepSeek / xAI / Exa API keys + model selection + baseUrl (with eye-toggle plaintext view)
+- **Schedule** — launchd scheduling (cron editor + current schedule display)
+- **Logs** — Log viewer (component/level filters)
+- **Data** — Export / clear / backup
 
 ## Architecture
 
 ```
 ui/
 ├── src/
-│   ├── app/              # Next.js App Router pages + API routes
-│   │   ├── page.tsx       # Dashboard
-│   │   ├── bookmarks/     # Bookmark management
-│   │   ├── sync/          # Sync control center
-│   │   ├── reports/       # Report library + editor
-│   │   ├── articles/      # Article factory
-│   │   ├── settings/      # Settings panel
-│   │   └── api/           # RESTful API endpoints
-│   ├── components/        # React components (layout, dashboard, bookmarks, sync, reports, settings, ui)
-│   ├── hooks/             # Custom React hooks
-│   ├── store/             # Zustand state stores
-│   ├── lib/               # Utilities + backend services
-│   │   ├── api.ts         # Frontend API client (with mock support)
-│   │   ├── db.ts          # SQLite database layer
-│   │   ├── sync-service.ts # sync_bookmarks.sh wrapper
-│   │   ├── reader-service.ts # Python reader wrappers
-│   │   ├── config.ts      # .env.twitter management
-│   │   ├── logger.ts      # Unified logging
-│   │   └── utils.ts       # cn() helper
-│   ├── types/             # TypeScript shared types
-│   └── db/                # Schema + mock data
-├── CONTRACT.md           # API & Data Contract v1.0
+│   ├── app/                  # Next.js App Router pages + API routes
+│   │   ├── page.tsx          # Dashboard
+│   │   ├── bookmarks/        # Bookmark list + detail
+│   │   ├── sync/             # Pipeline control
+│   │   ├── articles/         # Article list + detail
+│   │   ├── settings/         # Settings page (5 tabs)
+│   │   └── api/              # RESTful API endpoints (32 routes)
+│   ├── components/           # React components
+│   │   ├── layout/           # Sidebar, ClientLayout
+│   │   ├── dashboard/        # StatCards, PipelineStatus, ActivityFeed
+│   │   ├── bookmarks/        # BookmarkTable, BookmarkCard
+│   │   ├── sync/             # PipelineActions, SyncTerminal
+│   │   ├── articles/         # ArticleTable, ArticleDetail
+│   │   ├── settings/         # GeneralSettings, LLMSettings, ScheduleSettings, LogsSettings, DataSettings
+│   │   └── ui/               # shadcn/ui primitives
+│   ├── hooks/                # Custom React hooks
+│   ├── store/                # Zustand state stores
+│   ├── lib/
+│   │   ├── api.ts            # Frontend API client
+│   │   ├── db.ts             # SQLite database layer
+│   │   ├── fs-data.ts        # Filesystem data layer (reads output/)
+│   │   ├── sync-service.ts   # sync_bookmarks.sh wrapper
+│   │   ├── config.ts         # .env management
+│   │   ├── logger.ts         # Unified logging
+│   │   └── utils.ts          # cn() helper
+│   ├── types/                # TypeScript shared types
+│   └── db/                   # Schema + mock data
+├── data/
+│   └── x_bookmarks.db        # SQLite DB (logs, bookmark metadata, settings)
+├── CONTRACT.md               # API contract (Phase 1, partial — see warning inside)
 ├── package.json
 ├── tsconfig.json
 ├── next.config.js
@@ -49,10 +71,11 @@ ui/
 ### Prerequisites
 
 - Node.js 18+
-- npm or yarn
-- The existing `x-bookmark-reports` repository at the parent level
-- Python 3 (for running reader scripts)
-- Bash (for running sync script)
+- npm
+- Parent `x-bookmark-reports` repo with Python backend scripts in `bin/` and `lib/`
+- `.venv/bin/python3` with `openai` installed (for `article_pipeline.py`)
+- System `python3` (3.9+) for `coordinator.py` and `upload_to_notion.py`
+- Bash (for `sync_bookmarks.sh` and `auto_run.sh`)
 
 ### Installation
 
@@ -67,7 +90,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3001
+Open `http://127.0.0.1:3001` (recommended — bypasses system HTTP proxy) or `http://localhost:3001`.
 
 ### Production
 
@@ -76,55 +99,51 @@ npm run build
 npm start
 ```
 
+### Clear cache (502 / white screen / "Cannot find module './NNN.js'")
+
+```bash
+npm run dev:clean
+```
+
 ## Environment
 
-The UI reads configuration from `../.env.twitter` (relative to the `ui/` directory):
+The UI reads configuration from the parent-level `../.env` (relative to `ui/`):
 
 ```
-API_KEY=base64(auth_token+ct0+kdt+twid)
+TWITTER_API_IO_KEY=...
+NOTION_TOKEN=...
+NOTION_DB_ID=...
+DEEPSEEK_API_KEY=...
+XAI_API_KEY=...
+EXA_API_KEY=...
 PROXY=http://127.0.0.1:7897
+BOOKMARKS_PATH=../twitter_data/bookmarks.json
+XAI_MODEL=grok-4.3
+DEEPSEEK_MODEL=deepseek-chat
+NOTION_UPLOAD_LIVE=true
 ```
 
-Settings can also be managed through the UI's Settings page.
+Settings can also be managed through the UI's Settings → General / LLM & Web Search tabs. API keys support eye-toggle plaintext view via `/api/settings/plaintext-key`.
 
-## Features
+## Backend Integration
 
-### 1. Dashboard
-- System status cards (sync time, bookmark count, pending, reports)
-- Pipeline visualization (Sync → Read → Report → Article) with animated status
-- Recent activity feed
+The UI triggers backend Python scripts via `child_process.spawn`:
 
-### 2. Bookmarks
-- Table/card dual view with pagination
-- Full-text search, status/tag/category filters
-- Batch operations (multi-select + bulk read)
-- Detail view with tweet text, replies, external links, reports
+```typescript
+// Sync Bookmarks (Step 1 + 2)
+execSync('bash sync_bookmarks.sh', { cwd: '..' })
+spawn('python3', ['bin/coordinator.py', '--deep-batch'], { cwd: '..' })
 
-### 3. Sync Control
-- Incremental / full sync modes
-- Real-time SSE progress stream
-- Terminal-style colored log output
-- Sync history with statistics
-- .env.twitter configuration UI
+// Run Pipeline (Step 3)
+spawn('.venv/bin/python3', ['bin/article_pipeline.py', 'run-batch', '--resume'], { cwd: '..' })
 
-### 4. Reports
-- Library with filtering and search
-- Split-screen Markdown editor (source + preview)
-- Version history
-- Export to Markdown
-- Basic vs Enhanced comparison view
+// Upload to Notion (Step 4)
+spawn('.venv/bin/python3', ['bin/upload_to_notion.py', '--mode', 'finished', '--live'], { cwd: '..' })
+```
 
-### 5. Articles
-- Draft management from reports
-- Markdown editor
-- Version timeline
-- Export formats (Markdown, HTML, WeChat)
+Each API route uses `pgrep` + `kill -9` to terminate same-type old processes before spawning a new one, preventing concurrent writes to shared state files.
 
-### 6. Settings
-- Environment configuration
-- Schedule management (cron editor)
-- Log viewer with component/level filters
-- Data management (backup/restore)
+The full 4-step pipeline runs automatically every 3 hours via `launchd (com.tizer.bookmark-auto)` calling `auto_run.sh` from the project root.
 
 ## Tech Stack
 
@@ -143,50 +162,20 @@ Settings can also be managed through the UI's Settings page.
 
 ## API Contract
 
-All API endpoints follow the contract defined in `CONTRACT.md`:
+See [CONTRACT.md](./CONTRACT.md) for the Phase 1 contract (partial — marked DEPRECATED PARTIAL).
 
-- Response format: `{ success: boolean, data: T, error?: { code, message, detail } }`
-- HTTP 200 for all responses (script errors return `success: false`)
-- API_KEY is masked in responses (`abc****xyz`)
-- SSE streams at `/api/sync/[jobId]/stream`
-
-## Mock Mode
-
-By default, the frontend runs in **mock mode** (`USE_MOCK = true` in `src/lib/api.ts`). This allows the UI to be fully functional without real backend services. To switch to real APIs:
-
-```typescript
-// src/lib/api.ts
-export const USE_MOCK = false;
-```
-
-## Integration with Existing Scripts
-
-The UI calls existing scripts via `child_process.spawn`:
-
-```typescript
-// sync_bookmarks.sh
-spawn('bash', ['../sync_bookmarks.sh', '--full'], { cwd: '..' })
-
-// x_reader.py
-spawn('python3', ['x-reader/scripts/x_reader.py', url], { cwd: '..' })
-
-// x-tweet-reader
-spawn('python3', ['x-tweet-reader/main.py', url], { cwd: '..' })
-```
-
-**Important**: The UI never modifies scripts in the parent directory.
+For the current API surface, the source of truth is `src/app/api/` (32 routes). Known deviations from the Phase 1 contract are documented in [`../docs/UI_AUDIT_2026-06-27.md`](../docs/UI_AUDIT_2026-06-27.md).
 
 ## Database
 
 SQLite database is auto-initialized at `ui/data/x_bookmarks.db` on first start. The schema is applied from `src/db/schema.sql`. If `bookmarks_*.json` files exist in the parent directory, they are automatically imported.
 
-## File Origins
+The DB stores:
 
-| File Set | Source |
-|----------|--------|
-| `CONTRACT.md`, `types/api.ts`, `db/schema.sql`, `db/mock.ts` | Orchestrator (Stage 1) |
-| `app/api/*`, `lib/db.ts`, `lib/sync-service.ts`, `lib/reader-service.ts`, `lib/config.ts`, `lib/logger.ts` | Backend Agent (Stage 2) |
-| `app/*` (pages), `components/*`, `hooks/*`, `store/*`, `lib/api.ts` | Frontend Agent (Stage 3) |
+- `logs` — pipeline run logs (currently masked by `isDbEmpty()` bug, see B046)
+- `bookmarks` — bookmark metadata cache
+- `settings` — UI settings (key/value)
+- `articles` — article metadata cache
 
 ## Troubleshooting
 
@@ -195,11 +184,43 @@ SQLite database is auto-initialized at `ui/data/x_bookmarks.db` on first start. 
 npx next dev -p 3001
 ```
 
+### 502 / white screen (Cursor Simple Browser or system proxy)
+The system HTTP proxy forwards `127.0.0.1` to the proxy server, causing 502.
+
+```bash
+# Option 1: Use 127.0.0.1 directly
+open http://127.0.0.1:3001
+
+# Option 2: Bypass proxy in env
+export NO_PROXY="127.0.0.1,localhost,::1,0.0.0.0"
+export no_proxy="$NO_PROXY"
+
+# Option 3: Use the launcher
+../Open\ Dashboard\ UI.command
+```
+
+### "Cannot find module './NNN.js'" (build cache corruption)
+```bash
+npm run dev:clean
+```
+
 ### Database locked
 The database uses WAL mode (`journal_mode = WAL`). If you see locking errors, ensure no other process is accessing `data/x_bookmarks.db`.
 
 ### Script not found
-Ensure the UI is running from within the `ui/` directory so that `../sync_bookmarks.sh` resolves correctly.
+Ensure the UI is running from within the `ui/` directory so that `../bin/coordinator.py` etc. resolve correctly.
+
+## Known Issues
+
+See [`../docs/UI_AUDIT_2026-06-27.md`](../docs/UI_AUDIT_2026-06-27.md) for the full UI audit (31+ bugs, 4 P0 / 6 P1 / 9 P2).
+
+Top-priority bugs being tracked in [`../BUGS.md`](../BUGS.md):
+
+- B046 `isDbEmpty()` semantic error
+- B047 Dashboard `totalBookmarks` wrong source
+- B048 Bookmarks page reads deep drafts
+- B049 Schedule Cron settings don't write launchd
+- B050 Cross-provider model bug
 
 ## License
 

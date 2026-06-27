@@ -1,6 +1,6 @@
 # Twitter Bookmark 报告系统 — 项目上下文
 
-> 本文件供 Subagent 了解项目实际情况。数据截止 2026-05-05。
+> 本文件供 Subagent 了解项目实际情况。数据截止 2026-06-27。
 > 每次开发迭代前先读此文件。
 
 ---
@@ -14,6 +14,7 @@
 ├── sync_bookmarks.sh            ← 书签同步脚本（rettiwt-api v7）
 └── x-bookmark-reports/         ← 本系统根目录
     ├── auto_run.sh              ← launchd 定时脚本（每 3 小时）
+    ├── Open Dashboard UI.command ← 双击启动 Next.js UI（macOS）
     ├── bin/
     │   ├── coordinator.py       ← 深度报告生成主入口
     │   ├── article_pipeline.py  ← 成品文章管线 CLI
@@ -33,6 +34,12 @@
     │   │   ├── fs-data.ts       ← 文件系统数据层（读 output/ 目录）
     │   │   └── db.ts            ← SQLite 数据库访问层
     │   └── data/x_bookmarks.db  ← SQLite DB（日志、书签元数据、设置）
+    ├── docs/                    ← 项目文档（审计、变更日志、归档）
+    │   ├── UI_AUDIT_2026-06-27.md ← UI 全面审计报告
+    │   ├── CHANGELOG.md         ← 变更日志
+    │   └── archive/             ← 过期规划归档
+    ├── logs/                    ← 运行日志（gitignore，持久化）
+    │   └── bookmark-auto.log    ← auto_run.sh 日志
     ├── output/                  ← 管线产出（gitignore）
     │   ├── bookmark-deep-*.md   ← 深度报告草稿
     │   ├── article-final/       ← 成品文章 .md
@@ -40,8 +47,12 @@
     │   ├── 归档/                 ← 历史文件归档（不计入统计）
     │   ├── .deep-run-state.json
     │   ├── .article-pipeline-state.json
-    │   └── .notion-finished-state.json
-    └── cache/                   ← API 响应缓存（gitignore）
+    │   ├── .notion-finished-state.json
+    │   └── auto_run_state.json  ← auto_run.sh 最近一次执行状态
+    ├── cache/                   ← API 响应缓存（gitignore）
+    ├── Progress.md              ← 工作日志（按迭代记录）
+    ├── README.md / WORKFLOW.md / BUGS.md / TASK_SUMMARY.md
+    └── AGENTS.md / CLAUDE.md    ← GitNexus 自动生成
 ```
 
 **重要**：项目名含空格（`Twitter Bookmark`），Shell 命令中涉及路径必须加引号。
@@ -51,7 +62,7 @@
 ## 二、书签数据详情（bookmarks.json）
 
 - **路径**：`/Users/tizer_mac_studio/work/Cursor/Twitter Bookmark/twitter_data/bookmarks.json`
-- **格式**：JSON 数组，当前约 **940+ 条**书签记录（每次 sync 追加到数组头部）
+- **格式**：JSON 数组，当前约 **1584 条**书签记录（每次 sync 追加到数组头部）
 - **排序**：数组靠前 ≈ 最近加入的书签，不严格按时间排序
 
 ### 字段说明
@@ -83,6 +94,9 @@
 ## 三、管线全流程
 
 ```
+Step 0: 代理检测（可选 --force 跳过）
+        → 检查 http://127.0.0.1:7897 是否可达
+
 Step 1: sync_bookmarks.sh
         → 从 Twitter 拉取新书签，prepend 到 bookmarks.json
 
@@ -114,6 +128,7 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 | `output/.deep-run-state.json` | 记录已生成深度报告的 tweet_id 集合 | 清空后 coordinator 将重新处理所有书签 |
 | `output/.article-pipeline-state.json` | 记录每篇文章在成品管线中的状态（pending/research/written） | 清空后管线从头处理所有草稿 |
 | `output/.notion-finished-state.json` | 记录已上传成品文章的 tweet_id | 即使清空，upload 也会通过 Notion DB 去重 |
+| `output/auto_run_state.json` | `auto_run.sh` 最近一次执行的状态（status/step/计数/错误） | 清空后下次 launchd 触发会重新写入 |
 
 **注意**：多个进程同时写同一状态文件会导致内容损坏。API routes 在启动新进程前会 kill 同类型的旧进程。
 
@@ -182,8 +197,14 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 | `GET /api/article-pipeline/progress` | 查询成品管线实时进度 |
 | `POST /api/pipeline/notion-upload` | 触发 upload_to_notion.py --mode finished --live |
 | `GET /api/dashboard/stats` | 返回 Dashboard 统计数据 |
+| `GET /api/dashboard/activity` | 返回 Activity Feed（受 `isDbEmpty()` 影响，见 B046） |
 | `GET /api/settings` | 读取设置（从 .env + SQLite） |
 | `POST /api/settings` | 保存设置 |
+| `GET /api/settings/plaintext-key` | 按 key 名查询明文 API Key（前端 eye 按钮用） |
+| `GET /api/schedule/launchd` | 查询 launchd 当前调度（待补，见 B054） |
+| `POST /api/schedule/launchd` | 写入 launchd plist 并 reload |
+| `GET /api/logs` | 查询日志（当前为 mock，见 B052） |
+| `GET /api/data/*` | 数据管理（导出 / 清理 / 备份） |
 | `GET /api/system/rettiwt` | 检查 rettiwt 环境 |
 | `GET /api/articles` | 列出成品文章 |
 | `GET /api/articles/[id]` | 获取单篇文章详情 |
@@ -196,13 +217,16 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 - **Plist**：`~/Library/LaunchAgents/com.tizer.bookmark-auto.plist`
 - **脚本**：`auto_run.sh`（项目根目录）
 - **频率**：每 3 小时（00:00 / 03:00 / 06:00 / 09:00 / 12:00 / 15:00 / 18:00 / 21:00）
-- **日志**：`auto_run.sh` 内部写入 `auto_run_state.json`
+- **日志**：`logs/bookmark-auto.log`（项目内，gitignore，重启不丢）
+- **状态**：`output/auto_run_state.json`（最近一次执行状态）
 
 管理命令：
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.tizer.bookmark-auto.plist
 launchctl load ~/Library/LaunchAgents/com.tizer.bookmark-auto.plist
 launchctl list | grep bookmark
+tail -f logs/bookmark-auto.log     # 实时查看日志
+cat output/auto_run_state.json     # 查看最近一次状态
 ```
 
 ---
@@ -231,9 +255,35 @@ bash -c "'$SCRIPT_PATH' && ..."  # 单引号包住含空格路径
 每个 API route 在启动新子进程前，会用 `pgrep` + `kill -9` 终止同类型的旧进程，
 防止多个实例并发写入共享状态文件。
 
+### 9.6 Settings 五 Tab（2026-06-27 改造）
+UI Settings 页面包含 5 个 Tab：
+- **General**：Notion DB ID、Auto Sync 开关、代理、数据路径
+- **LLM & Web Search**：DeepSeek / xAI / Exa API Key + 模型选择 + baseUrl（带明文 eye 切换）
+- **Schedule**：launchd 调度（cron 编辑器 + 当前调度显示，B054 待修）
+- **Logs**：日志查看器（当前 mock，B052 待修）
+- **Data**：数据导出 / 清理 / 备份
+
+### 9.7 UI 审计与待修问题
+`docs/UI_AUDIT_2026-06-27.md` 记录了 31+ 个 UI Bug（4 P0 / 6 P1 / 9 P2）。
+P0/P1 已写入 `BUGS.md` 待修复表（B046–B055）。修复按 4 阶段 PR 路线图推进：
+- PR-1：数据源真值化（B046/B047/B048）
+- PR-2：DB 日志/活动解锁（B051/B052/B053）
+- PR-3：调度单一源 + 历史持久化（B049/B054）
+- PR-4：UI 硬化与清理（B050/B055 + P2/P3）
+
 ---
 
 ## 十、里程碑（Changelog 视角）
+
+### 2026-06-27 — UI 审计 + 文档整理
+
+**主要变更**：
+1. **UI 全面审计**：`docs/UI_AUDIT_2026-06-27.md`，31+ bug（4 P0 / 6 P1 / 9 P2）
+2. **文档整理**：归档 `UI-ADJUSTMENT-PLAN.md`；删除 Streamlit legacy（`app.py` + `start.command`）
+3. **新建工作日志**：`Progress.md`（根目录）+ `docs/CHANGELOG.md`
+4. **核心文档对齐**：`PROJECT_CONTEXT.md` / `README.md` / `WORKFLOW.md` 更新至当前状态
+5. **`BUGS.md` 补全**：B046–B055（UI 审计 P0/P1）
+6. **`ui/` 文档更新**：重写 `ui/README.md`；`ui/CONTRACT.md` 加 DEPRECATED PARTIAL 标注
 
 ### 2026-05-05 — 管线全面重构与稳定化
 
@@ -261,4 +311,7 @@ bash -c "'$SCRIPT_PATH' && ..."  # 单引号包住含空格路径
 | `WORKFLOW.md` | 工作流详细规范 |
 | `BUGS.md` | Bug 跟踪（必读） |
 | `TASK_SUMMARY.md` | Subagent 输出模板 |
+| `Progress.md` | 工作日志（按迭代记录功能/错误/解决方案） |
+| `docs/CHANGELOG.md` | 变更日志（从 BUGS 已修复 + 里程碑提取） |
+| `docs/UI_AUDIT_2026-06-27.md` | UI 全面审计报告（P0/P1/P2 详解 + PR 路线图） |
 | `.cursor/rules/workflow.mdc` | Cursor IDE 规则 |

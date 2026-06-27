@@ -87,6 +87,9 @@
 | `PROJECT_CONTEXT.md` | 项目全局上下文（技术栈、API、管线说明） | 重大变更时 |
 | `BUGS.md` | Bug 跟踪 | 每次审查/修复后 |
 | `TASK_SUMMARY.md` | Subagent 输出模板 | 仅作为模板引用 |
+| `Progress.md` | 工作日志（按迭代记录功能/错误/解决方案） | 每个迭代结束 |
+| `docs/CHANGELOG.md` | 变更日志（从 BUGS 已修复 + 里程碑提取） | 重大变更时 |
+| `docs/UI_AUDIT_*.md` | UI 审计报告（按日期归档） | 每次 UI 审计后 |
 | `README.md` | 对外快速上手文档 | 功能/管线变更时 |
 | `.cursor/rules/workflow.mdc` | Cursor IDE 规则 | 需要时更新 |
 
@@ -316,7 +319,8 @@ bash auto_run.sh --force   # 跳过代理检测
 
 ```bash
 launchctl list | grep bookmark                                  # 查看 launchd 状态
-cat auto_run_state.json                                         # 查看最近一次执行状态
+cat output/auto_run_state.json                                  # 查看最近一次执行状态
+tail -f logs/bookmark-auto.log                                  # 实时查看日志
 ```
 
 ### 9.4 常见故障排查

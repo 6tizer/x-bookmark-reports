@@ -7,10 +7,22 @@
 
 ## 待修复
 
+> UI 审计 P0/P1 详见 [docs/UI_AUDIT_2026-06-27.md](./docs/UI_AUDIT_2026-06-27.md)。
+> P2/P3 不计入 BUGS.md，保留在审计文档中随修复 PR 处理。
 
 | ID   | 文件     | 问题描述                                                                                                                                                           | 严重性    | 发现日期       | 状态       |
 | ---- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | -------- |
-| B026 | app.py | `_run_deep_batch_inner`（L363-555）完整复制了 `BookmarkCoordinator.run_deep` 的核心逻辑，任何 bug 修复需同步两处，维护风险高。**暂缓**：建议后续改为 `run_deep` 注入进度/stop 回调，一次性重构并配合 Streamlit 回归测试 | MEDIUM | 2026-04-28 | deferred |
+| B026 | app.py | `_run_deep_batch_inner`（L363-555）完整复制了 `BookmarkCoordinator.run_deep` 的核心逻辑，任何 bug 修复需同步两处，维护风险高。**暂缓**：建议后续改为 `run_deep` 注入进度/stop 回调，一次性重构并配合 Streamlit 回归测试。**注：app.py 已于 2026-06-27 删除，本条作废** | MEDIUM | 2026-04-28 | deferred-obsolete |
+| B046 | ui/src/lib/db.ts | `isDbEmpty()` 语义错误：检查的是 `bookmarks` 表而非 `logs` 表，导致 DB 有真实日志时 Activity Feed / Logs Viewer 仍显示 mock 数据 | HIGH | 2026-06-27 | 待修复 |
+| B047 | ui/src/app/api/dashboard/stats/route.ts | `totalBookmarks` 取 `output/bookmark-deep-*.md` 文件数（642）而非 `bookmarks.json` 真实条数（1584），Dashboard 卡片严重失真 | HIGH | 2026-06-27 | 待修复 |
+| B048 | ui/src/lib/fs-data.ts | Bookmarks 页 `listFsBookmarks()` 读 `output/` 深度草稿而非 `bookmarks.json`，把"已处理书签"当成"书签总数" | HIGH | 2026-06-27 | 待修复 |
+| B049 | ui/src/components/settings/ScheduleSettings.tsx | Cron 调度设置只写 SQLite，不写 `~/Library/LaunchAgents/com.tizer.bookmark-auto.plist`，UI 改了也不生效（launchd 仍按旧 plist 跑） | HIGH | 2026-06-27 | 待修复 |
+| B050 | ui/src/components/settings/LLMSettings.tsx | Pipeline Default Model 跨 provider 模型 bug：在 Settings 切换为 xAI Grok 后，研究步骤把 `grok-4.3` 模型名喂给 DeepSeek API，导致 400 错误 | HIGH | 2026-06-27 | 待修复 |
+| B051 | ui/src/app/api/dashboard/activity/route.ts | Activity Feed 受 `isDbEmpty()` 影响（B046）永远返回空数组，DB 中真实活动被屏蔽 | MEDIUM | 2026-06-27 | 待修复 |
+| B052 | ui/src/app/api/logs/route.ts | Logs Viewer 在 DB 模式下仍返回 mock 数据，未读取 SQLite `logs` 表 | MEDIUM | 2026-06-27 | 待修复 |
+| B053 | ui/src/app/sync/page.tsx | Sync Terminal 依赖 SSE 流，但后端 `child_process.spawn` 未做 stdout 转发，UI 看不到实时输出 | MEDIUM | 2026-06-27 | 待修复 |
+| B054 | ui/src/app/api/schedule/launchd/route.ts | 缺 GET 方法，前端无法读取当前 launchd 调度详情（频率/下次触发时间），Settings Schedule Tab 显示空白 | MEDIUM | 2026-06-27 | 待修复 |
+| B055 | ui/src/app/articles/page.tsx | 模型列表硬编码且过期，未从 `/api/settings` 动态读取当前可用模型 | MEDIUM | 2026-06-27 | 待修复 |
 
 
 ---
@@ -120,6 +132,7 @@
 
 ## 更新日志
 
+- **2026-06-27**: UI 全面审计 — 新增 B046–B055（4 P0 + 6 P1，详见 `docs/UI_AUDIT_2026-06-27.md`）；B026 标记 obsolete（`app.py` 已删除）
 - **2026-05-05**: 修复 B037–B045（管线全面稳定化：--resume 默认、Notion 去重、Exa bug、并发保护、auto_run.sh 更新等）
 - **2026-05-04**: 修复 B036（TypeScript build 错误）；修复 B035（代理/白屏）
 - **2026-04-28**: 修复 B021–B025、B027–B034（HIGH/MEDIUM/LOW）；B026 暂缓 deferred；requirements 锁定；`_unshorten` HEAD+GET fallback；`get_config` 注入 author

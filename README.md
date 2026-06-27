@@ -25,9 +25,9 @@ npm run dev
 | Bookmarks | 书签列表（作者、标题、互动数据） |
 | Sync | Pipeline 控制中心（触发各阶段、查看日志） |
 | Articles | 成品文章列表 |
-| Settings | API Key 配置、调度、日志、数据管理 |
+| Settings | General / LLM & Web Search / Schedule / Logs / Data 五 Tab |
 
-> 若 Cursor 内置浏览器 502/白屏：`npm run dev:clean` 清除缓存后重试。
+> 若 Cursor 内置浏览器 502/白屏：`npm run dev:clean` 清除缓存后重试，或用 `http://127.0.0.1:3001`（绕过系统代理）。
 
 ---
 
@@ -36,6 +36,7 @@ npm run dev
 ```
 x-bookmark-reports/
 ├── auto_run.sh                 # launchd 定时任务入口（每 3 小时）
+├── Open Dashboard UI.command   # 双击启动 Next.js UI（macOS）
 ├── bin/
 │   ├── coordinator.py          # 深度报告生成主入口
 │   ├── article_pipeline.py     # 成品文章管线 CLI（研究 + 成文）
@@ -64,14 +65,22 @@ x-bookmark-reports/
 │   │   └── types/              # TypeScript 类型定义
 │   └── data/
 │       └── x_bookmarks.db      # SQLite DB（日志、书签、设置）
+├── docs/                       # 项目文档
+│   ├── UI_AUDIT_2026-06-27.md  # UI 审计报告（31+ bug）
+│   ├── CHANGELOG.md            # 变更日志
+│   └── archive/                # 过期规划归档
+├── logs/                       # 运行日志（gitignore，持久化）
+│   └── bookmark-auto.log       # auto_run.sh 日志
 ├── output/                     # 管线产出（gitignore）
 │   ├── bookmark-deep-*.md      # 深度报告草稿
 │   ├── article-final/          # 成品文章 (.md)
 │   ├── article-research/       # 研究结果 (.json)
 │   ├── .deep-run-state.json    # 深度报告进度
 │   ├── .article-pipeline-state.json  # 成品管线进度
-│   └── .notion-finished-state.json   # Notion 上传进度
+│   ├── .notion-finished-state.json   # Notion 上传进度
+│   └── auto_run_state.json     # auto_run.sh 最近一次状态
 ├── cache/                      # API 响应缓存（gitignore）
+├── Progress.md                 # 工作日志（按迭代记录）
 ├── .env                        # 环境配置（不提交）
 └── .env.example                # 配置示例
 ```
@@ -197,3 +206,6 @@ bash auto_run.sh --force   # 跳过代理检测，立即运行全流程
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) — 项目详细技术上下文
 - [WORKFLOW.md](./WORKFLOW.md) — 开发工作流规范
 - [BUGS.md](./BUGS.md) — Bug 跟踪记录
+- [Progress.md](./Progress.md) — 工作日志（按迭代记录）
+- [docs/CHANGELOG.md](./docs/CHANGELOG.md) — 变更日志
+- [docs/UI_AUDIT_2026-06-27.md](./docs/UI_AUDIT_2026-06-27.md) — UI 审计报告（31+ bug）
