@@ -1,5 +1,10 @@
 # x-bookmark-reports UI — API & Data Contract v1.0
 
+> **DEPRECATED PARTIAL**: 本契约冻结于 Phase 1（2026-04-28），仅作历史保留。
+> 当前 API 以 `ui/src/app/api/` 实际代码为准（共 32 个 route）。
+> 已知差异：pipeline routes（`/api/pipeline/coordinator`、`/api/article-pipeline/run`、`/api/pipeline/notion-upload`）、`/api/settings/plaintext-key`、`/api/schedule/launchd`（缺 GET，见 B054）、`/api/data/*` 等均不在本契约中。
+> 完整审计见 [`../docs/UI_AUDIT_2026-06-27.md`](../docs/UI_AUDIT_2026-06-27.md)。
+
 > **Status**: FINAL — Immutable after Phase 1  
 > **Version**: 1.0  
 > **Date**: 2026-04-28  
