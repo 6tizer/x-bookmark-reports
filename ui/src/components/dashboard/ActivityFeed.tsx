@@ -28,6 +28,11 @@ const typeIcon: Record<ActivityType, React.ReactNode> = {
   report: <FileText size={14} />,
   article: <Newspaper size={14} />,
   setting: <Settings size={14} />,
+  // Stage 4：fs 派生活动事件新增 4 种 type
+  coordinator: <RefreshCw size={14} />,
+  article_pipeline: <Newspaper size={14} />,
+  notion_upload: <FileText size={14} />,
+  auto_run: <RefreshCw size={14} />,
 };
 
 const actionIcon: Record<ActivityAction, React.ReactNode> = {
@@ -43,6 +48,11 @@ const typeColor: Record<ActivityType, string> = {
   report: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400",
   article: "bg-orange-50 text-orange-600 dark:bg-orange-950 dark:text-orange-400",
   setting: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+  // Stage 4：fs 派生活动事件新增 4 种 type，复用相近色调
+  coordinator: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
+  article_pipeline: "bg-orange-50 text-orange-600 dark:bg-orange-950 dark:text-orange-400",
+  notion_upload: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400",
+  auto_run: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
 };
 
 function formatTime(dateStr: string): string {

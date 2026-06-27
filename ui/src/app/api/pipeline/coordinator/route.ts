@@ -8,9 +8,10 @@ import { NextResponse } from "next/server";
 import { spawn, execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { createInterface } from "readline";
 import { getRepoRoot } from "@/lib/repo-root";
 import { createLog } from "@/lib/db";
+import { pipeOutputToLogger } from "@/lib/pipe-output-to-logger";
+import { updateRunState } from "@/lib/fs-data";
 import type { ApiResponse } from "@/types/api";
 
 export const dynamic = "force-dynamic";
@@ -32,36 +33,6 @@ function resolvePython(repoRoot: string): string {
   const venvPy = path.join(repoRoot, ".venv", "bin", "python3");
   if (fs.existsSync(venvPy)) return venvPy;
   return "python3";
-}
-
-function pipeOutputToLogger(child: ReturnType<typeof spawn>, component: "coordinator" | "article_pipeline" | "notion_upload"): void {
-  if (child.stdout) {
-    const rl = createInterface({ input: child.stdout });
-    rl.on("line", (line: string) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      const level = /error|fail|exception/i.test(trimmed) ? "error" as const
-        : /warn|warning/i.test(trimmed) ? "warn" as const
-        : "info" as const;
-      try {
-        createLog(component, level, trimmed.slice(0, 500), trimmed.length > 500 ? trimmed : undefined);
-      } catch {
-        /* ignore if DB not ready */
-      }
-    });
-  }
-  if (child.stderr) {
-    const rl = createInterface({ input: child.stderr });
-    rl.on("line", (line: string) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      try {
-        createLog(component, "error", trimmed.slice(0, 500), trimmed.length > 500 ? trimmed : undefined);
-      } catch {
-        /* ignore */
-      }
-    });
-  }
 }
 
 function killExistingPipelineProcesses(): void {
@@ -140,6 +111,14 @@ export async function POST(
 
     // Now spawn coordinator.py as detached process
     const startedAt = new Date().toISOString();
+    // Stage 4：spawn 后立即写 last_run_started，解决 B-SYNC-DEEP-TIMESTAMP-MISLEADING
+    // 即使 Next.js 进程随后重启，state 文件仍保留「started 但无 finished」的中断信号
+    const deepRunStatePath = path.join(repoRoot, "output", ".deep-run-state.json");
+    updateRunState(deepRunStatePath, {
+      last_run_started: startedAt,
+      last_run_status: "running",
+    });
+
     const child = spawn(py, coordinatorArgs, {
       cwd: repoRoot,
       detached: true,
@@ -148,6 +127,26 @@ export async function POST(
     });
 
     pipeOutputToLogger(child, "coordinator");
+
+    // Stage 4：监听 exit / error 事件，写 last_run_finished + last_run_status
+    // 注意：detached + unref 后事件回调仍可触发（Node.js detached child 不影响事件回调）
+    // 但若 Next.js 进程在 child exit 前重启，回调丢失——可接受（state 残留 started 无 finished）
+    child.on("exit", (code: number | null) => {
+      const finishedAt = new Date().toISOString();
+      updateRunState(deepRunStatePath, {
+        last_run_finished: finishedAt,
+        last_run_status: code === 0 ? "success" : "failed",
+      });
+    });
+    child.on("error", (err: Error) => {
+      const finishedAt = new Date().toISOString();
+      updateRunState(deepRunStatePath, {
+        last_run_finished: finishedAt,
+        last_run_status: "failed",
+        last_run_error: err.message,
+      });
+    });
+
     child.unref();
 
     return NextResponse.json({

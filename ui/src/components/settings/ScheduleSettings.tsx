@@ -25,6 +25,18 @@ interface ScheduleStatus {
   launchdPlistPath: string | null;
 }
 
+/** launchd GET /api/schedule/launchd 返回的调度信息 */
+interface LaunchdScheduleInfo {
+  loaded: boolean;
+  plistPath: string;
+  plistName: string;
+  schedule: {
+    type: "calendar" | "interval" | "unknown";
+    intervals?: Array<{ hour?: number; minute?: number }>;
+    seconds?: number;
+  };
+}
+
 const presetSchedules = [
   { label: "Every 6 hours", value: "0 */6 * * *" },
   { label: "Every 12 hours", value: "0 */12 * * *" },
@@ -42,6 +54,7 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
   const [togglingTimer, setTogglingTimer] = useState(false);
   const [timerEnabled, setTimerEnabled] = useState(false);
   const [launchdLoading, setLaunchdLoading] = useState(false);
+  const [launchdSchedule, setLaunchdSchedule] = useState<LaunchdScheduleInfo | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,11 +64,27 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
     fetchStatus();
   }, [settings?.cronExpression]);
 
+  /** 拉取 launchd plist 调度配置（GET /api/schedule/launchd） */
+  const fetchLaunchdSchedule = useCallback(async () => {
+    try {
+      const res = await fetch("/api/schedule/launchd");
+      const data = await res.json();
+      if (data.success && data.data) {
+        setLaunchdSchedule(data.data);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const fetchStatus = useCallback(async () => {
     setLoadingStatus(true);
     try {
-      const res = await fetch("/api/schedule/status");
-      const data = await res.json();
+      const [statusRes] = await Promise.all([
+        fetch("/api/schedule/status"),
+        fetchLaunchdSchedule(),
+      ]);
+      const data = await statusRes.json();
       if (data.success && data.data) {
         setScheduleStatus(data.data);
         setTimerEnabled(data.data.builtInTimerEnabled);
@@ -68,7 +97,7 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
     } finally {
       setLoadingStatus(false);
     }
-  }, []);
+  }, [fetchLaunchdSchedule]);
 
   const validateCron = (value: string): boolean => {
     const parts = value.trim().split(/\s+/);
@@ -137,6 +166,25 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
     } catch {
       return iso;
     }
+  };
+
+  /** 将 launchd schedule 格式化为可读中文描述 */
+  const formatLaunchdSchedule = (info: LaunchdScheduleInfo | null): string => {
+    if (!info) return "加载中…";
+    const { schedule } = info;
+    if (schedule.type === "interval" && schedule.seconds != null) {
+      const hours = (schedule.seconds / 3600).toFixed(1).replace(/\.0$/, "");
+      return `每 ${schedule.seconds} 秒（约 ${hours} 小时）`;
+    }
+    if (schedule.type === "calendar" && schedule.intervals?.length) {
+      const points = schedule.intervals.map((iv) => {
+        const h = String(iv.hour ?? 0).padStart(2, "0");
+        const m = String(iv.minute ?? 0).padStart(2, "0");
+        return `${h}:${m}`;
+      });
+      return `触发点：${points.join("、")}`;
+    }
+    return "未识别的调度配置";
   };
 
   return (
@@ -298,11 +346,17 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
           Manage the system-level scheduled task. This runs even when the dashboard is closed.
         </p>
 
-        {scheduleStatus?.launchdPlistPath && (
+        {(launchdSchedule?.plistPath || scheduleStatus?.launchdPlistPath) && (
           <div className="text-[11px] text-muted-foreground font-mono">
-            Plist: {scheduleStatus.launchdPlistPath}
+            Plist: {launchdSchedule?.plistPath ?? scheduleStatus?.launchdPlistPath}
           </div>
         )}
+
+        {/* 当前 plist 中的调度配置（只读，编辑留 PR-3） */}
+        <div className="text-[11px]">
+          <span className="text-muted-foreground">当前调度：</span>
+          <span className="text-foreground">{formatLaunchdSchedule(launchdSchedule)}</span>
+        </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs">

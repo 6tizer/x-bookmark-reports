@@ -20,6 +20,7 @@ export default function SyncPage() {
     triggerArticlePipeline,
     triggerNotionUpload,
     clearHistory,
+    clearCurrentOperation,
   } = usePipeline();
 
   return (
@@ -42,14 +43,10 @@ export default function SyncPage() {
         />
 
         <SyncTerminal
-          logs={
-            currentOperation
-              ? [
-                  `${currentOperation.type} started: ${currentOperation.command.join(" ")}`,
-                ]
-              : []
-          }
+          component={currentOperation?.component}
+          startedAt={currentOperation?.startedAt}
           title={currentOperation?.type}
+          onStop={clearCurrentOperation}
         />
 
         <PipelineHistory history={history} onClear={clearHistory} />

@@ -116,7 +116,31 @@
 
 ---
 
-## 2026-05-05 — 管线全面重构与稳定化（B037–B045）
+## 2026-06-27 — PR-2 人工验收反馈修复（日志误判 / Activity / Articles UX）
+
+### 我们实现了哪些功能？
+
+1. **日志级别真值解析**：新增 `pipeline-log.ts` + `pipe-output-to-logger.ts`，从 Python `[INFO]`/`[ERROR]` 标签解析级别，不再因 `errors: 0`、`deep_failed: 0` 子串误判为 Error。
+2. **三处 pipeline route 共用**：`coordinator`、`article-pipeline/run`、`notion-upload` 统一调用共享 `pipeOutputToLogger`。
+3. **Sync Terminal 着色**：`parseLogColor` 改为读 `[LEVEL]` 标签，Stop 按钮加红框高亮。
+4. **ActivityFeed 时间**：`activity/route.ts` 合并 DB + fs 派生活动，按 timestamp 倒序，修复只显示 53d 前旧 sync 的问题。
+5. **Articles 模型下拉**：每行 Run 旁增加与顶部工具栏联动的模型 `<select>`，顶部加「Run model」标签。
+
+### 我们遇到了哪些错误？
+
+1. Logs / Terminal 大量红色 Error，内容实为 `[INFO]`（Stats 字典含 `errors`/`failed` 子串）。
+2. Dashboard Recent Activity 显示「53d ago」——DB 有 2 条 2025-05 旧数据，未合并较新的 fs `auto_run` 事件。
+3. Articles 用户期望 Run 旁有模型下拉（原先仅在顶部工具栏）。
+4. `coordinator/route.ts` 移除 `createLog` import 后 build 失败（该 route 仍直接写 createLog）。
+
+### 我们是如何解决这些错误的？
+
+1. 实现 `parseStdoutLogLevel()` 优先匹配 `\[(INFO|WARNING|ERROR)\]`。
+2. `mergeActivities()` 合并 `listActivities` + `listFsActivities` 去重排序。
+3. 每行 Run 旁复用 `pipelineModel` state 的下拉框。
+4. 保留 `coordinator` 对 `createLog` 的直接 import。
+
+---
 
 详见 `docs/CHANGELOG.md` 与 `BUGS.md` 已修复表。核心：4 步管线固化、`auto_run.sh` 重写、`launchd` 调频 3 小时、Notion 去重、Exa `choices[0]` 修复、并发进程保护、`--resume` 默认 True。
 
