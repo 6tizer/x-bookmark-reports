@@ -151,9 +151,10 @@ function ToggleRow({
           }`}
           aria-pressed={checked}
         >
+          {/* 圆点 14×14，上下左右各预留 3px 边距，OFF→ON 平移 16px */}
           <span
-            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-              checked ? "translate-x-4" : "translate-x-0.5"
+            className={`absolute top-[3px] left-[3px] h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+              checked ? "translate-x-[16px]" : "translate-x-0"
             }`}
           />
         </button>
