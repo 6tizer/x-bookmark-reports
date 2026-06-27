@@ -209,7 +209,12 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Model</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Model
+            <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
+              持久化 → <code>.env DEEPSEEK_MODEL</code>，所有 backend 脚本默认读这个
+            </span>
+          </label>
           <select
             value={deepseekModel}
             onChange={(e) => setDeepseekModel(e.target.value)}
@@ -261,12 +266,19 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
         </div>
       </div>
 
-      {/* Pipeline Default Model */}
+      {/* Pipeline Default Model — 仅前端 UI 临时覆盖，不持久到 .env */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Pipeline Default Model</h3>
-        <p className="text-[10px] text-muted-foreground">
-          Stored in this browser only. Passed to <code className="text-[10px]">bin/article_pipeline.py --model</code> when
-          you run the pipeline from the UI.
+        <h3 className="text-sm font-semibold text-foreground">
+          UI 临时模型覆盖
+          <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
+            (Pipeline Default Model)
+          </span>
+        </h3>
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          仅存浏览器 localStorage，<strong className="text-foreground">不写 .env</strong>。<br />
+          当你从 UI 点 Articles 页的 Run / Batch run 时，作为 <code>--model</code> 临时传给
+          <code> bin/article_pipeline.py</code>，<strong>本次运行内</strong>覆盖 DeepSeek &gt; Model。<br />
+          launchd / 命令行直接跑 backend 脚本时此设置不生效。
         </p>
         <select
           value={pipelineModel}

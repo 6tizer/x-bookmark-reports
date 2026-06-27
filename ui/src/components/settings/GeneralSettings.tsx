@@ -121,6 +121,47 @@ function ApiKeyField({
   );
 }
 
+// 统一 toggle 行：左侧 label+desc 自适应，右侧固定宽度 toggle 按钮——
+// 多处复用确保不同 section 间 toggle 视觉严格对齐
+function ToggleRow({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        {description && (
+          <p className="text-[11px] text-muted-foreground">{description}</p>
+        )}
+      </div>
+      <div className="shrink-0 w-9">
+        <button
+          type="button"
+          onClick={() => onChange(!checked)}
+          className={`relative block h-5 w-9 rounded-full transition-colors ${
+            checked ? "bg-twitter-blue" : "bg-muted"
+          }`}
+          aria-pressed={checked}
+        >
+          <span
+            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+              checked ? "translate-x-4" : "translate-x-0.5"
+            }`}
+          />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdateApiKey }: GeneralSettingsProps) {
   const [proxy, setProxy] = useState("");
   const [dataPath, setDataPath] = useState("");
@@ -140,15 +181,19 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
     }
   }, [settings]);
 
-  const handleSave = () => {
-    onSave({
-      proxy: proxy || null,
-      dataPath,
-      bookmarksPath,
-      articlesDir,
-      autoSync,
-      notionUploadLive,
-    });
+  const handleSave = async () => {
+    // 至少 350ms 显示 "Saving..." 反馈，避免后端 <100ms 一闪而过用户看不到
+    await Promise.all([
+      onSave({
+        proxy: proxy || null,
+        dataPath,
+        bookmarksPath,
+        articlesDir,
+        autoSync,
+        notionUploadLive,
+      }),
+      new Promise((r) => setTimeout(r, 350)),
+    ]);
   };
 
   const handleApiKeySave = (keyName: ApiKeyName, encoded: string) => {
@@ -197,27 +242,12 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
         </div>
 
         {/* Notion Upload Live */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">Notion Upload Live</p>
-            <p className="text-[11px] text-muted-foreground">Actually upload to Notion (vs dry-run)</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setNotionUploadLive(!notionUploadLive);
-            }}
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              notionUploadLive ? "bg-twitter-blue" : "bg-muted"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                notionUploadLive ? "translate-x-4" : "translate-x-0.5"
-              }`}
-            />
-          </button>
-        </div>
+        <ToggleRow
+          label="Notion Upload Live"
+          description="Actually upload to Notion (vs dry-run)"
+          checked={notionUploadLive}
+          onChange={setNotionUploadLive}
+        />
       </div>
 
       {/* Paths Section */}
@@ -274,25 +304,12 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
         </div>
 
         {/* Auto Sync */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">Auto Sync</p>
-            <p className="text-[11px] text-muted-foreground">Automatically sync bookmarks on schedule</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAutoSync(!autoSync)}
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              autoSync ? "bg-twitter-blue" : "bg-muted"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                autoSync ? "translate-x-4" : "translate-x-0.5"
-              }`}
-            />
-          </button>
-        </div>
+        <ToggleRow
+          label="Auto Sync"
+          description="Automatically sync bookmarks on schedule"
+          checked={autoSync}
+          onChange={setAutoSync}
+        />
       </div>
 
       <div className="flex items-center gap-2">

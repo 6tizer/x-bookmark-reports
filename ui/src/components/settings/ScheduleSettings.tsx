@@ -332,13 +332,14 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
           </div>
         </div>
 
-        {/* Pipeline Steps */}
+        {/* Pipeline Steps — 与 auto_run.sh 实际执行顺序保持一致 */}
         <div className="rounded-md bg-muted p-3">
-          <p className="text-[10px] text-muted-foreground mb-2 font-medium">Pipeline steps executed:</p>
+          <p className="text-[10px] text-muted-foreground mb-2 font-medium">Pipeline steps executed (auto_run.sh):</p>
           <ol className="text-[11px] text-muted-foreground space-y-1 font-mono">
-            <li>1. coordinator.py --deep-batch</li>
-            <li>2. article_pipeline.py run-batch</li>
-            <li>3. upload_to_notion.py --mode finished --live</li>
+            <li>1. sync_bookmarks.sh                       <span className="text-muted-foreground/70">// 拉取新的 Twitter 书签</span></li>
+            <li>2. coordinator.py --deep-batch             <span className="text-muted-foreground/70">// 生成深度报告</span></li>
+            <li>3. article_pipeline.py run-batch --resume  <span className="text-muted-foreground/70">// 报告改写为成品文章</span></li>
+            <li>4. upload_to_notion.py --mode finished --live <span className="text-muted-foreground/70">// 上传到 Notion</span></li>
           </ol>
         </div>
       </div>
