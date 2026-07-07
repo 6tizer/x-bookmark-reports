@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-07-07 — PR-5 流水线 fail-soft 加固 + 健康检查（cursor/pr-5-batch-failsoft-fix）
+
+### 事故复盘（7-4 ~ 7-7）
+
+- **现象**：Notion 最新文章停在 7-5 凌晨，用户 7-7 下午才发现；期间 launchd 每 3h 触发的 auto_run 连续 9 次 failed。
+- **根因链**：tweet `2073171123542573231`（AI 蒸馏话题长推文）触发 DeepSeek 400 "Content Exists Risk"（内容审核永久拒绝）→ article_pipeline run-batch fail-fast 整个 batch exit 1 → auto_run.sh Step 3 exit 1 跳过 Step 4 → 52 篇已 written 文章积压 2 天不上传。
+- **误判排除**：xAI 403 自 5 月起就是常态（Exa 兜底工作正常，7-4 前一直成功）；DeepSeek 未欠费（是内容审核不是额度）；rettiwt 标签获取正常（sync 每 3h 都有新增）。
+- **应急恢复（7-7 17:20）**：确认工作区 fail-soft 修改有效（dry test 跳过 failed），等 18:00 launchd 自动触发 → 19:10 成功上传 53 篇积压（含 1 篇新文章），流水线完全恢复。
+
+### 实现的功能（5 commit × Coder/Reviewer/Tester 子代理流水，子代理 Composer 2.5）
+
+1. **Commit 1 — run-batch fail-soft**：failed 默认跳过（新增 `--retry-failed` 显式重试）；仅全部失败才 exit 1，部分失败不阻塞上层
+2. **Commit 2 — auto_run.sh Step 3 fail-soft**：记录 ARTICLE_EXIT 不退出，继续 Step 4 上传积压；article 失败但 upload 成功时状态降级 partial/done
+3. **Commit 3 — ContentPolicyError 标 skipped**：rewrite.py 新增 ContentPolicyError（检测 Content Exists Risk）；run_write 标 status=skipped（`[SKIP-POLICY]` 日志）；UI 全链路加 skipped 状态（fs-data / types / 列表页 / 详情页，灰色 badge）
+4. **Commit 4 — /api/health + HealthBanner**：健康检查端点（launchd / lastRun / recentFailStreak / pendingUploads / xAI 状态 / warnings）；顶部警告条 60s 轮询，连续失败>=3 红色告警
+5. **Commit 5 — BUGS.md / Progress.md**：4 项新 bug 登记 + 本工作日志
+
+### 遇到的错误
+
+1. git push 403：gh active account 是 tizerluo（无权限），`gh auth switch -u 6tizer` 解决
+2. Tester curl /api/articles 得 403：本机代理拦截，需 `--noproxy '*'`（既有已知问题，非代码 bug）
+3. Commander 初次应急时误删 state 中的 failed 条目（会导致下次重新处理再触发 400），及时从备份还原，改为依赖 fail-soft 跳过逻辑
+
+### 解决方案
+
+1. 事故的三层防御：单篇隔离（skipped）→ batch 容错（fail-soft return）→ 流水线容错（Step 3 不阻塞 Step 4）
+2. 监控闭环：/api/health 4 条告警规则 + HealthBanner，同类事故最长 3h 内可见（下次打开 Dashboard 即见红条）
+3. 边界实测方法论：注入 3 条 fake failed 到 history 验证红警触发，测完还原
+
+---
+
 ## 2026-06-27 — PR-3 Schedule 单一真相 + Settings/Articles/Reports 加固（cursor/pr-3-schedule-truth-and-cleanup）
 
 ### 实现的功能（11 commit × Coder/Reviewer/Test 子代理流水）
