@@ -249,12 +249,14 @@ except Exception:
 " "$ARTICLE_STATE")"
 fi
 
-if ! "$VENV_PYTHON3" bin/article_pipeline.py run-batch >> "$LOG_FILE" 2>&1; then
-    ERR="article_pipeline.py run-batch 执行失败，查看日志: $LOG_FILE"
-    log "ERROR: $ERR"
-    write_state "failed" "article" "$SYNC_NEW" "$PROCESS_NEW" 0 0 "$ERR"
-    append_history "failed" "article" "$SYNC_NEW" "$PROCESS_NEW" 0 0 "$ERR"
-    exit 1
+# PR-5 Commit 2：Step 3 fail-soft——article_pipeline 部分/全部失败也继续 Step 4，
+# 上传已 written 的积压文章，避免单篇失败阻塞整条流水线（7-4~7-7 事故教训）
+ARTICLE_EXIT=0
+"$VENV_PYTHON3" bin/article_pipeline.py run-batch >> "$LOG_FILE" 2>&1 || ARTICLE_EXIT=$?
+
+if [ "$ARTICLE_EXIT" -ne 0 ]; then
+    WARN="article_pipeline.py run-batch 失败（exit=$ARTICLE_EXIT），继续 Step 4 上传已 written 文章"
+    log "WARN: $WARN"
 fi
 
 ARTICLE_WRITTEN_AFTER=0
@@ -309,6 +311,13 @@ fi
 log "Step 4: Notion 上传完成，本次新增 $UPLOAD_NEW 篇"
 
 # ========== 写入成功状态 ==========
-write_state "success" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" ""
-append_history "success" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" ""
-log "===== 流水线完成（同步 +$SYNC_NEW 条，报告 +$PROCESS_NEW 篇，成品 +$ARTICLE_NEW 篇，Notion +$UPLOAD_NEW 篇）====="
+if [ "$ARTICLE_EXIT" -ne 0 ]; then
+    WARN="article 步骤部分失败（exit=$ARTICLE_EXIT），但 Notion 上传成功"
+    write_state "partial" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" "$WARN"
+    append_history "partial" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" "$WARN"
+    log "===== 流水线完成（同步 +$SYNC_NEW 条，报告 +$PROCESS_NEW 篇，成品 +$ARTICLE_NEW 篇，Notion +$UPLOAD_NEW 篇；article 步骤有失败）====="
+else
+    write_state "success" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" ""
+    append_history "success" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" ""
+    log "===== 流水线完成（同步 +$SYNC_NEW 条，报告 +$PROCESS_NEW 篇，成品 +$ARTICLE_NEW 篇，Notion +$UPLOAD_NEW 篇）====="
+fi
