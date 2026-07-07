@@ -41,7 +41,7 @@ from lib.article_pipeline.metadata import (
     parse_deep_draft,
 )
 from lib.article_pipeline.research import Researcher, load_bundle, save_bundle
-from lib.article_pipeline.rewrite import Rewriter, parse_final_frontmatter, save_final
+from lib.article_pipeline.rewrite import ContentPolicyError, Rewriter, parse_final_frontmatter, save_final
 from lib.article_pipeline.state import PipelineState
 
 logger = logging.getLogger("article_pipeline")
@@ -180,6 +180,11 @@ def run_write(
     rewriter = Rewriter()
     try:
         content = rewriter.rewrite(meta.to_dict(), body, research_text, model=model)
+    except ContentPolicyError as exc:
+        # 内容审核永久拒绝：标 skipped，--resume 永久跳过，不占 failed 语义
+        logger.warning("  [SKIP-POLICY] rewrite for %s: %s", meta.tweet_id, exc)
+        state.upsert(meta.tweet_id, status="skipped", last_error=str(exc))
+        return False
     except Exception as exc:
         logger.error("  [FAIL] rewrite for %s: %s", meta.tweet_id, exc)
         state.upsert(meta.tweet_id, status="failed", last_error=str(exc))

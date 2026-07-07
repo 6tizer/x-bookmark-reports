@@ -18,6 +18,11 @@ from lib.config import (
 
 logger = logging.getLogger(__name__)
 
+
+class ContentPolicyError(Exception):
+    """DeepSeek 内容审核拒绝（Content Exists Risk），永久性拒绝不可重试。"""
+
+
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 # Emoji candidates for auto icon selection based on keywords
@@ -137,15 +142,22 @@ class Rewriter:
             len(user_content),
         )
 
-        resp = client.chat.completions.create(
-            model=use_model,
-            messages=[
-                {"role": "system", "content": self._system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.7,
-            max_tokens=4096,
-        )
+        try:
+            resp = client.chat.completions.create(
+                model=use_model,
+                messages=[
+                    {"role": "system", "content": self._system_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=0.7,
+                max_tokens=4096,
+            )
+        except Exception as e:
+            # DeepSeek 内容审核拒绝是永久性错误，抛专门异常让上层标 skipped
+            msg = str(e)
+            if "Content Exists Risk" in msg or "content_policy" in msg.lower():
+                raise ContentPolicyError(msg) from e
+            raise
 
         article_body = resp.choices[0].message.content or ""
         logger.info("DeepSeek rewrite done: %d chars output", len(article_body))
