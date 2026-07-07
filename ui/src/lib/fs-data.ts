@@ -282,7 +282,8 @@ export type FsArticlePipelineStatus =
   | "researched"
   | "written"
   | "uploaded"
-  | "failed";
+  | "failed"
+  | "skipped";
 
 export interface FsArticle {
   id: string;
@@ -308,7 +309,8 @@ function normalizePipelineStatus(st: string | undefined): FsArticlePipelineStatu
     s === "researched" ||
     s === "written" ||
     s === "uploaded" ||
-    s === "failed"
+    s === "failed" ||
+    s === "skipped"
   ) {
     return s;
   }

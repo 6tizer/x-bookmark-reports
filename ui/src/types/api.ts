@@ -353,7 +353,8 @@ export type ArticleStatus =
   | "researched"
   | "written"
   | "uploaded"
-  | "failed";
+  | "failed"
+  | "skipped";
 export type ExportFormat = "markdown" | "html" | "wechat";
 
 export interface Article {

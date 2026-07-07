@@ -41,7 +41,7 @@ from lib.article_pipeline.metadata import (
     parse_deep_draft,
 )
 from lib.article_pipeline.research import Researcher, load_bundle, save_bundle
-from lib.article_pipeline.rewrite import Rewriter, parse_final_frontmatter, save_final
+from lib.article_pipeline.rewrite import ContentPolicyError, Rewriter, parse_final_frontmatter, save_final
 from lib.article_pipeline.state import PipelineState
 
 logger = logging.getLogger("article_pipeline")
@@ -180,6 +180,11 @@ def run_write(
     rewriter = Rewriter()
     try:
         content = rewriter.rewrite(meta.to_dict(), body, research_text, model=model)
+    except ContentPolicyError as exc:
+        # 内容审核永久拒绝：标 skipped，--resume 永久跳过，不占 failed 语义
+        logger.warning("  [SKIP-POLICY] rewrite for %s: %s", meta.tweet_id, exc)
+        state.upsert(meta.tweet_id, status="skipped", last_error=str(exc))
+        return False
     except Exception as exc:
         logger.error("  [FAIL] rewrite for %s: %s", meta.tweet_id, exc)
         state.upsert(meta.tweet_id, status="failed", last_error=str(exc))
@@ -303,6 +308,10 @@ def cmd_run_batch(args: argparse.Namespace) -> int:
         return 0
 
     # Filter already completed if resuming
+    # - written/uploaded：已完成，跳过
+    # - skipped：人工或自动标记跳过（如 DeepSeek Content Exists Risk 永久拒绝），跳过
+    # - failed：默认也跳过（避免单篇 fail 反复重试导致整个 batch 雪崩）；用 --retry-failed 显式重试
+    retry_failed = getattr(args, "retry_failed", False)
     to_process = []
     for d in drafts:
         meta = parse_deep_draft(d)
@@ -310,8 +319,12 @@ def cmd_run_batch(args: argparse.Namespace) -> int:
             continue
         if resume:
             entry = state.get(meta.tweet_id)
-            if entry and entry.get("status") in ("written", "uploaded"):
-                logger.debug("Skipping completed %s", meta.tweet_id)
+            status = entry.get("status") if entry else None
+            if status in ("written", "uploaded", "skipped"):
+                logger.debug("Skipping completed %s (status=%s)", meta.tweet_id, status)
+                continue
+            if status == "failed" and not retry_failed:
+                logger.info("Skipping failed %s (use --retry-failed to retry)", meta.tweet_id)
                 continue
         to_process.append(meta)
 
@@ -360,7 +373,12 @@ def cmd_run_batch(args: argparse.Namespace) -> int:
             time.sleep(2)
 
     print(f"\nBatch complete: {success} success, {failed} failed")
-    return 0 if failed == 0 else 1
+    # PR-5：fail-soft 语义——单篇/部分失败不让整个 batch exit 1，避免 auto_run.sh Step 3→4 雪崩
+    # 失败的文章已记 state 里 status=failed，下次 --resume 默认跳过；可用 --retry-failed 显式重试
+    # 仅当全部 fail（success == 0 且 failed > 0）时才 return 1，让上层知道这次没产出
+    if success == 0 and failed > 0:
+        return 1
+    return 0
 
 
 def cmd_research_only(args: argparse.Namespace) -> int:
@@ -458,6 +476,7 @@ Examples:
     p_batch.add_argument("--limit", type=int, default=0, help="Max articles to process (0=all)")
     p_batch.add_argument("--resume", action="store_true", default=True, help="Skip already completed (default: True)")
     p_batch.add_argument("--no-resume", dest="resume", action="store_false", help="Do NOT skip completed articles")
+    p_batch.add_argument("--retry-failed", action="store_true", default=False, help="Retry articles previously marked failed (default: skip them)")
     p_batch.add_argument("--force", action="store_true", help="Force re-run all steps")
     p_batch.add_argument("--model", default=None, help="Override rewrite model (DeepSeek)")
     p_batch.add_argument("--xai-model", default=None, help="Override xAI research model (临时覆盖 .env XAI_MODEL)")

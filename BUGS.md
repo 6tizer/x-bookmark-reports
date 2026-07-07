@@ -96,6 +96,10 @@
 | B-ARTC-RUN-CONFIRM | ui/src/app/articles/page.tsx | Written 状态点 Run 不弹确认，可能覆盖 | LOW | 2026-06-27 | 2026-06-27 | PR-2 已实现 confirmingArticle modal；PR-3 Commit 9 沿用 |
 | B-NAV-REPORTS | ui/src/app/reports/* + ui/src/app/api/reports/* + ui/src/hooks/useReports.ts + ui/src/components/reports/* | Reports 入口已删但代码大量残留（10+ 文件） | LOW | 2026-06-27 | 2026-06-27 | PR-3 Commit 10：批量删除 11 个文件 + 6 个文件清理引用，净减 1525 行；/reports HTTP 404 |
 | B-REPORTS-PAGE | ui/src/app/reports/page.tsx | /reports 僵尸路由可访问 | LOW | 2026-06-27 | 2026-06-27 | PR-3 Commit 10：路由删除 |
+| B-PIPELINE-FAIL-FAST | bin/article_pipeline.py | run-batch 单篇失败（如 DeepSeek 400）导致整个 batch exit 1，7-4~7-7 事故 52 篇积压 2 天 | HIGH | 2026-07-07 | 2026-07-07 | PR-5 Commit 1：failed 默认跳过（--retry-failed 显式重试）；仅全部失败才 exit 1 |
+| B-AUTORUN-STEP3-FAIL-FAST | auto_run.sh | Step 3 失败直接 exit 1 跳过 Step 4，已 written 文章积压不上传 | HIGH | 2026-07-07 | 2026-07-07 | PR-5 Commit 2：记录 ARTICLE_EXIT 不退出，继续 Step 4；article 失败但 upload 成功时状态降级 partial |
+| B-DEEPSEEK-CONTENT-RISK-AMBIGUITY | lib/article_pipeline/rewrite.py + bin/article_pipeline.py | DeepSeek 内容审核拒绝（Content Exists Risk）是永久性拒绝，却标 failed 与临时失败混淆 | MEDIUM | 2026-07-07 | 2026-07-07 | PR-5 Commit 3：新增 ContentPolicyError，run_write 标 status=skipped；UI 加 skipped 状态（灰色 badge） |
+| B-NO-HEALTH-MONITOR | ui | 流水线连续失败 2 天无任何告警，用户后知后觉 | MEDIUM | 2026-07-07 | 2026-07-07 | PR-5 Commit 4：/api/health 端点（failStreak/积压/xAI 状态）+ HealthBanner 顶部警告条（60s 轮询） |
 
 
 ---
@@ -153,6 +157,8 @@
 
 ## 更新日志
 
+- **2026-07-07**: PR-5 (流水线 fail-soft 加固 + 健康检查) — 7-4~7-7 事故复盘修复：单篇 DeepSeek 400 (Content Exists Risk) 引发 batch fail-fast → auto_run Step 4 跳过 → 52 篇积压 2 天。修复 B-PIPELINE-FAIL-FAST / B-AUTORUN-STEP3-FAIL-FAST / B-DEEPSEEK-CONTENT-RISK-AMBIGUITY（新增 skipped 状态）/ B-NO-HEALTH-MONITOR（/api/health + HealthBanner）。
+- **2026-06-28**: PR-4 (P3 清理 + Article 详情页 P0 回归修复) 合并 — 修复 NEW-ARTICLE-DETAIL-GROK (P0 回归) / B-SYNC-ACTIONS-COLLAPSED / B-ARTC-ACTIONS-GROUPING / B-DATA-NO-DRY-RUN / B-DATA-NO-CATEGORY-CLEAR / B-DATA-EXPORT-LOG-SECRET-LEAK；附带修复 .gitignore data/ 太宽吞 API 路由。
 - **2026-06-27**: PR-3 (Schedule 单一真相 + History 持久化 + Settings/Articles/Reports 加固) 合并 — 修复 18 项 P0/P1/P2：B-CRON-DEAD / B-BUILTIN-TIMER-CONFUSING / B-AUTO-SYNC-DEAD / B-SYNC-HISTORY-NO-PERSISTENCE / B-PIPELINE-MODEL-CROSS-PROVIDER (P0) / B-NOTION-DBID-NO-SAVE-BTN / B-XAI-MODEL-MISSING / B-SYNC-RESUME / B-DEEPSEEK-BASE / B-PATH-STYLE-INCONSISTENT / B-PUB-STATUS / B-ARTC-UPLOADED-NEVER-WRITTEN / B-ARTC-RUN-CONFIRM / B-NAV-REPORTS / B-REPORTS-PAGE / B-SYNC-DEEP-TIMESTAMP-MISLEADING。BUGS.md 待修复表现在仅 B026 obsolete 标记；P3 留作后续。GitNexus 索引待重建。
 - **2026-06-27**: PR-2 (DB Truth + Stream) 合并 — 修复 B052–B055（Logs API 真值化 + SyncTerminal SSE + launchd GET + Articles 模型动态化）；新增 4 项验收修复（pipeline-log 共享模块避免 Python `[INFO]` 行被误判 Error、Stop 按钮红框高亮、Activity DB+fs 合并排序、Articles 每行 Run 旁加模型下拉）；GitNexus 索引待重建
 - **2026-06-27**: PR-1 (Data Truthification) 合并 — 修复 B046–B051 + B056–B061（Dashboard 6 卡 + bookmarks.json 真值源 + lifecycle join + Articles uploaded 状态 + 翻页 + Run modal + 双进度条默认显示 + Settings 5 项 UX 修复 + notion-stats .env 引号 bug）；新增 B052–B055 留 PR-2 处理；GitNexus 重建索引 3254 nodes / 6147 edges / 285 flows

@@ -19,6 +19,7 @@ const PIPELINE_FILTER_STATUSES: ArticleStatus[] = [
   "written",
   "uploaded",
   "failed",
+  "skipped",
 ];
 
 const PIPELINE_MODEL_STORAGE = "articlePipelineModel";
@@ -31,6 +32,7 @@ function statusLabel(s: ArticleStatus): string {
     written: "Written",
     uploaded: "Uploaded",
     failed: "Failed",
+    skipped: "Skipped",
   };
   return map[s] ?? s.replace(/_/g, " ");
 }
@@ -114,6 +116,7 @@ export default function ArticlesPage() {
     written: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
     uploaded: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
     failed: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
+    skipped: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
   };
 
   const executeRun = async (article: Article) => {
