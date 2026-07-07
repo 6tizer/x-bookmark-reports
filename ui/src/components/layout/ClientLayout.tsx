@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { Sidebar, type SidebarCounts } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { HealthBanner } from "@/components/layout/HealthBanner";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { useUIStore } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
         )}
       >
         <Header />
+        <HealthBanner />
         <main className="flex-1 p-4 md:p-6 overflow-auto">{children}</main>
       </div>
       <CommandPalette />
