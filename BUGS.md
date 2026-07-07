@@ -13,6 +13,7 @@
 | ID   | 文件     | 问题描述                                                                                                                                                           | 严重性    | 发现日期       | 状态       |
 | ---- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | -------- |
 | B026 | app.py | `_run_deep_batch_inner` 完整复制了 `BookmarkCoordinator.run_deep` 的核心逻辑。**注：app.py 已于 2026-06-27 删除，本条作废** | MEDIUM | 2026-04-28 | obsolete |
+| B-TITLE-SECTION-HEADER-LEAK | ui/src/lib/fs-data.ts | Articles 列表出现标题「外部链接详情」——deep draft 的 section header 被 extractTitle() 误当标题；DEEP_DRAFT_SECTION_HEADERS 跳过集合有「外部链接」但缺「外部链接详情」（与 PR-1 修过的「主推文」同类）。修复：往 Set 加词条 | LOW | 2026-07-07 | 待修复 |
 
 
 ---
