@@ -46,7 +46,7 @@ function buildSettingsFromEnv(): Settings {
     notionDbId: env.NOTION_DB_ID || "",
     deepseekApiKey: maskApiKey(env.DEEPSEEK_API_KEY),
     deepseekBaseUrl: env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1",
-    deepseekModel: env.DEEPSEEK_MODEL || "deepseek-chat",
+    deepseekModel: env.DEEPSEEK_MODEL || "deepseek-v4-flash",
     xaiApiKey: maskApiKey(env.XAI_API_KEY),
     xaiBaseUrl: env.XAI_BASE_URL || "https://api.x.ai/v1",
     xaiModel: env.XAI_MODEL || "grok-4.3",

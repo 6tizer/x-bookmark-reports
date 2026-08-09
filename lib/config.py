@@ -213,7 +213,7 @@ def get_config() -> dict[str, dict[str, str | int]]:
 # DeepSeek — article rewrite (OpenAI-compatible)
 DEEPSEEK_API_KEY = _optional_env("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = _optional_env("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-DEEPSEEK_MODEL = _optional_env("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_MODEL = _optional_env("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
 # x.ai — research search (OpenAI Responses API + web_search / x_search)
 XAI_API_KEY = _optional_env("XAI_API_KEY", "")

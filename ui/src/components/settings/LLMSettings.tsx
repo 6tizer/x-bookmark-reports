@@ -123,7 +123,7 @@ function ApiKeyField({
 
 export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApiKey }: LLMSettingsProps) {
   const [deepseekBaseUrl, setDeepseekBaseUrl] = useState("https://api.deepseek.com/v1");
-  const [deepseekModel, setDeepseekModel] = useState("deepseek-chat");
+  const [deepseekModel, setDeepseekModel] = useState("deepseek-v4-flash");
   const [xaiBaseUrl, setXaiBaseUrl] = useState("https://api.x.ai/v1");
   const [xaiModel, setXaiModel] = useState("grok-4.3");
   const [exaBaseUrl, setExaBaseUrl] = useState("https://api.exa.ai");
@@ -131,7 +131,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
   useEffect(() => {
     if (settings) {
       setDeepseekBaseUrl(settings.deepseekBaseUrl || "https://api.deepseek.com/v1");
-      setDeepseekModel(settings.deepseekModel || "deepseek-chat");
+      setDeepseekModel(settings.deepseekModel || "deepseek-v4-flash");
       setXaiBaseUrl(settings.xaiBaseUrl || "https://api.x.ai/v1");
       setXaiModel(settings.xaiModel || "grok-4.3");
       setExaBaseUrl(settings.exaBaseUrl || "https://api.exa.ai");
@@ -198,8 +198,8 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
             onChange={(e) => setDeepseekModel(e.target.value)}
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           >
-            <option value="deepseek-chat">deepseek-chat</option>
-            <option value="deepseek-reasoner">deepseek-reasoner</option>
+            <option value="deepseek-v4-flash">deepseek-v4-flash</option>
+            <option value="deepseek-v4-pro">deepseek-v4-pro</option>
           </select>
         </div>
       </div>

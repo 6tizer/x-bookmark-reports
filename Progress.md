@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-08-10 — 内容质量排查与修复（一个月回顾）
+
+### 背景
+一个月没动系统。用户发现 Notion 内容「有点问题」。
+
+### 排查发现的问题
+
+1. **35 篇 failed 文章**：22 篇是 DeepSeek 平台 7-24~7-26 迁移期下线 `deepseek-reasoner` 导致（API 报 supported model names are v4-pro/v4-flash）；12 篇网络瞬断/超时；1 篇内容审核。这些标 failed 被 `--resume` 永久跳过，Notion 缺失。
+2. **21 篇空正文文章**：rewrite 产出 0 字正文却照样保存上传，Notion 出现空页面。
+3. **Exa Research API 退役**（410 Gone，8月新变化）：research 步骤 xAI(403)+Exa(410) 双挂，实际拿不到内容。
+
+### 实现的功能
+
+1. **DeepSeek 模型换 v4-flash**（实测 reasoning≈6.4k tokens + 正文≈0.9k）：.env / config.py / settings route / model-options / LLMSettings / .env.example 全链路统一
+2. **rewrite.py 加固**：max_tokens 4096→16384（给 reasoning+正文留空间）+ 空正文防御（content 空则抛错标 failed 不保存空文件）
+3. **upload_to_notion.py 加最小字数门槛**：正文 <300 字 `[SKIP-SHORT]` 不上传，防空页
+4. **清理空文章**：删 20 篇 Notion 空页 + 21 篇本地空文件 + state 记录 + research bundle
+5. **重跑救回**：21 篇空文章全部重写（v4-flash 正文 3000-4900 字正常；3 篇顽固的 finish_reason=stop 但 content 空，单独用 v4-pro 救回）；22 篇迁移期 failed 重跑救回
+6. **全量扫 Notion 2044 页**：确认仅剩 1 篇 5-03 测试数据偏短，其余正文正常
+
+### 遇到的错误
+
+1. v4-flash max_tokens=8192 仍 0 字（reasoning 7935 吃光）→ 升 16384 解决
+2. 3 篇 finish_reason=stop 但 content 空（v4-flash 边缘 case）→ 单独 v4-pro 救回
+3. dry-run upload 卡住 8 分钟（stdout 缓冲 + 查重慢）→ 改 `-u` + tee 实时输出
+4. 之前 heredoc 后台任务没写成功（0 字节）→ 改写文件方式 `/tmp/notion_scan.py`
+
+### 解决方案
+
+1. 模型选型实测驱动：v4-flash（便宜）在 max_tokens 足够时正文稳定；v4-pro 作 flash 边缘 case 的兜底
+2. 防御纵深：rewrite 空正文防御 + upload 字数门槛，双层防空页
+3. 清理流程：Notion 按 source_url 查 page_id → 读 blocks 确认空 → archive；本地删文件+state+research
+
+### 最终状态
+- 1123 written = 1123 文件 = 1123 Notion，0 缺口，0 空文件
+- healthy=true，pendingUploads=0，warnings 空
+
+### 待办
+- B-EXA-RESEARCH-RETIRED：Exa Research 退役，research 步骤实际空转，待决策（换端点/换 API/去 research 步骤）
+
+---
+
 ## 2026-07-07 — PR-5 流水线 fail-soft 加固 + 健康检查（cursor/pr-5-batch-failsoft-fix）
 
 ### 事故复盘（7-4 ~ 7-7）

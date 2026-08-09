@@ -14,6 +14,7 @@
 | ---- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | -------- |
 | B026 | app.py | `_run_deep_batch_inner` 完整复制了 `BookmarkCoordinator.run_deep` 的核心逻辑。**注：app.py 已于 2026-06-27 删除，本条作废** | MEDIUM | 2026-04-28 | obsolete |
 | B-TITLE-SECTION-HEADER-LEAK | ui/src/lib/fs-data.ts | Articles 列表出现标题「外部链接详情」——deep draft 的 section header 被 extractTitle() 误当标题；DEEP_DRAFT_SECTION_HEADERS 跳过集合有「外部链接」但缺「外部链接详情」（与 PR-1 修过的「主推文」同类）。修复：往 Set 加词条 | LOW | 2026-07-07 | 待修复 |
+| B-EXA-RESEARCH-RETIRED | lib/article_pipeline/research.py | Exa Research API 已退役（410 Gone, tag=RESEARCH_RETIRED），research 步骤 xAI(403 无额度)+Exa(410 退役)双挂，实际拿不到研究内容（仅 fallback 289 字） | MEDIUM | 2026-08-10 | 待修复 |
 
 
 ---
@@ -101,6 +102,10 @@
 | B-AUTORUN-STEP3-FAIL-FAST | auto_run.sh | Step 3 失败直接 exit 1 跳过 Step 4，已 written 文章积压不上传 | HIGH | 2026-07-07 | 2026-07-07 | PR-5 Commit 2：记录 ARTICLE_EXIT 不退出，继续 Step 4；article 失败但 upload 成功时状态降级 partial |
 | B-DEEPSEEK-CONTENT-RISK-AMBIGUITY | lib/article_pipeline/rewrite.py + bin/article_pipeline.py | DeepSeek 内容审核拒绝（Content Exists Risk）是永久性拒绝，却标 failed 与临时失败混淆 | MEDIUM | 2026-07-07 | 2026-07-07 | PR-5 Commit 3：新增 ContentPolicyError，run_write 标 status=skipped；UI 加 skipped 状态（灰色 badge） |
 | B-NO-HEALTH-MONITOR | ui | 流水线连续失败 2 天无任何告警，用户后知后觉 | MEDIUM | 2026-07-07 | 2026-07-07 | PR-5 Commit 4：/api/health 端点（failStreak/积压/xAI 状态）+ HealthBanner 顶部警告条（60s 轮询） |
+| B062 | auto_run.sh | `append_history` 轮转方向写反：`sed -i '' "100,$d"` 是「删第 100 行到末尾」= 保留最旧 99 行、砍掉刚 append 的最新记录。文件一到 101 行就把新记录砍回 99，history 实质冻结在旧数据（最新只停在侥幸落第 100 行的记录）。B-SYNC-HISTORY-NO-PERSISTENCE(PR-3) 同批引入。真实的 07-24 07:22 `+27/+27/+27` 手动运行记录即被此逻辑吃掉 | MEDIUM | 2026-07-24 | 2026-07-24 | 改为 `tail -n 100 > .tmp && mv` 保留最新 100 行；105 行自测确认留最新、丢最旧 |
+| B-DEEPSEEK-MODEL-EOL | lib/config.py + .env + ui | DeepSeek 平台 7-24~7-26 迁移期下线 `deepseek-reasoner`（API 报「supported API model names are deepseek-v4-pro or deepseek-v4-flash」），期间 22 篇 rewrite 400 标 failed 后永久跳过；Notion 缺口。旧模型名已废弃 | HIGH | 2026-08-10 | 2026-08-10 | 全链路换 `deepseek-v4-flash`（.env / config.py / settings route / model-options / LLMSettings / .env.example）；重跑救回 22 篇 |
+| B-REWRITE-EMPTY-CONTENT | lib/article_pipeline/rewrite.py | v4-flash/pro 是 reasoning 模型，`max_tokens=4096` 全被 `reasoning_content` 吃光导致正文 `content=0`（finish_reason=length/stop），rewrite 不检查空就保存 → Notion 出现一批正文 0 字空页面（21 篇） | HIGH | 2026-08-10 | 2026-08-10 | max_tokens 4096→16384（实测 reasoning≈6.4k + 正文≈0.9k）；新增空正文防御抛错标 failed 不保存 |
+| B-UPLOAD-NO-MIN-LENGTH | bin/upload_to_notion.py | 上传前不校验正文字数，空/过短成品照样建 Notion 空页 | MEDIUM | 2026-08-10 | 2026-08-10 | `upload_finished_file` 加 MIN_BODY_CHARS=300 门槛，偏短 `[SKIP-SHORT]` 返回 failed 不上传 |
 
 
 ---
@@ -158,6 +163,8 @@
 
 ## 更新日志
 
+- **2026-08-10**: 内容质量排查 + 修复 — 用户反馈 Notion 内容异常。排查发现：(1) DeepSeek 平台迁移期下线旧模型名导致 22 篇 failed（B-DEEPSEEK-MODEL-EOL），换 deepseek-v4-flash 救回；(2) v4 reasoning 模型 max_tokens=4096 被 reasoning_content 吃光导致 21 篇正文 0 字空文章（B-REWRITE-EMPTY-CONTENT），改 16384 + 空正文防御；(3) upload 无字数门槛（B-UPLOAD-NO-MIN-LENGTH），加 300 字门槛。清理：删 20 篇 Notion 空页 + 21 篇本地空文件 + 重跑全部救回。全量扫 Notion 2044 页确认仅剩 1 篇测试数据偏短。附带发现 B-EXA-RESEARCH-RETIRED（Exa Research 退役，待决策）。
+- **2026-07-24**: 内容管线停摆排查 — 根因 `rettiwt-api` 7.0.3 解析不了 X 新响应、静默返回空 → sync 每次 0 条 → 下游空转报 success（同 2026-04 v4 教训）。升级 7.1.2 后恢复，补跑 +27 书签→+27 报告→+27 成品→+27 Notion。附带发现并修复 B062（auto_run.sh history 轮转方向写反，冻结历史）。
 - **2026-07-07**: PR-5 (流水线 fail-soft 加固 + 健康检查) — 7-4~7-7 事故复盘修复：单篇 DeepSeek 400 (Content Exists Risk) 引发 batch fail-fast → auto_run Step 4 跳过 → 52 篇积压 2 天。修复 B-PIPELINE-FAIL-FAST / B-AUTORUN-STEP3-FAIL-FAST / B-DEEPSEEK-CONTENT-RISK-AMBIGUITY（新增 skipped 状态）/ B-NO-HEALTH-MONITOR（/api/health + HealthBanner）。
 - **2026-06-28**: PR-4 (P3 清理 + Article 详情页 P0 回归修复) 合并 — 修复 NEW-ARTICLE-DETAIL-GROK (P0 回归) / B-SYNC-ACTIONS-COLLAPSED / B-ARTC-ACTIONS-GROUPING / B-DATA-NO-DRY-RUN / B-DATA-NO-CATEGORY-CLEAR / B-DATA-EXPORT-LOG-SECRET-LEAK；附带修复 .gitignore data/ 太宽吞 API 路由。
 - **2026-06-27**: PR-3 (Schedule 单一真相 + History 持久化 + Settings/Articles/Reports 加固) 合并 — 修复 18 项 P0/P1/P2：B-CRON-DEAD / B-BUILTIN-TIMER-CONFUSING / B-AUTO-SYNC-DEAD / B-SYNC-HISTORY-NO-PERSISTENCE / B-PIPELINE-MODEL-CROSS-PROVIDER (P0) / B-NOTION-DBID-NO-SAVE-BTN / B-XAI-MODEL-MISSING / B-SYNC-RESUME / B-DEEPSEEK-BASE / B-PATH-STYLE-INCONSISTENT / B-PUB-STATUS / B-ARTC-UPLOADED-NEVER-WRITTEN / B-ARTC-RUN-CONFIRM / B-NAV-REPORTS / B-REPORTS-PAGE / B-SYNC-DEEP-TIMESTAMP-MISLEADING。BUGS.md 待修复表现在仅 B026 obsolete 标记；P3 留作后续。GitNexus 索引待重建。
