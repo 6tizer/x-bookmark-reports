@@ -1,0 +1,16 @@
+{
+  "session_id": "fix-content-quality-20260810",
+  "branch": "fix/content-quality-20260810",
+  "commit": "2bb59f0",
+  "tier": "hotfix",
+  "reviewer_model": "composer-2.5-fast",
+  "commander_model": "fable-5",
+  "verdict": "approve",
+  "date": "2026-08-10",
+  "summary": "内容质量修复：DeepSeek 模型迁移 v4-flash + rewrite 空正文防御(max_tokens 16384) + upload 300字门槛 + B062 history 轮转修复。Reviewer APPROVE，0 P0/P1，3 P2 文档/边缘语义建议留 follow-up。生产已实测：1123 written=1123 Notion，0 缺口。",
+  "findings": [
+    {"severity": "P2", "location": "ui/src/lib/db.ts:63", "desc": "SQLite 层默认值仍 deepseek-chat，非生产路径"},
+    {"severity": "P2", "location": "README.md:132", "desc": "文档示例仍 deepseek-chat"},
+    {"severity": "P2", "location": "bin/upload_to_notion.py:695", "desc": "body_too_short 返回 failed 会对永久偏短文件 recurring retry"}
+  ]
+}
