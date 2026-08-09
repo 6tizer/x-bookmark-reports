@@ -686,6 +686,14 @@ def upload_finished_file(md_path: Path, live: bool) -> tuple[str, str]:
     """
     text = md_path.read_text(encoding="utf-8")
     meta, body = _parse_finished_frontmatter(text)
+
+    # 最小正文字数门槛（PR-6）：rewrite 产出空/过短正文（如 reasoning 模型 max_tokens 被
+    # reasoning_content 吃光导致 content=0）时不上传 Notion，避免产生空页面。
+    MIN_BODY_CHARS = 300
+    if len(body.strip()) < MIN_BODY_CHARS:
+        print(f"  [SKIP-SHORT] {md_path.name} body too short ({len(body.strip())} chars < {MIN_BODY_CHARS})")
+        return "failed", f"body_too_short {len(body.strip())} chars"
+
     blocks = _md_to_blocks(body)
 
     title = meta.get("title") or md_path.stem

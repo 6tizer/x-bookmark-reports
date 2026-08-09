@@ -112,8 +112,9 @@ PYEOF
         local total
         total=$(wc -l < "$history_file" 2>/dev/null || echo 0)
         if [ "$total" -gt 100 ]; then
-            # macOS sed 用 -i ''
-            sed -i '' "100,\$d" "$history_file" 2>/dev/null || true
+            # 保留最近 100 行（旧的 sed "100,$d" 写反了：会砍掉最新记录、留最旧的）
+            tail -n 100 "$history_file" > "$history_file.tmp" 2>/dev/null \
+                && mv "$history_file.tmp" "$history_file" 2>/dev/null || true
         fi
     fi
 }

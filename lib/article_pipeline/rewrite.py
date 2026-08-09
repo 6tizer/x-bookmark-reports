@@ -150,7 +150,10 @@ class Rewriter:
                     {"role": "user", "content": user_content},
                 ],
                 temperature=0.7,
-                max_tokens=4096,
+                # reasoning 模型（v4-flash/v4-pro）的 reasoning_content 会占用 max_tokens 配额。
+                # 实测：v4-flash 长输入 reasoning≈6.4k tokens + 正文≈0.9k，4096/8192 都会被 reasoning
+                # 吃光导致正文 content=0（finish_reason=length）。16384 给 reasoning+正文留足空间。
+                max_tokens=16384,
             )
         except Exception as e:
             # DeepSeek 内容审核拒绝是永久性错误，抛专门异常让上层标 skipped
@@ -161,6 +164,15 @@ class Rewriter:
 
         article_body = resp.choices[0].message.content or ""
         logger.info("DeepSeek rewrite done: %d chars output", len(article_body))
+
+        # 空正文防御：content 为空（reasoning 占满 max_tokens 导致 finish_reason=length）
+        # 时抛错让上层标 failed 重试，而不是保存空文件污染 Notion
+        if not article_body.strip():
+            finish = getattr(resp.choices[0], "finish_reason", "?")
+            raise ValueError(
+                f"DeepSeek returned empty content (finish_reason={finish}); "
+                "likely max_tokens exhausted by reasoning_content"
+            )
 
         # Extract title from the generated body
         gen_title = _extract_title_from_body(article_body)

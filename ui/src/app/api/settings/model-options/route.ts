@@ -29,11 +29,11 @@ interface ModelOptionsData {
 // ── 静态白名单（DeepSeek / xAI 已知模型） ──
 
 const DEEPSEEK_WHITELIST: ModelOption[] = [
-  { value: "deepseek-chat", label: "DeepSeek Chat" },
-  { value: "deepseek-reasoner", label: "DeepSeek Reasoner" },
+  { value: "deepseek-v4-flash", label: "DeepSeek V4 Flash（默认，性价比）" },
+  { value: "deepseek-v4-pro", label: "DeepSeek V4 Pro（长文更稳）" },
 ];
 
-const DEFAULT_DEEPSEEK = "deepseek-chat";
+const DEFAULT_DEEPSEEK = "deepseek-v4-flash";
 const DEFAULT_XAI = "grok-4.3";
 
 // ── .env 解析（沿用 notion-stats.ts 的引号剥离逻辑） ──
