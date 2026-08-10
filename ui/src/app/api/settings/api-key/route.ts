@@ -16,6 +16,7 @@ const API_KEY_ENV_MAP: Record<ApiKeyName, string> = {
   DEEPSEEK_API_KEY: "DEEPSEEK_API_KEY",
   XAI_API_KEY: "XAI_API_KEY",
   EXA_API_KEY: "EXA_API_KEY",
+  FIRECRAWL_API_KEY: "FIRECRAWL_API_KEY",
 };
 
 // ── GET: Reveal a single key's plaintext value ─────────────────────

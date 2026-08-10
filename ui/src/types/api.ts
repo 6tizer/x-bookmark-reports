@@ -464,6 +464,9 @@ export interface Settings {
   xaiModel: string;
   exaApiKey: string;
   exaBaseUrl: string;
+  searxngBaseUrl: string;
+  firecrawlApiKey: string;
+  firecrawlBaseUrl: string;
   // Paths
   bookmarksPath: string;
   articlesDir: string;
@@ -493,9 +496,11 @@ export interface UpdateSettingsRequest {
   xaiBaseUrl?: string;
   xaiModel?: string;
   exaBaseUrl?: string;
+  searxngBaseUrl?: string;
+  firecrawlBaseUrl?: string;
 }
 
-export type ApiKeyName = "TWITTER_API_IO_KEY" | "NOTION_TOKEN" | "DEEPSEEK_API_KEY" | "XAI_API_KEY" | "EXA_API_KEY";
+export type ApiKeyName = "TWITTER_API_IO_KEY" | "NOTION_TOKEN" | "DEEPSEEK_API_KEY" | "XAI_API_KEY" | "EXA_API_KEY" | "FIRECRAWL_API_KEY";
 
 export interface UpdateApiKeyRequest {
   keyName: ApiKeyName;

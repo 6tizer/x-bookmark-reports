@@ -52,6 +52,9 @@ function buildSettingsFromEnv(): Settings {
     xaiModel: env.XAI_MODEL || "grok-4.3",
     exaApiKey: maskApiKey(env.EXA_API_KEY),
     exaBaseUrl: env.EXA_BASE_URL || "https://api.exa.ai",
+    searxngBaseUrl: env.SEARXNG_BASE_URL || "http://100.99.184.51:8888",
+    firecrawlApiKey: maskApiKey(env.FIRECRAWL_API_KEY),
+    firecrawlBaseUrl: env.FIRECRAWL_BASE_URL || "https://api.firecrawl.dev/v2",
     bookmarksPath: bookmarksPathAbs,
     articlesDir: articlesDirAbs,
     dataPath: dataPathAbs,
@@ -123,6 +126,12 @@ export async function PUT(
     }
     if (body.exaBaseUrl !== undefined) {
       envUpdates.EXA_BASE_URL = body.exaBaseUrl;
+    }
+    if (body.searxngBaseUrl !== undefined) {
+      envUpdates.SEARXNG_BASE_URL = body.searxngBaseUrl;
+    }
+    if (body.firecrawlBaseUrl !== undefined) {
+      envUpdates.FIRECRAWL_BASE_URL = body.firecrawlBaseUrl;
     }
 
     if (Object.keys(envUpdates).length > 0) {

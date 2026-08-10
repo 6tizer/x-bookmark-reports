@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * LLMSettings — DeepSeek, xAI, Exa, Pipeline Default Model
+ * LLMSettings — DeepSeek, xAI, Search (SearXNG/Firecrawl), Exa, Pipeline Default Model
  */
 
 import { useState, useEffect } from "react";
@@ -127,6 +127,8 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
   const [xaiBaseUrl, setXaiBaseUrl] = useState("https://api.x.ai/v1");
   const [xaiModel, setXaiModel] = useState("grok-4.3");
   const [exaBaseUrl, setExaBaseUrl] = useState("https://api.exa.ai");
+  const [searxngBaseUrl, setSearxngBaseUrl] = useState("http://100.99.184.51:8888");
+  const [firecrawlBaseUrl, setFirecrawlBaseUrl] = useState("https://api.firecrawl.dev/v2");
 
   useEffect(() => {
     if (settings) {
@@ -135,6 +137,8 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
       setXaiBaseUrl(settings.xaiBaseUrl || "https://api.x.ai/v1");
       setXaiModel(settings.xaiModel || "grok-4.3");
       setExaBaseUrl(settings.exaBaseUrl || "https://api.exa.ai");
+      setSearxngBaseUrl(settings.searxngBaseUrl || "http://100.99.184.51:8888");
+      setFirecrawlBaseUrl(settings.firecrawlBaseUrl || "https://api.firecrawl.dev/v2");
     }
   }, [settings]);
 
@@ -145,6 +149,8 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
       xaiBaseUrl,
       xaiModel,
       exaBaseUrl,
+      searxngBaseUrl,
+      firecrawlBaseUrl,
     });
   };
 
@@ -239,9 +245,48 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
         </div>
       </div>
 
+      {/* Search (SearXNG 主 / Firecrawl 备) */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <h3 className="text-sm font-semibold text-foreground">Search (SearXNG / Firecrawl)</h3>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">
+            SearXNG Base URL
+            <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
+              主搜索，自托管实例，无需 key
+            </span>
+          </label>
+          <input
+            type="text"
+            value={searxngBaseUrl}
+            onChange={(e) => setSearxngBaseUrl(e.target.value)}
+            className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+        <ApiKeyField
+          label="Firecrawl API Key（可留空走 Keyless）"
+          maskedValue={settings?.firecrawlApiKey || "****"}
+          keyName="FIRECRAWL_API_KEY"
+          onSave={handleApiKeySave}
+        />
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">
+            Firecrawl Base URL
+            <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
+              备用搜索：仅 SearXNG 失败或 0 结果时启用
+            </span>
+          </label>
+          <input
+            type="text"
+            value={firecrawlBaseUrl}
+            onChange={(e) => setFirecrawlBaseUrl(e.target.value)}
+            className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+      </div>
+
       {/* Exa */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Exa (Web Search)</h3>
+        <h3 className="text-sm font-semibold text-foreground">Exa (可选补充)</h3>
         <ApiKeyField
           label="API Key"
           maskedValue={settings?.exaApiKey || "****"}

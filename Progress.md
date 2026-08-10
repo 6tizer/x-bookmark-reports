@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-08-10 — research 栈迁移：SearXNG 主 + Firecrawl 备 + Exa Search 可选
+
+### 背景
+xAI 403（额度用尽）、Exa Research 模型（chat.completions + exa-research）410 退役，research 步骤双挂。迁移到「SearXNG 主 + Firecrawl 备 + Exa /search 可选」。
+
+### 我们实现了哪些功能？
+
+1. **SearXNG 主搜索**（必跑）：GET `{SEARXNG_BASE_URL}/search?q=...&format=json`，默认实例 `http://100.99.184.51:8888`，无需 key
+2. **Firecrawl 备用搜索**（仅 SearXNG 失败或 0 结果时）：POST `{FIRECRAWL_BASE_URL}/search`，无 key 走 Keyless
+3. **Exa 改 REST /search 可选补充**（有 key 时）：POST `{EXA_BASE_URL}/search` + `x-api-key`；删除已 410 的 chat.completions + exa-research 调用
+4. **xAI 保留为可选**：现有逻辑不动，失败 fail-soft
+5. **ResearchBundle 新字段**：`raw_searxng_response` / `raw_firecrawl_response` / `search_results_text`（搜索结果拼 markdown 供 rewrite 使用）；topic 默认取 meta 标题（xAI 缺席时非空）；全部 fail-soft 不抛异常
+6. **Settings UI**：新增「Search (SearXNG / Firecrawl)」区块（SearXNG Base URL + Firecrawl ApiKeyField + Base URL），Exa 区块改「Exa (可选补充)」；types / config / settings route / api-key route 同步
+
+### 我们遇到了哪些错误？
+
+1. tsc TS2739：`Settings` 接口加 3 个必填字段后，`ui/src/db/mock.ts` 与 `ui/src/lib/db.ts`（legacy DB 模式）两处构造器缺字段
+2. `npx tsc` 解析到新版 TS（6/7.x）报 `tsconfig.json` TS5101（baseUrl 废弃）——git stash 验证为存量问题，与本次改动无关
+
+### 我们是如何解决这些错误的？
+
+1. mock/db 构造器补 `searxngBaseUrl` / `firecrawlApiKey` / `firecrawlBaseUrl` 默认值（DB schema 无对应列，`??` 兜底）
+2. 以项目锁定的 `node_modules/.bin/tsc --noEmit`（TS 5.9.3）为准：exit 0
+
+### 验证
+
+- 实测 `research()`：topic=Code Mode AI agents（meta 标题兜底），sources=14，searxng=2988 字符，firecrawl=0（主搜索成功未触发备用），to_text=4114 字符
+- 改动：lib/config.py、lib/article_pipeline/research.py、.env.example、ui/src/types/api.ts、ui/src/lib/config.ts、ui/src/app/api/settings/route.ts、ui/src/app/api/settings/api-key/route.ts、ui/src/components/settings/LLMSettings.tsx（+ 波及修复 ui/src/db/mock.ts、ui/src/lib/db.ts）
+
+---
+
 ## 2026-08-10 — 内容质量排查与修复（一个月回顾）
 
 ### 背景

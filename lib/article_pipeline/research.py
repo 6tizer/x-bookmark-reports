@@ -1,4 +1,4 @@
-"""Research module — x.ai Responses API + Exa dual-path search."""
+"""Research module — SearXNG 主 + Firecrawl 备 + xAI / Exa Search 可选补充."""
 
 from __future__ import annotations
 
@@ -8,11 +8,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import requests
+
 from lib import config
 from lib.config import (
     ARTICLE_RESEARCH_DIR,
     EXA_API_KEY,
     EXA_BASE_URL,
+    FIRECRAWL_API_KEY,
+    FIRECRAWL_BASE_URL,
+    SEARXNG_BASE_URL,
     XAI_API_KEY,
     XAI_BASE_URL,
 )
@@ -112,6 +117,9 @@ class ResearchBundle:
     key_insights: List[str] = field(default_factory=list)
     raw_xai_response: str = ""
     raw_exa_response: str = ""
+    raw_searxng_response: str = ""
+    raw_firecrawl_response: str = ""
+    search_results_text: str = ""
     sources: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -124,6 +132,9 @@ class ResearchBundle:
             "key_insights": self.key_insights,
             "raw_xai_response": self.raw_xai_response[:4000],
             "raw_exa_response": self.raw_exa_response[:4000],
+            "raw_searxng_response": self.raw_searxng_response[:4000],
+            "raw_firecrawl_response": self.raw_firecrawl_response[:4000],
+            "search_results_text": self.search_results_text[:8000],
             "sources": self.sources,
         }
 
@@ -152,6 +163,8 @@ class ResearchBundle:
             parts.append("## 关键发现")
             for i, ins in enumerate(self.key_insights, 1):
                 parts.append(f"{i}. {ins}")
+        if self.search_results_text:
+            parts.append(f"## 搜索结果\n{self.search_results_text}")
         if self.sources:
             parts.append("## 来源")
             for s in self.sources:
@@ -160,11 +173,10 @@ class ResearchBundle:
 
 
 class Researcher:
-    """Run research via x.ai (primary) and Exa (supplementary)."""
+    """研究编排：xAI（可选）→ SearXNG（主）→ Firecrawl（备）→ Exa Search（可选补充）。"""
 
     def __init__(self) -> None:
         self._xai_client: Any = None
-        self._exa_client: Any = None
         self._system_prompt = _load_prompt("system_research.txt")
 
     def _get_xai_client(self) -> Any:
@@ -179,17 +191,79 @@ class Researcher:
             )
         return self._xai_client
 
-    def _get_exa_client(self) -> Any:
-        if self._exa_client is None:
-            if not EXA_API_KEY:
-                return None
-            from openai import OpenAI
+    # --- 搜索后端（全部 fail-soft：异常由调用方捕获记录，不向上抛） ---
 
-            self._exa_client = OpenAI(
-                api_key=EXA_API_KEY,
-                base_url=EXA_BASE_URL,
-            )
-        return self._exa_client
+    def _search_searxng(self, query: str, limit: int = 10) -> List[Dict[str, str]]:
+        """SearXNG 主搜索：GET /search?q=...&format=json，取 results[]。"""
+        resp = requests.get(
+            f"{SEARXNG_BASE_URL.rstrip('/')}/search",
+            params={"q": query, "format": "json"},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results: List[Dict[str, str]] = []
+        for item in (data.get("results") or [])[:limit]:
+            results.append({
+                "title": str(item.get("title") or ""),
+                "url": str(item.get("url") or ""),
+                "content": str(item.get("content") or ""),
+            })
+        return results
+
+    def _search_firecrawl(self, query: str, limit: int = 5) -> List[Dict[str, str]]:
+        """Firecrawl 备用搜索：POST {base}/search；无 key 时 Keyless（不带 Authorization）。"""
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if FIRECRAWL_API_KEY:
+            headers["Authorization"] = f"Bearer {FIRECRAWL_API_KEY}"
+        resp = requests.post(
+            f"{FIRECRAWL_BASE_URL.rstrip('/')}/search",
+            headers=headers,
+            json={"query": query, "limit": limit},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results: List[Dict[str, str]] = []
+        for item in ((data.get("data") or {}).get("web") or [])[:limit]:
+            results.append({
+                "title": str(item.get("title") or ""),
+                "url": str(item.get("url") or ""),
+                "content": str(item.get("description") or item.get("content") or ""),
+            })
+        return results
+
+    def _search_exa(self, query: str, limit: int = 5) -> List[Dict[str, str]]:
+        """Exa 可选补充：POST {EXA_BASE_URL}/search（REST + x-api-key；非已退役的 exa-research 模型）。"""
+        resp = requests.post(
+            f"{EXA_BASE_URL.rstrip('/')}/search",
+            headers={"x-api-key": EXA_API_KEY, "Content-Type": "application/json"},
+            json={"query": query, "numResults": limit},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results: List[Dict[str, str]] = []
+        for item in (data.get("results") or [])[:limit]:
+            results.append({
+                "title": str(item.get("title") or ""),
+                "url": str(item.get("url") or ""),
+                "content": str(item.get("text") or item.get("summary") or ""),
+            })
+        return results
+
+    @staticmethod
+    def _format_search_results(results: List[Dict[str, str]]) -> str:
+        """把搜索结果（标题/URL/摘要）拼成 markdown，供 to_text() 传给 rewrite 步骤。"""
+        lines: List[str] = []
+        for r in results:
+            title = r.get("title") or "(no title)"
+            url = r.get("url") or ""
+            snippet = (r.get("content") or "").strip()
+            lines.append(f"- [{title}]({url})")
+            if snippet:
+                lines.append(f"  {snippet[:300]}")
+        return "\n".join(lines)
 
     def research(
         self,
@@ -206,8 +280,12 @@ class Researcher:
             ResearchBundle with structured findings.
         """
         bundle = ResearchBundle()
+        # topic 默认设为 meta 标题，保证 xAI 缺席时 bundle.topic 非空
         topic = meta.get("title") or meta.get("url") or "unknown topic"
+        bundle.topic = topic
         query = self._build_query(meta, body_excerpt)
+        # 搜索引擎用简洁查询词（标题优先），区别于喂给 xAI 的长 prompt
+        search_query = meta.get("title") or body_excerpt[:200] or topic
 
         # --- x.ai ---
         xai_text = ""
@@ -255,58 +333,55 @@ class Researcher:
             logger.error("x.ai research failed: %s", exc)
             bundle.raw_xai_response = f"[x.ai error: {exc}]"
 
-        # --- Exa (optional supplement) ---
-        exa_client = self._get_exa_client()
-        if exa_client is not None:
-            max_retries = 2
-            for attempt in range(1, max_retries + 1):
-                try:
-                    logger.info(
-                        "Exa research: supplementing for '%s' (attempt %d/%d)",
-                        topic[:60], attempt, max_retries,
-                    )
-                    exa_query = f"对以下主题进行深度研究，补充竞品分析、社区反馈和项目背景：{topic}\n\n{body_excerpt[:1000]}"
-                    exa_resp = exa_client.chat.completions.create(
-                        model="exa-research",
-                        messages=[
-                            {"role": "system", "content": self._system_prompt},
-                            {"role": "user", "content": exa_query},
-                        ],
-                        timeout=60,
-                    )
-                    # Exa returns multiple choices; early ones are intermediate
-                    # search steps with empty content. Find the last non-empty one.
-                    exa_text = ""
-                    for choice in reversed(exa_resp.choices):
-                        c = choice.message.content
-                        if c:
-                            exa_text = c
-                            break
-                    if exa_text:
-                        bundle.raw_exa_response = exa_text
-                        logger.info("Exa research done: %d chars", len(exa_text))
-                        break  # success
-                    else:
-                        logger.warning(
-                            "Exa returned %d choices, all empty (attempt %d/%d)",
-                            len(exa_resp.choices), attempt, max_retries,
-                        )
-                        if attempt < max_retries:
-                            import time as _t
-                            _t.sleep(3)
-                except Exception as exc:
-                    logger.warning(
-                        "Exa research failed (attempt %d/%d): %s",
-                        attempt, max_retries, exc,
-                    )
-                    if attempt == max_retries:
-                        bundle.raw_exa_response = f"[Exa error: {exc}]"
-                    else:
-                        import time as _t
-                        _t.sleep(3)
+        # --- SearXNG（主搜索，必跑；失败 fail-soft 仅记录） ---
+        searxng_results: List[Dict[str, str]] = []
+        try:
+            logger.info("SearXNG search: '%s'", search_query[:60])
+            searxng_results = self._search_searxng(search_query, limit=10)
+            bundle.raw_searxng_response = json.dumps(searxng_results, ensure_ascii=False)
+            logger.info("SearXNG search done: %d results", len(searxng_results))
+        except Exception as exc:
+            logger.warning("SearXNG search failed: %s", exc)
+            bundle.raw_searxng_response = f"[searxng error: {exc}]"
 
-        # Parse structured data from combined text
+        # --- Firecrawl（备用：仅 SearXNG 失败或 0 结果时启用） ---
+        firecrawl_results: List[Dict[str, str]] = []
+        if not searxng_results:
+            try:
+                logger.info("Firecrawl search (fallback): '%s'", search_query[:60])
+                firecrawl_results = self._search_firecrawl(search_query, limit=5)
+                bundle.raw_firecrawl_response = json.dumps(firecrawl_results, ensure_ascii=False)
+                logger.info("Firecrawl search done: %d results", len(firecrawl_results))
+            except Exception as exc:
+                logger.warning("Firecrawl search failed: %s", exc)
+                bundle.raw_firecrawl_response = f"[firecrawl error: {exc}]"
+
+        # --- Exa /search（可选补充，有 key 时；REST 端点，非已退役的 exa-research 模型） ---
+        exa_results: List[Dict[str, str]] = []
+        if EXA_API_KEY:
+            try:
+                logger.info("Exa /search supplement: '%s'", search_query[:60])
+                exa_results = self._search_exa(search_query, limit=5)
+                bundle.raw_exa_response = json.dumps(exa_results, ensure_ascii=False)
+                logger.info("Exa /search done: %d results", len(exa_results))
+            except Exception as exc:
+                logger.warning("Exa /search failed: %s", exc)
+                bundle.raw_exa_response = f"[exa error: {exc}]"
+
+        # 汇总搜索结果：URL 去重进 sources；markdown 进 search_results_text 供 rewrite 使用
+        all_results = searxng_results + firecrawl_results + exa_results
+        seen_urls = set(bundle.sources)
+        for r in all_results:
+            u = r.get("url") or ""
+            if u and u not in seen_urls:
+                seen_urls.add(u)
+                bundle.sources.append(u)
+        bundle.search_results_text = self._format_search_results(all_results)
+
+        # Parse structured data from combined text（xAI 缺席时保留 meta 标题作为 topic）
         self._parse_research(bundle, xai_text)
+        if not bundle.topic:
+            bundle.topic = topic
         return bundle
 
     def _build_query(self, meta: Dict[str, Any], body_excerpt: str) -> str:
@@ -399,6 +474,9 @@ def load_bundle(tweet_id: str) -> Optional[ResearchBundle]:
             key_insights=data.get("key_insights", []),
             raw_xai_response=data.get("raw_xai_response", ""),
             raw_exa_response=data.get("raw_exa_response", ""),
+            raw_searxng_response=data.get("raw_searxng_response", ""),
+            raw_firecrawl_response=data.get("raw_firecrawl_response", ""),
+            search_results_text=data.get("search_results_text", ""),
             sources=data.get("sources", []),
         )
     except (json.JSONDecodeError, OSError) as exc:

@@ -23,6 +23,9 @@ export interface RawEnvConfig {
   XAI_MODEL?: string;
   EXA_API_KEY?: string;
   EXA_BASE_URL?: string;
+  SEARXNG_BASE_URL?: string;
+  FIRECRAWL_API_KEY?: string;
+  FIRECRAWL_BASE_URL?: string;
   // Paths
   BOOKMARKS_PATH?: string;
   ARTICLES_DIR?: string;
@@ -40,6 +43,7 @@ export const API_KEY_ENV_NAMES = [
   "DEEPSEEK_API_KEY",
   "XAI_API_KEY",
   "EXA_API_KEY",
+  "FIRECRAWL_API_KEY",
 ] as const;
 
 function readEnvFile(): RawEnvConfig {
