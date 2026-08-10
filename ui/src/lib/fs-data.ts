@@ -318,14 +318,8 @@ function normalizePipelineStatus(st: string | undefined): FsArticlePipelineStatu
 }
 
 function countNotionFinishedUploaded(): number {
-  if (!fs.existsSync(NOTION_FINISHED_STATE)) return 0;
-  try {
-    const raw = JSON.parse(fs.readFileSync(NOTION_FINISHED_STATE, "utf-8")) as { uploaded?: unknown };
-    if (Array.isArray(raw.uploaded)) return raw.uploaded.length;
-  } catch {
-    /* ignore */
-  }
-  return 0;
+  // 与 getNotionFinishedSet 同一口径（过滤非数字 id）
+  return getNotionFinishedSet().size;
 }
 
 // ─────────────────────────────────────────────
@@ -1255,8 +1249,9 @@ export interface RunStateFields {
  *
  * 设计要点：
  *   - 文件不存在时创建默认结构 + 写入 last_run_* 字段
- *   - 文件存在但解析失败时，**不破坏原内容**，仅追加 last_run_* 字段
- *   - 用 try/catch 包裹，避免 Next.js 进程因 state 文件 IO 异常崩溃
+ *   - 文件存在但 JSON 解析失败 / 非 object：**refuse-write**（不覆写，打 error 日志）
+ *   - 成功路径：仅合并 last_run_*，tmp + rename 原子写
+ *   - 外层 try/catch 吞 IO 异常，避免阻塞 pipeline spawn / API
  */
 export function updateRunState(stateFilePath: string, updates: RunStateFields): void {
   try {

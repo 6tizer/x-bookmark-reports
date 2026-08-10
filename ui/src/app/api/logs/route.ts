@@ -2,9 +2,8 @@
  * GET /api/logs
  * CONTRACT v1.0 — DB logs + logs/bookmark-auto.log 合并（按时间倒序去重）
  *
- * 分页策略：
- * - page===1：合并 DB 最近条目 + bookmark-auto.log（auto_run 近况）
- * - page>1：仅 DB 分页（文件日志只覆盖近期，避免深页空窗/total 失真）
+ * 分页：从起点取 DB 窗口 + 文件日志合并后再 slice，保证跨页连续。
+ * 超过窗口上限的深页回退为纯 DB 分页。
  */
 
 import { NextResponse } from "next/server";
@@ -12,10 +11,12 @@ import { listLogs } from "@/lib/db";
 import { mergeLogEntries, readBookmarkAutoLog } from "@/lib/log-reader";
 import type { ApiResponse, LogEntry, PaginatedResponse, LogComponent, LogLevel } from "@/types/api";
 
+/** 合并窗口上限：超出后深页走纯 DB，避免一次加载过大 */
+const MERGE_WINDOW_MAX = 3000;
+
 export async function GET(
   request: Request
 ): Promise<NextResponse<ApiResponse<PaginatedResponse<LogEntry>>>> {
-  // 提到 try 外，便于 catch 块引用
   let page = 1;
   let limit = 50;
   try {
@@ -27,27 +28,37 @@ export async function GET(
     const component = (searchParams.get("component") as LogComponent) ?? undefined;
     const level = (searchParams.get("level") as LogLevel) ?? undefined;
 
-    if (page > 1) {
-      // 深页：纯 DB，保证 offset/total/hasMore 一致
+    const offset = (page - 1) * limit;
+    // 深页超出合并窗口：纯 DB，避免空页与内存暴涨
+    if (offset >= MERGE_WINDOW_MAX) {
       const dbPage = listLogs(page, limit, component, level);
       return NextResponse.json({ success: true, data: dbPage });
     }
 
-    // 首页：合并文件日志与 DB 最近条目
-    const dbRecent = listLogs(1, Math.max(limit, 200), component, level);
     const fileLogs = readBookmarkAutoLog(500);
-    const merged = mergeLogEntries(dbRecent.items, fileLogs, component, level);
-    const items = merged.slice(0, limit);
+    const fetchLimit = Math.min(
+      Math.max(page * limit + fileLogs.length, 200),
+      MERGE_WINDOW_MAX
+    );
+    const dbWindow = listLogs(1, fetchLimit, component, level);
+    const merged = mergeLogEntries(dbWindow.items, fileLogs, component, level);
+    const items = merged.slice(offset, offset + limit);
 
-    // total ≈ DB 总数 + 仅存在于文件侧的增量（近似，供 UI 翻页）
-    const dbKeys = new Set(dbRecent.items.map((e) => `${e.timestamp}|${e.message}`));
+    // file-only：出现在合并结果但不在本次 DB 窗口键集合中的条目
+    const dbKeys = new Set(dbWindow.items.map((e) => `${e.timestamp}|${e.message}`));
     let fileOnly = 0;
     for (const e of fileLogs) {
       if (component && e.component !== component) continue;
       if (level && e.level !== level) continue;
       if (!dbKeys.has(`${e.timestamp}|${e.message}`)) fileOnly++;
     }
-    const total = Math.max(dbRecent.total + fileOnly, merged.length);
+
+    // total：DB 全量 + file-only 近似；hasMore 以合并流与 DB 是否还有更多为准
+    const total = Math.max(dbWindow.total + fileOnly, merged.length);
+    const hasMore =
+      offset + items.length < merged.length ||
+      dbWindow.hasMore ||
+      fetchLimit < dbWindow.total;
 
     return NextResponse.json({
       success: true,
@@ -56,7 +67,7 @@ export async function GET(
         total,
         page,
         limit,
-        hasMore: page * limit < total,
+        hasMore,
       },
     });
   } catch (err) {
@@ -64,6 +75,8 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
+        // 顶层 message：兼容 api.ts 非 2xx 读取 errBody.message
+        message,
         data: { items: [], total: 0, page, limit, hasMore: false },
         error: { code: "INTERNAL_ERROR", message, detail: String(err) },
       },

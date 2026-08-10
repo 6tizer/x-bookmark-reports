@@ -44,6 +44,9 @@ function statusColor(status: PipelineStatus): string {
       return "bg-green-500 text-white border-green-500";
     case "running":
       return "bg-twitter-blue text-white border-twitter-blue animate-pulse";
+    case "partial":
+      // 与 Sync PipelineOverview 一致：部分成功/失败
+      return "bg-orange-500 text-white border-orange-500";
     case "failed":
       return "bg-red-500 text-white border-red-500";
     default:
@@ -57,6 +60,8 @@ function lineStyle(status: PipelineStatus): string {
       return "bg-green-400";
     case "running":
       return "bg-twitter-blue pipeline-line-active";
+    case "partial":
+      return "bg-orange-400";
     default:
       return "border-t-2 border-dashed border-border bg-transparent";
   }
