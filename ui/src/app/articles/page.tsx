@@ -40,6 +40,12 @@ function statusLabel(s: ArticleStatus): string {
 export default function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [total, setTotal] = useState(0);
+  // 页头口径：drafts / finished / failed（与筛选后的 total 解耦）
+  const [listStats, setListStats] = useState<{
+    drafts: number;
+    finished: number;
+    failed: number;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ArticleStatus | undefined>(undefined);
@@ -100,6 +106,7 @@ export default function ArticlesPage() {
       setTotal(res.total);
       setHasMore(res.hasMore);
       setPage(res.page);
+      if (res.stats) setListStats(res.stats);
     } finally {
       setIsLoading(false);
     }
@@ -169,7 +176,9 @@ export default function ArticlesPage() {
           <div>
             <h1 className="text-xl font-bold text-foreground">Articles</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {`${total} article${total === 1 ? "" : "s"} (deep drafts + pipeline)`}
+              {listStats
+                ? `${listStats.drafts} drafts · ${listStats.finished} finished · ${listStats.failed} failed`
+                : `${total} article${total === 1 ? "" : "s"}`}
             </p>
           </div>
 

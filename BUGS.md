@@ -23,6 +23,17 @@
 
 | ID   | 文件                                 | 问题描述                                                                                                   | 严重性    | 发现日期       | 修复日期       | 修复说明                                                    |
 | ---- | ---------------------------------- | ------------------------------------------------------------------------------------------------------ | ------ | ---------- | ---------- | ------------------------------------------------------- |
+| B-SYNC-REWRITE-STALE | ui/src/lib/fs-data.ts + PipelineOverview | Idle+failed 时 rewrite 仍标 running | MEDIUM | 2026-08-11 | 2026-08-11 | 状态机改为 running/completed/partial/pending；UI 橙色 partial |
+| B-ARTICLES-TOTAL-MIXED | ui articles API/page | 页头 total 与 Dashboard 口径混用 | MEDIUM | 2026-08-11 | 2026-08-11 | API 附加 `stats:{drafts,finished,failed}`；页头拆分显示 |
+| B-LOG-STALE | ui logs route + log-reader | auto_run 只写文件不进 SQLite，Logs 停在旧数据 | HIGH | 2026-08-11 | 2026-08-11 | 合并 `logs/bookmark-auto.log`；加 logs.timestamp 索引 |
+| B-TITLE-PLACEHOLDER-LEAK | lib/article_pipeline/rewrite.py | 成品标题可为「素材不足」等占位词 | MEDIUM | 2026-08-11 | 2026-08-11 | 占位标题回退 meta.title / 否则 failed；修复 2 篇 frontmatter |
+| B-DEEP-STATE-ORPHANS | output/.deep-run-state.json | completed_ids=2105 vs 磁盘 1163 | MEDIUM | 2026-08-11 | 2026-08-11 | `bin/reconcile_deep_state.py`：942→orphaned_ids，bak.20260811 |
+| B-NOTION-COUNT-DRIFT | ui StatCards | Notion 总记录与本管线已上传口径混淆 | LOW | 2026-08-11 | 2026-08-11 | 文案改为「Notion 总记录（含历史）· 本管线已上传 N」（不改数据） |
+| B-HEALTH-XAI-ONLY | /api/health | apiStatus 仅 xAI | LOW | 2026-08-11 | 2026-08-11 | 扩展 searxng/firecrawl/exa |
+| B-RETTIWT-LOCAL-NULL | /api/system/rettiwt | localVersion=null（PATH/--version） | LOW | 2026-08-11 | 2026-08-11 | PATH fallback + 读 package.json（CLI 无 --version） |
+| B-DOCS-CONTEXT-STALE | PROJECT_CONTEXT.md | §五研究栈文档过期 | LOW | 2026-08-11 | 2026-08-11 | 改为 SearXNG 主→Firecrawl 备→Exa 可选 |
+| B-SEARCH-ENV-MISSING | .env / Settings | 无 SEARXNG/FIRECRAWL 配置 | MEDIUM | 2026-08-11 | 2026-08-11 | 已写入 SEARXNG_BASE_URL + FIRECRAWL_API_KEY；研究链路实测 OK |
+| B-FIRECRAWL-KEY-MASK | ui settings API/UI | 空 key 显示 **** | LOW | 2026-08-11 | 2026-08-11 | maskApiKey 空→""；Firecrawl 不再兜底 **** |
 | B001 | github_client.py                   | `GitHubNotFound` 未被 fallback 捕获，gh CLI 404 时不会尝试 urllib                                                | MEDIUM | 2026-03-30 | 2026-03-30 | 添加 `GitHubNotFound` 到异常捕获元组                             |
 | B002 | github_client.py                   | URL 提取可被伪造 URL 绕过（如 `evil.com/?github.com/owner/repo`）                                                 | MEDIUM | 2026-03-30 | 2026-03-30 | 使用 `urllib.parse.urlparse` 验证 netloc                    |
 | B003 | github_client.py                   | `GitHubParseError` 是死代码，从未抛出                                                                           | LOW    | 2026-03-30 | 2026-03-30 | 移除未使用的异常类                                               |
@@ -163,6 +174,9 @@
 
 ## 更新日志
 
+- **2026-08-11**: 逻辑/数据/文档修复批次 — 完成 P0–P3：rewrite `partial` 状态机、Articles stats 口径、Logs 合并 bookmark-auto.log、rewrite 坏标题防御+2 篇数据修复、deep-state reconcile（942 orphans）、Notion 文案、health apiStatus 扩展、rettiwt package.json 版本、PROJECT_CONTEXT 研究栈同步。详见 Progress.md。
+- **2026-08-11**: 浏览器点选验收 — cursor-ide-browser 恢复后逐页走通；确认 Settings Search 区块上线；新登记 B-SYNC-REWRITE-STALE（Rewrite 误标 Running）。详见验收文档 §5。
+- **2026-08-11**: UI 验收 — 管线正常（最近 auto_run success +3）；生产 UI 过期已 rebuild/重启；Glass 打开各页供人工复看。新登记 B-LOG-STALE / B-SEARCH-ENV-MISSING / B-ARTICLES-TOTAL-MIXED / B-DEEP-STATE-ORPHANS 等（详见 `docs/UI_ACCEPTANCE_2026-08-11.md`）。
 - **2026-08-10**: research 栈迁移 — 决策对齐后实施：xAI 403（额度尽）+ Exa Research 410（退役）双挂 → 迁移为 SearXNG 主（自托管 CQA Tokyo，实测 20 条/0.7s）+ Firecrawl 备（Keyless，2 credits/10 条）+ Exa `/search` 可选（每月 $10 免费额度）。改动 research.py / config.py / .env.example + Settings UI 新增 Search 区块。B-EXA-RESEARCH-RETIRED 转已修复。
 - **2026-08-10**: 内容质量排查 + 修复 — 用户反馈 Notion 内容异常。排查发现：(1) DeepSeek 平台迁移期下线旧模型名导致 22 篇 failed（B-DEEPSEEK-MODEL-EOL），换 deepseek-v4-flash 救回；(2) v4 reasoning 模型 max_tokens=4096 被 reasoning_content 吃光导致 21 篇正文 0 字空文章（B-REWRITE-EMPTY-CONTENT），改 16384 + 空正文防御；(3) upload 无字数门槛（B-UPLOAD-NO-MIN-LENGTH），加 300 字门槛。清理：删 20 篇 Notion 空页 + 21 篇本地空文件 + 重跑全部救回。全量扫 Notion 2044 页确认仅剩 1 篇测试数据偏短。附带发现 B-EXA-RESEARCH-RETIRED（Exa Research 退役，待决策）。
 - **2026-07-24**: 内容管线停摆排查 — 根因 `rettiwt-api` 7.0.3 解析不了 X 新响应、静默返回空 → sync 每次 0 条 → 下游空转报 success（同 2026-04 v4 教训）。升级 7.1.2 后恢复，补跑 +27 书签→+27 报告→+27 成品→+27 Notion。附带发现并修复 B062（auto_run.sh history 轮转方向写反，冻结历史）。

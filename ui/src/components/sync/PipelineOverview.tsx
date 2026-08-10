@@ -35,6 +35,8 @@ function statusColor(status: PipelineStatus): string {
       return "bg-green-500 text-white border-green-500";
     case "running":
       return "bg-twitter-blue text-white border-twitter-blue animate-pulse";
+    case "partial":
+      return "bg-orange-500 text-white border-orange-500";
     case "failed":
       return "bg-red-500 text-white border-red-500";
     default:
@@ -48,6 +50,8 @@ function statusBadge(status: PipelineStatus): string {
       return "text-green-500";
     case "running":
       return "text-twitter-blue";
+    case "partial":
+      return "text-orange-500";
     case "failed":
       return "text-red-500";
     default:

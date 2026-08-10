@@ -52,7 +52,7 @@ x-bookmark-reports/
 │   └── article_pipeline/       # 成品文章管线模块
 │       ├── state.py            # 管线状态（幂等、可续跑）
 │       ├── metadata.py         # 深度报告元数据解析
-│       ├── research.py         # xAI + Exa 双路搜索研究
+│       ├── research.py         # SearXNG 主 → Firecrawl 备 → Exa/xAI 可选
 │       ├── rewrite.py          # DeepSeek 文章成文
 │       └── prompts/            # System prompt 模板
 ├── ui/                         # Next.js Dashboard ★
@@ -122,8 +122,12 @@ NOTION_DB_ID=your_db_id          # Notion 数据库 ID
 
 # AI 模型（成品管线必填）
 DEEPSEEK_API_KEY=your_key        # DeepSeek（文章成文）
-XAI_API_KEY=your_key             # xAI Grok（搜索研究）
-EXA_API_KEY=your_key             # Exa（补充研究，可选）
+
+# 研究搜索栈（SearXNG 主 → Firecrawl 备 → Exa/xAI 可选）
+SEARXNG_BASE_URL=http://127.0.0.1:8888
+FIRECRAWL_API_KEY=fc-xxx         # 可选；SearXNG 无结果时备用
+EXA_API_KEY=your_key             # 可选补充（/search）
+XAI_API_KEY=your_key             # 可选；额度不足时 fail-soft
 
 # 可选
 PROXY=http://127.0.0.1:7897
@@ -193,11 +197,13 @@ bash auto_run.sh --force   # 跳过代理检测，立即运行全流程
 
 ## 🤖 AI 搜索供应商
 
-| 供应商 | 用途 | 模型 | 说明 |
-|---|---|---|---|
-| **xAI (Grok)** | 主力搜索 | `grok-4.3` | Responses API，含 `web_search` + `x_search` |
-| **Exa** | 补充研究 | `exa-research` | 多 choices，自动取最后非空结果，2 次重试 |
-| **DeepSeek** | 文章成文 | `deepseek-chat` | OpenAI 兼容 API |
+| 供应商 | 用途 | 说明 |
+|---|---|---|
+| **SearXNG** | 主搜索 | 自托管聚合搜索（`SEARXNG_BASE_URL`） |
+| **Firecrawl** | 备用抓取 | SearXNG 无结果时补充（`FIRECRAWL_API_KEY`） |
+| **Exa** | 可选补充 | `/search` 语义搜索（非 research chat） |
+| **xAI (Grok)** | 可选 | Responses API；额度不足 fail-soft |
+| **DeepSeek** | 文章成文 | OpenAI 兼容 API |
 
 ---
 

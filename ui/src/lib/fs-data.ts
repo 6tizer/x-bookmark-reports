@@ -318,14 +318,8 @@ function normalizePipelineStatus(st: string | undefined): FsArticlePipelineStatu
 }
 
 function countNotionFinishedUploaded(): number {
-  if (!fs.existsSync(NOTION_FINISHED_STATE)) return 0;
-  try {
-    const raw = JSON.parse(fs.readFileSync(NOTION_FINISHED_STATE, "utf-8")) as { uploaded?: unknown };
-    if (Array.isArray(raw.uploaded)) return raw.uploaded.length;
-  } catch {
-    /* ignore */
-  }
-  return 0;
+  // 与 getNotionFinishedSet 同一口径（过滤非数字 id）
+  return getNotionFinishedSet().size;
 }
 
 // ─────────────────────────────────────────────
@@ -494,7 +488,12 @@ export function listArticles(
   limit: number = 20,
   status?: string,
   search?: string
-): { items: FsArticle[]; total: number; hasMore: boolean } {
+): {
+  items: FsArticle[];
+  total: number;
+  hasMore: boolean;
+  stats: { drafts: number; finished: number; failed: number };
+} {
   const tweetIds = new Set(listDeepDraftTweetIds());
   const pipeline = readPipelineArticles();
   for (const k of Object.keys(pipeline)) {
@@ -510,6 +509,16 @@ export function listArticles(
     const a = buildFsArticleForTweetId(tid, notionSet);
     if (a) articles.push(a);
   }
+
+  // 页头口径：在 status/search 过滤前统计全局 drafts / finished / failed
+  const drafts = articles.length;
+  let finished = 0;
+  let failed = 0;
+  for (const a of articles) {
+    if (a.status === "written" || a.status === "uploaded") finished++;
+    else if (a.status === "failed") failed++;
+  }
+  const stats = { drafts, finished, failed };
 
   if (status) {
     articles = articles.filter((a) => a.status === status);
@@ -528,7 +537,7 @@ export function listArticles(
   const total = articles.length;
   const offset = (page - 1) * limit;
   const items = articles.slice(offset, offset + limit);
-  return { items, total, hasMore: page * limit < total };
+  return { items, total, hasMore: page * limit < total, stats };
 }
 
 export function getArticleById(id: string): FsArticle | null {
@@ -626,7 +635,7 @@ export function getDashboardStats(): FsDashboardStats {
   };
 }
 
-type PipelineStepStatus = "pending" | "running" | "completed" | "failed";
+type PipelineStepStatus = "pending" | "running" | "completed" | "failed" | "partial";
 
 function node(
   status: PipelineStepStatus,
@@ -745,8 +754,12 @@ export function getPipelineStatus(): DashboardPipelineFour {
     });
   } else if (totalDrafts > 0 && deepDone >= totalDrafts) {
     deepReports = node("completed", deep.last_run || lastRun, 100);
+  } else if (deepDone > 0 && Array.isArray(deep.errors) && deep.errors.length > 0) {
+    // Idle 且有错误：partial（勿再误标 running）
+    deepReports = node("partial", deep.last_run || lastRun, deepProgress);
   } else if (deepDone > 0) {
-    deepReports = node("running", deep.last_run || lastRun, deepProgress);
+    // Idle 有进度无错误：pending（等待下次 deep-batch）
+    deepReports = node("pending", deep.last_run || lastRun, deepProgress);
   } else if (twitterSync.status === "completed") {
     deepReports = node("pending", deep.last_run || undefined, 0);
   } else {
@@ -765,13 +778,23 @@ export function getPipelineStatus(): DashboardPipelineFour {
   const bp = getBatchProgress();
   const articleSubRunning = bp.isRunning;
 
-  const rewrite: PipelineNode = articleSubRunning
-    ? node("running", bp.items[0]?.updatedAt, rewP, undefined, rewPGlobal)
-    : rewP >= 100
-      ? node("completed", lastRun, 100, undefined, rewPGlobal)
-      : rewP > 0
-        ? node("running", lastRun, rewP, undefined, rewPGlobal)
-        : node("pending", lastRun, 0, undefined, rewPGlobal);
+  // Rewrite 状态机：Idle + failed 时标 partial/failed，不再把进度中的管线误标为 running
+  let rewrite: PipelineNode;
+  if (articleSubRunning) {
+    rewrite = node("running", bp.items[0]?.updatedAt, rewP, undefined, rewPGlobal);
+  } else if (rewP >= 100 && bp.failed === 0) {
+    rewrite = node("completed", lastRun, 100, undefined, rewPGlobal);
+  } else if (bp.failed > 0 && bp.completed > 0) {
+    rewrite = node("partial", lastRun, rewP, undefined, rewPGlobal);
+  } else if (bp.failed > 0) {
+    // 整批失败、零完成
+    rewrite = node("failed", lastRun, rewP, undefined, rewPGlobal);
+  } else if (rewP > 0) {
+    // 有进度但尚无 failed，且未在跑：视为 pending（等待下次 batch）
+    rewrite = node("pending", lastRun, rewP, undefined, rewPGlobal);
+  } else {
+    rewrite = node("pending", lastRun, 0, undefined, rewPGlobal);
+  }
 
   const finishedRatio = totalDrafts > 0 ? notionFinishedCount / totalDrafts : 0;
   const notionProgress = Math.min(100, Math.round(finishedRatio * 100));
@@ -1226,8 +1249,9 @@ export interface RunStateFields {
  *
  * 设计要点：
  *   - 文件不存在时创建默认结构 + 写入 last_run_* 字段
- *   - 文件存在但解析失败时，**不破坏原内容**，仅追加 last_run_* 字段
- *   - 用 try/catch 包裹，避免 Next.js 进程因 state 文件 IO 异常崩溃
+ *   - 文件存在但 JSON 解析失败 / 非 object：**refuse-write**（不覆写，打 error 日志）
+ *   - 成功路径：仅合并 last_run_*，tmp + rename 原子写
+ *   - 外层 try/catch 吞 IO 异常，避免阻塞 pipeline spawn / API
  */
 export function updateRunState(stateFilePath: string, updates: RunStateFields): void {
   try {
@@ -1238,10 +1262,18 @@ export function updateRunState(stateFilePath: string, updates: RunStateFields): 
         const parsed = JSON.parse(raw) as unknown;
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
           current = parsed as Record<string, unknown>;
+        } else {
+          // 非 object：禁止覆写，避免清空 articles / completed_ids
+          console.error(`[updateRunState] refuse write: non-object JSON at ${stateFilePath}`);
+          return;
         }
-      } catch {
-        // 解析失败：保留原文件备份，从空对象开始追加 last_run_*
-        // 不抛错——pipeline 不应因 state 文件损坏而中断
+      } catch (err) {
+        // 解析失败：禁止覆写损坏文件
+        console.error(
+          `[updateRunState] refuse write: JSON parse failed at ${stateFilePath}`,
+          err
+        );
+        return;
       }
     }
     const merged: Record<string, unknown> = { ...current };
@@ -1260,7 +1292,10 @@ export function updateRunState(stateFilePath: string, updates: RunStateFields): 
     if (updates.last_run_step !== undefined) {
       merged.last_run_step = updates.last_run_step;
     }
-    fs.writeFileSync(stateFilePath, JSON.stringify(merged, null, 2), "utf-8");
+    // 原子写：同目录 tmp + rename（与 Python os.replace 一致）
+    const tmpPath = `${stateFilePath}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2), "utf-8");
+    fs.renameSync(tmpPath, stateFilePath);
   } catch {
     // 全部异常吞掉：state 文件写入失败不应阻塞 pipeline spawn / API 响应
   }

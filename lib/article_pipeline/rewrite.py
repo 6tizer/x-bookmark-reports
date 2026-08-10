@@ -69,6 +69,19 @@ def _extract_title_from_body(body: str) -> str:
     return ""
 
 
+def _yaml_double_quote(value: str) -> str:
+    """将字符串写成 YAML 双引号标量（转义 \\ \" 与控制字符）。"""
+    escaped = (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+    return f'"{escaped}"'
+
+
 def _extract_tags(title: str, body: str) -> List[str]:
     """Extract plausible tags from title + body content."""
     text = (title + " " + body[:3000]).lower()
@@ -177,10 +190,27 @@ class Rewriter:
         # Extract title from the generated body
         gen_title = _extract_title_from_body(article_body)
         if not gen_title:
-            gen_title = meta.get("title") or "未命名文章"
+            gen_title = meta.get("title") or ""
 
         # Clean the title (remove leading # if somehow still there)
         gen_title = gen_title.lstrip("#").strip()
+
+        # 占位/坏标题防御：素材不足、密码保护、未命名文章、空 → 回退 meta.title
+        _BAD_TITLE_MARKERS = ("素材不足", "密码保护", "未命名文章")
+        if (not gen_title) or any(m in gen_title for m in _BAD_TITLE_MARKERS):
+            fallback = (meta.get("title") or "").strip()
+            if fallback and not any(m in fallback for m in _BAD_TITLE_MARKERS):
+                logger.warning(
+                    "Rejecting placeholder title %r; falling back to meta.title %r",
+                    gen_title,
+                    fallback,
+                )
+                gen_title = fallback
+            else:
+                raise ValueError(
+                    f"Invalid article title after rewrite: {gen_title!r} "
+                    f"(meta.title={fallback!r}); marking failed"
+                )
 
         # Remove the H1 from body (it will go into frontmatter)
         article_clean = re.sub(r"^#\s+.+\n?", "", article_body, count=1, flags=re.MULTILINE)
@@ -197,12 +227,12 @@ class Rewriter:
 
         frontmatter = (
             f"---\n"
-            f"title: \"{gen_title}\"\n"
-            f"author: \"{author}\"\n"
-            f"source_url: \"{source_url}\"\n"
+            f"title: {_yaml_double_quote(gen_title)}\n"
+            f"author: {_yaml_double_quote(author)}\n"
+            f"source_url: {_yaml_double_quote(source_url)}\n"
             f"tags: {json_dumps_tags(tags)}\n"
-            f"notion_icon: \"{icon}\"\n"
-            f"generated_at: \"{now}\"\n"
+            f"notion_icon: {_yaml_double_quote(icon)}\n"
+            f"generated_at: {_yaml_double_quote(now)}\n"
             f"---\n"
         )
 
