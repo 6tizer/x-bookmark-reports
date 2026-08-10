@@ -36,6 +36,8 @@ export async function GET(): Promise<
     return NextResponse.json(
       {
         success: false,
+        // 顶层 message：兼容 api.ts 非 2xx 读取 errBody.message
+        message,
         data: { components: [] },
         error: { code: "INTERNAL_ERROR", message, detail: String(err) },
       },
