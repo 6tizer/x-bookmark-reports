@@ -48,10 +48,10 @@ export async function GET(
     }
 
     const total = Math.max(dbWindow.total + fileOnly, merged.length);
+    // 触顶 MERGE_WINDOW_MAX 后不再假装后面还有可合并页（避免 items=[] 仍 hasMore=true）
     const hasMore =
       offset + items.length < merged.length ||
-      fetchLimit < dbWindow.total ||
-      dbWindow.hasMore;
+      (fetchLimit < MERGE_WINDOW_MAX && fetchLimit < dbWindow.total);
 
     return NextResponse.json({
       success: true,
