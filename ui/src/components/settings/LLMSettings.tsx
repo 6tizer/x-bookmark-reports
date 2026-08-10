@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * LLMSettings — DeepSeek, xAI, Search (SearXNG/Firecrawl), Exa, Pipeline Default Model
+ * LLMSettings — DeepSeek, xAI, Search (SearXNG/Firecrawl), Exa
  */
 
 import { useState, useEffect } from "react";
@@ -127,7 +127,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
   const [xaiBaseUrl, setXaiBaseUrl] = useState("https://api.x.ai/v1");
   const [xaiModel, setXaiModel] = useState("grok-4.3");
   const [exaBaseUrl, setExaBaseUrl] = useState("https://api.exa.ai");
-  const [searxngBaseUrl, setSearxngBaseUrl] = useState("http://100.99.184.51:8888");
+  const [searxngBaseUrl, setSearxngBaseUrl] = useState("");
   const [firecrawlBaseUrl, setFirecrawlBaseUrl] = useState("https://api.firecrawl.dev/v2");
 
   useEffect(() => {
@@ -137,7 +137,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
       setXaiBaseUrl(settings.xaiBaseUrl || "https://api.x.ai/v1");
       setXaiModel(settings.xaiModel || "grok-4.3");
       setExaBaseUrl(settings.exaBaseUrl || "https://api.exa.ai");
-      setSearxngBaseUrl(settings.searxngBaseUrl || "http://100.99.184.51:8888");
+      setSearxngBaseUrl(settings.searxngBaseUrl || "");
       setFirecrawlBaseUrl(settings.firecrawlBaseUrl || "https://api.firecrawl.dev/v2");
     }
   }, [settings]);
@@ -196,7 +196,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
           <label className="text-xs font-medium text-muted-foreground">
             Model
             <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
-              持久化 → <code>.env DEEPSEEK_MODEL</code>，所有 backend 脚本默认读这个
+              持久化 → <code>.env DEEPSEEK_MODEL</code>，rewrite 步骤使用
             </span>
           </label>
           <select
@@ -259,6 +259,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
             type="text"
             value={searxngBaseUrl}
             onChange={(e) => setSearxngBaseUrl(e.target.value)}
+            placeholder="http://<host>:8888（留空则跳过 SearXNG）"
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>

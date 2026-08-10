@@ -135,7 +135,7 @@ def run_research(
     logger.info(
         "  [DONE] research for %s: %d chars, %d sources",
         meta.tweet_id,
-        len(bundle.raw_xai_response),
+        len(bundle.raw_searxng_response),
         len(bundle.sources),
     )
     return True

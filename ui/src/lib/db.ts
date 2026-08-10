@@ -975,7 +975,7 @@ export function getSettings(): Settings {
       xaiModel: "grok-4.3",
       exaApiKey: "****",
       exaBaseUrl: "https://api.exa.ai",
-      searxngBaseUrl: "http://100.99.184.51:8888",
+      searxngBaseUrl: "",
       firecrawlApiKey: "****",
       firecrawlBaseUrl: "https://api.firecrawl.dev/v2",
       bookmarksPath: "",
@@ -1001,7 +1001,7 @@ export function getSettings(): Settings {
     exaApiKey: maskApiKey(row.exa_api_key ? String(row.exa_api_key) : null),
     exaBaseUrl: String(row.exa_base_url ?? "https://api.exa.ai"),
     // DB schema 无 searxng/firecrawl 列（legacy 模式），?? 默认值兜底
-    searxngBaseUrl: String(row.searxng_base_url ?? "http://100.99.184.51:8888"),
+    searxngBaseUrl: String(row.searxng_base_url ?? ""),
     firecrawlApiKey: maskApiKey(row.firecrawl_api_key ? String(row.firecrawl_api_key) : null),
     firecrawlBaseUrl: String(row.firecrawl_base_url ?? "https://api.firecrawl.dev/v2"),
     bookmarksPath: row.bookmarks_path ? String(row.bookmarks_path) : "",

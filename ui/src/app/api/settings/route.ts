@@ -52,7 +52,7 @@ function buildSettingsFromEnv(): Settings {
     xaiModel: env.XAI_MODEL || "grok-4.3",
     exaApiKey: maskApiKey(env.EXA_API_KEY),
     exaBaseUrl: env.EXA_BASE_URL || "https://api.exa.ai",
-    searxngBaseUrl: env.SEARXNG_BASE_URL || "http://100.99.184.51:8888",
+    searxngBaseUrl: env.SEARXNG_BASE_URL || "",
     firecrawlApiKey: maskApiKey(env.FIRECRAWL_API_KEY),
     firecrawlBaseUrl: env.FIRECRAWL_BASE_URL || "https://api.firecrawl.dev/v2",
     bookmarksPath: bookmarksPathAbs,

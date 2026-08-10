@@ -232,7 +232,7 @@ class Rewriter:
 
         if research_text:
             parts.append("\n\n## 搜索研究结果\n")
-            max_research = 4000
+            max_research = 8000
             rt = research_text[:max_research]
             if len(research_text) > max_research:
                 rt += "\n\n... (研究结果已截断)"

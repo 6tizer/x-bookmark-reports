@@ -224,8 +224,8 @@ XAI_MODEL = _optional_env("XAI_MODEL", "grok-4.3")
 EXA_API_KEY = _optional_env("EXA_API_KEY", "")
 EXA_BASE_URL = _optional_env("EXA_BASE_URL", "https://api.exa.ai")
 
-# SearXNG — 主力搜索（自托管实例，无需 key）
-SEARXNG_BASE_URL = _optional_env("SEARXNG_BASE_URL", "http://100.99.184.51:8888")
+# SearXNG — 主力搜索（自托管实例，无需 key；空 = 未配置，跳过主路走 Firecrawl 备路）
+SEARXNG_BASE_URL = _optional_env("SEARXNG_BASE_URL", "")
 
 # Firecrawl — 备用搜索（SearXNG 失败或 0 结果时启用；无 key 也可 Keyless 调用）
 FIRECRAWL_API_KEY = _optional_env("FIRECRAWL_API_KEY", "")

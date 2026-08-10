@@ -164,7 +164,7 @@ class ResearchBundle:
             for i, ins in enumerate(self.key_insights, 1):
                 parts.append(f"{i}. {ins}")
         if self.search_results_text:
-            parts.append(f"## 搜索结果\n{self.search_results_text}")
+            parts.append(f"### 搜索结果\n{self.search_results_text}")
         if self.sources:
             parts.append("## 来源")
             for s in self.sources:
@@ -178,6 +178,8 @@ class Researcher:
     def __init__(self) -> None:
         self._xai_client: Any = None
         self._system_prompt = _load_prompt("system_research.txt")
+        # Firecrawl 熔断标志：遇 402/429（额度/限流）置开，本实例后续跳过 Firecrawl
+        self._firecrawl_circuit_open = False
 
     def _get_xai_client(self) -> Any:
         if self._xai_client is None:
@@ -195,6 +197,10 @@ class Researcher:
 
     def _search_searxng(self, query: str, limit: int = 10) -> List[Dict[str, str]]:
         """SearXNG 主搜索：GET /search?q=...&format=json，取 results[]。"""
+        if not SEARXNG_BASE_URL:
+            # 未配置（空 URL）不算失败：info 跳过并返回空，让 Firecrawl 备路接管
+            logger.info("SearXNG skipped: SEARXNG_BASE_URL not configured")
+            return []
         resp = requests.get(
             f"{SEARXNG_BASE_URL.rstrip('/')}/search",
             params={"q": query, "format": "json"},
@@ -222,7 +228,17 @@ class Researcher:
             json={"query": query, "limit": limit},
             timeout=30,
         )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.HTTPError:
+            # 402/429 = 额度耗尽/限流：打开熔断，避免批量任务持续烧 Keyless 月额度
+            if resp.status_code in (402, 429):
+                self._firecrawl_circuit_open = True
+                logger.warning(
+                    "Firecrawl circuit opened (HTTP %s): skipping further Firecrawl calls this run",
+                    resp.status_code,
+                )
+            raise
         data = resp.json()
         results: List[Dict[str, str]] = []
         for item in ((data.get("data") or {}).get("web") or [])[:limit]:
@@ -238,7 +254,12 @@ class Researcher:
         resp = requests.post(
             f"{EXA_BASE_URL.rstrip('/')}/search",
             headers={"x-api-key": EXA_API_KEY, "Content-Type": "application/json"},
-            json={"query": query, "numResults": limit},
+            json={
+                "query": query,
+                "numResults": limit,
+                # 要求返回摘要文本，否则补充路 content 为空
+                "contents": {"text": {"maxCharacters": 1000}},
+            },
             timeout=30,
         )
         resp.raise_for_status()
@@ -287,51 +308,57 @@ class Researcher:
         # 搜索引擎用简洁查询词（标题优先），区别于喂给 xAI 的长 prompt
         search_query = meta.get("title") or body_excerpt[:200] or topic
 
-        # --- x.ai ---
+        # --- x.ai（可选：无 key 时 info 跳过，与 Exa 的 key 守卫模式一致，不算失败） ---
         xai_text = ""
         xai_sources: List[str] = []
-        try:
-            client = self._get_xai_client()
-            logger.info("x.ai research: querying '%s' (model=%s)", topic[:60], config.XAI_MODEL)
-
-            # Try Responses API first (supports web_search + x_search)
+        if not XAI_API_KEY:
+            logger.info("x.ai research skipped: XAI_API_KEY not configured")
+        else:
             try:
-                response = client.responses.create(
-                    model=config.XAI_MODEL,
-                    input=[
-                        {"role": "system", "content": self._system_prompt},
-                        {"role": "user", "content": query},
-                    ],
-                    tools=[
-                        {"type": "web_search"},
-                        {"type": "x_search"},
-                    ],
-                )
-                xai_text = _extract_text_from_responses(response)
-                xai_sources = _extract_sources_from_responses(response)
-            except Exception as resp_err:
-                # Fallback: chat.completions without search tools
-                logger.warning(
-                    "x.ai responses.create() failed (%s), falling back to chat.completions",
-                    resp_err,
-                )
-                resp = client.chat.completions.create(
-                    model=config.XAI_MODEL,
-                    messages=[
-                        {"role": "system", "content": self._system_prompt},
-                        {"role": "user", "content": query},
-                    ],
-                )
-                xai_text = resp.choices[0].message.content or ""
-                xai_sources = []
+                client = self._get_xai_client()
+                logger.info("x.ai research: querying '%s' (model=%s)", topic[:60], config.XAI_MODEL)
 
-            bundle.raw_xai_response = xai_text
-            bundle.sources.extend(xai_sources)
-            logger.info("x.ai research done: %d chars, %d sources", len(xai_text), len(xai_sources))
+                # Try Responses API first (supports web_search + x_search)
+                # timeout=30：防止 xAI 挂起阻塞后续 SearXNG 主路
+                try:
+                    response = client.responses.create(
+                        model=config.XAI_MODEL,
+                        input=[
+                            {"role": "system", "content": self._system_prompt},
+                            {"role": "user", "content": query},
+                        ],
+                        tools=[
+                            {"type": "web_search"},
+                            {"type": "x_search"},
+                        ],
+                        timeout=30,
+                    )
+                    xai_text = _extract_text_from_responses(response)
+                    xai_sources = _extract_sources_from_responses(response)
+                except Exception as resp_err:
+                    # Fallback: chat.completions without search tools
+                    logger.warning(
+                        "x.ai responses.create() failed (%s), falling back to chat.completions",
+                        resp_err,
+                    )
+                    resp = client.chat.completions.create(
+                        model=config.XAI_MODEL,
+                        messages=[
+                            {"role": "system", "content": self._system_prompt},
+                            {"role": "user", "content": query},
+                        ],
+                        timeout=30,
+                    )
+                    xai_text = resp.choices[0].message.content or ""
+                    xai_sources = []
 
-        except Exception as exc:
-            logger.error("x.ai research failed: %s", exc)
-            bundle.raw_xai_response = f"[x.ai error: {exc}]"
+                bundle.raw_xai_response = xai_text
+                bundle.sources.extend(xai_sources)
+                logger.info("x.ai research done: %d chars, %d sources", len(xai_text), len(xai_sources))
+
+            except Exception as exc:
+                logger.error("x.ai research failed: %s", exc)
+                bundle.raw_xai_response = f"[x.ai error: {exc}]"
 
         # --- SearXNG（主搜索，必跑；失败 fail-soft 仅记录） ---
         searxng_results: List[Dict[str, str]] = []
@@ -344,9 +371,11 @@ class Researcher:
             logger.warning("SearXNG search failed: %s", exc)
             bundle.raw_searxng_response = f"[searxng error: {exc}]"
 
-        # --- Firecrawl（备用：仅 SearXNG 失败或 0 结果时启用） ---
+        # --- Firecrawl（备用：仅 SearXNG 失败或 0 结果且熔断未开时启用） ---
         firecrawl_results: List[Dict[str, str]] = []
-        if not searxng_results:
+        if not searxng_results and self._firecrawl_circuit_open:
+            logger.info("Firecrawl fallback skipped: circuit open")
+        elif not searxng_results:
             try:
                 logger.info("Firecrawl search (fallback): '%s'", search_query[:60])
                 firecrawl_results = self._search_firecrawl(search_query, limit=5)
@@ -380,8 +409,6 @@ class Researcher:
 
         # Parse structured data from combined text（xAI 缺席时保留 meta 标题作为 topic）
         self._parse_research(bundle, xai_text)
-        if not bundle.topic:
-            bundle.topic = topic
         return bundle
 
     def _build_query(self, meta: Dict[str, Any], body_excerpt: str) -> str:

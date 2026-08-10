@@ -12,7 +12,7 @@
 #   Step 0: 代理检测
 #   Step 1: sync_bookmarks.sh      — 从 Twitter 拉取新书签
 #   Step 2: coordinator.py         — 生成深度草稿（deep reports）
-#   Step 3: article_pipeline.py    — 研究(xAI+Exa) + 撰写成品文章
+#   Step 3: article_pipeline.py    — 研究(SearXNG+Firecrawl+Exa) + 撰写成品文章
 #   Step 4: upload_to_notion.py    — 上传成品文章到 Notion（finished 模式）
 #
 

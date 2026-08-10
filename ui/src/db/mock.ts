@@ -576,7 +576,7 @@ export const mockSettings: Settings = {
   xaiModel: "grok-4.3",
   exaApiKey: "exa****xyz",
   exaBaseUrl: "https://api.exa.ai",
-  searxngBaseUrl: "http://100.99.184.51:8888",
+  searxngBaseUrl: "",
   firecrawlApiKey: "****",
   firecrawlBaseUrl: "https://api.firecrawl.dev/v2",
   bookmarksPath: "/Users/<user>/Library/Application Support/Google/Chrome/Default/Bookmarks",
