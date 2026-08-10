@@ -9,6 +9,7 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { getRepoRoot } from "@/lib/repo-root";
+import { loadEnv } from "@/lib/config";
 import { listLogsSince } from "@/lib/db";
 import {
   readPipelineArticles,
@@ -18,6 +19,10 @@ import type { ApiResponse, LogComponent } from "@/types/api";
 
 export const dynamic = "force-dynamic";
 
+type XaiStatus = "ok" | "forbidden" | "unknown";
+type SearxngStatus = "ok" | "unconfigured" | "error";
+type KeyStatus = "ok" | "keyless";
+
 interface HealthData {
   healthy: boolean;
   launchd: { loaded: boolean; nextTrigger: string | null };
@@ -25,7 +30,12 @@ interface HealthData {
   recentFailStreak: number;
   pendingUploads: number;
   pendingArticles: number;
-  apiStatus: { xai: "ok" | "forbidden" | "unknown" };
+  apiStatus: {
+    xai: XaiStatus;
+    searxng: SearxngStatus;
+    firecrawl: KeyStatus;
+    exa: KeyStatus;
+  };
   warnings: string[];
 }
 
@@ -207,7 +217,7 @@ function countPendingArticles(): number {
   }
 }
 
-function checkXaiStatus(): HealthData["apiStatus"]["xai"] {
+function checkXaiStatus(): XaiStatus {
   try {
     const sinceIso = new Date(Date.now() - 3600_000).toISOString();
     const components: LogComponent[] = ["article_pipeline", "agent"];
@@ -229,6 +239,35 @@ function checkXaiStatus(): HealthData["apiStatus"]["xai"] {
   } catch {
     return "unknown";
   }
+}
+
+/** SearXNG：配置且 /search?q=test 返回 200 → ok */
+async function checkSearxngStatus(): Promise<SearxngStatus> {
+  const env = loadEnv();
+  const base = (env.SEARXNG_BASE_URL || "").trim().replace(/\/$/, "");
+  if (!base) return "unconfigured";
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(`${base}/search?q=test&format=json`, {
+      signal: ctrl.signal,
+      headers: { Accept: "application/json" },
+    });
+    clearTimeout(timer);
+    return res.ok ? "ok" : "error";
+  } catch {
+    return "error";
+  }
+}
+
+function checkFirecrawlStatus(): KeyStatus {
+  const env = loadEnv();
+  return (env.FIRECRAWL_API_KEY || "").trim() ? "ok" : "keyless";
+}
+
+function checkExaStatus(): KeyStatus {
+  const env = loadEnv();
+  return (env.EXA_API_KEY || "").trim() ? "ok" : "keyless";
 }
 
 function buildWarnings(data: Omit<HealthData, "healthy" | "warnings">): string[] {
@@ -259,6 +298,9 @@ export async function GET(): Promise<NextResponse<ApiResponse<HealthData>>> {
   const pendingUploads = countPendingUploads();
   const pendingArticles = countPendingArticles();
   const xai = checkXaiStatus();
+  const searxng = await checkSearxngStatus();
+  const firecrawl = checkFirecrawlStatus();
+  const exa = checkExaStatus();
 
   const partial: Omit<HealthData, "healthy" | "warnings"> = {
     launchd,
@@ -266,7 +308,7 @@ export async function GET(): Promise<NextResponse<ApiResponse<HealthData>>> {
     recentFailStreak,
     pendingUploads,
     pendingArticles,
-    apiStatus: { xai },
+    apiStatus: { xai, searxng, firecrawl, exa },
   };
 
   const warnings = buildWarnings(partial);

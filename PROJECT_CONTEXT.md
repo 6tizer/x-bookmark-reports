@@ -151,14 +151,22 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 ### 4. TwitterAPI.io（推文回复）
 - **Endpoint**：`GET https://api.twitterapi.io/twitter/tweet/replies`
 
-### 5. xAI Responses API（搜索研究）
-- **Endpoint**：`https://api.x.ai/v1/responses`（OpenAI 兼容）
-- **模型**：`grok-4.3`（含 `web_search` + `x_search` 工具）
+### 5. 研究搜索栈（SearXNG 主 → Firecrawl 备 → Exa 可选）
+文章研究阶段的检索优先级：
 
-### 6. Exa Research API（补充研究，可选）
-- **Endpoint**：`https://api.exa.ai/v1/chat/completions`（OpenAI 兼容）
-- **模型**：`exa-research`
-- **注意**：返回多个 choices，需取最后一个非空结果；有重试机制（最多 2 次，间隔 3s）
+| 优先级 | 服务 | 配置 | 行为 |
+|---|---|---|---|
+| 主 | **SearXNG** | `SEARXNG_BASE_URL` | 自建聚合搜索；有结果时优先采用 |
+| 备 | **Firecrawl** | `FIRECRAWL_API_KEY` / `FIRECRAWL_BASE_URL` | SearXNG 无结果时爬取补充 |
+| 可选 | **Exa `/search`** | `EXA_API_KEY` / `EXA_BASE_URL` | 向量/语义搜索补充 |
+| 可选 | **xAI Responses** | `XAI_API_KEY` | `web_search` + `x_search`；额度不足时 fail-soft |
+
+> 说明：历史上以「Exa Research API / xAI 为主研究」；现已切换为 **SearXNG 主链路**，Exa 走 `/search`（非 research chat）作为可选补充。
+
+### 6. Exa Search API（可选补充）
+- **Endpoint**：`https://api.exa.ai/search`（或兼容 baseUrl）
+- **认证**：`EXA_API_KEY`
+- **注意**：旧 `exa-research` chat completions 路径已降级；若仍启用需取最后一个非空 choice，并有重试（最多 2 次，间隔 3s）
 
 ### 7. DeepSeek（文章成文）
 - **Endpoint**：`https://api.deepseek.com/v1`（OpenAI 兼容）
@@ -203,7 +211,8 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 | `GET /api/settings/plaintext-key` | 按 key 名查询明文 API Key（前端 eye 按钮用） |
 | `GET /api/schedule/launchd` | 查询 launchd 当前调度（待补，见 B054） |
 | `POST /api/schedule/launchd` | 写入 launchd plist 并 reload |
-| `GET /api/logs` | 查询日志（当前为 mock，见 B052） |
+| `GET /api/logs` | 查询日志（SQLite + `logs/bookmark-auto.log` 合并） |
+| `GET /api/health` | 流水线健康：launchd / 积压 / `apiStatus`（xai/searxng/firecrawl/exa） |
 | `GET /api/data/*` | 数据管理（导出 / 清理 / 备份） |
 | `GET /api/system/rettiwt` | 检查 rettiwt 环境 |
 | `GET /api/articles` | 列出成品文章 |
@@ -258,9 +267,9 @@ bash -c "'$SCRIPT_PATH' && ..."  # 单引号包住含空格路径
 ### 9.6 Settings 五 Tab（2026-06-27 改造）
 UI Settings 页面包含 5 个 Tab：
 - **General**：Notion DB ID、Auto Sync 开关、代理、数据路径
-- **LLM & Web Search**：DeepSeek / xAI / Exa API Key + 模型选择 + baseUrl（带明文 eye 切换）
-- **Schedule**：launchd 调度（cron 编辑器 + 当前调度显示，B054 待修）
-- **Logs**：日志查看器（当前 mock，B052 待修）
+- **LLM & Web Search**：DeepSeek / xAI / Exa / SearXNG / Firecrawl + 模型选择 + baseUrl（带明文 eye 切换）
+- **Schedule**：launchd 调度（cron 编辑器 + 当前调度显示）
+- **Logs**：日志查看器（DB + bookmark-auto.log 合并）
 - **Data**：数据导出 / 清理 / 备份
 
 ### 9.7 UI 审计与待修问题

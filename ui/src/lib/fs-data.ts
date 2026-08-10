@@ -494,7 +494,12 @@ export function listArticles(
   limit: number = 20,
   status?: string,
   search?: string
-): { items: FsArticle[]; total: number; hasMore: boolean } {
+): {
+  items: FsArticle[];
+  total: number;
+  hasMore: boolean;
+  stats: { drafts: number; finished: number; failed: number };
+} {
   const tweetIds = new Set(listDeepDraftTweetIds());
   const pipeline = readPipelineArticles();
   for (const k of Object.keys(pipeline)) {
@@ -510,6 +515,16 @@ export function listArticles(
     const a = buildFsArticleForTweetId(tid, notionSet);
     if (a) articles.push(a);
   }
+
+  // 页头口径：在 status/search 过滤前统计全局 drafts / finished / failed
+  const drafts = articles.length;
+  let finished = 0;
+  let failed = 0;
+  for (const a of articles) {
+    if (a.status === "written" || a.status === "uploaded") finished++;
+    else if (a.status === "failed") failed++;
+  }
+  const stats = { drafts, finished, failed };
 
   if (status) {
     articles = articles.filter((a) => a.status === status);
@@ -528,7 +543,7 @@ export function listArticles(
   const total = articles.length;
   const offset = (page - 1) * limit;
   const items = articles.slice(offset, offset + limit);
-  return { items, total, hasMore: page * limit < total };
+  return { items, total, hasMore: page * limit < total, stats };
 }
 
 export function getArticleById(id: string): FsArticle | null {
@@ -626,7 +641,7 @@ export function getDashboardStats(): FsDashboardStats {
   };
 }
 
-type PipelineStepStatus = "pending" | "running" | "completed" | "failed";
+type PipelineStepStatus = "pending" | "running" | "completed" | "failed" | "partial";
 
 function node(
   status: PipelineStepStatus,
@@ -765,13 +780,20 @@ export function getPipelineStatus(): DashboardPipelineFour {
   const bp = getBatchProgress();
   const articleSubRunning = bp.isRunning;
 
-  const rewrite: PipelineNode = articleSubRunning
-    ? node("running", bp.items[0]?.updatedAt, rewP, undefined, rewPGlobal)
-    : rewP >= 100
-      ? node("completed", lastRun, 100, undefined, rewPGlobal)
-      : rewP > 0
-        ? node("running", lastRun, rewP, undefined, rewPGlobal)
-        : node("pending", lastRun, 0, undefined, rewPGlobal);
+  // Rewrite 状态机：Idle + failed>0 时标 partial，不再把进度中的管线误标为 running
+  let rewrite: PipelineNode;
+  if (articleSubRunning) {
+    rewrite = node("running", bp.items[0]?.updatedAt, rewP, undefined, rewPGlobal);
+  } else if (rewP >= 100 && bp.failed === 0) {
+    rewrite = node("completed", lastRun, 100, undefined, rewPGlobal);
+  } else if (bp.failed > 0 && bp.completed > 0) {
+    rewrite = node("partial", lastRun, rewP, undefined, rewPGlobal);
+  } else if (rewP > 0) {
+    // 有进度但尚无 failed，且未在跑：视为 pending（等待下次 batch）
+    rewrite = node("pending", lastRun, rewP, undefined, rewPGlobal);
+  } else {
+    rewrite = node("pending", lastRun, 0, undefined, rewPGlobal);
+  }
 
   const finishedRatio = totalDrafts > 0 ? notionFinishedCount / totalDrafts : 0;
   const notionProgress = Math.min(100, Math.round(finishedRatio * 100));

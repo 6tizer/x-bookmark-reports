@@ -282,6 +282,145 @@ xAI 403（额度用尽）、Exa Research 模型（chat.completions + exa-researc
 
 ---
 
+## 2026-08-11 — Firecrawl 注册 + SearXNG/Firecrawl 配置落地
+
+### 我们实现了哪些功能？
+
+1. 通过 Firecrawl CLI auth 拿到 API key（`fc-c7d2...`），写入 `.env`。
+2. 写入 `SEARXNG_BASE_URL=http://100.99.184.51:8888`（tailnet tokyo-4-cqa）。
+3. 重启 Dashboard，Settings API 已返回新配置。
+4. 修复 B-FIRECRAWL-KEY-MASK：`maskApiKey` 空值返回 `""`；UI 空值不再显示 `****`。
+5. 实测研究链路：SearXNG 主路 + Exa 补充均产出（xAI 403 fail-soft 正常）。
+
+### 我们遇到了哪些错误？
+
+1. OAE 后端 `100.93.215.93:3100` 不通，邮箱注册走不了。
+2. `maskApiKey` 对空字符串返回 `****`，导致 UI 误以为已配置。
+
+### 我们是如何解决这些错误的？
+
+1. 改用 Firecrawl 官方 CLI auth（浏览器授权，无需邮箱）。
+2. 修 `maskApiKey` + `LLMSettings` 兜底逻辑，rebuild 后验证 `firecrawlApiKey` 现在正确 masked（`fc-****cac`）。
+
+---
+
+## 2026-08-11 — 浏览器逐页验收（MCP 恢复后）
+
+### 我们实现了哪些功能？
+
+1. 用 `cursor-ide-browser` 逐页点选：Dashboard / Bookmarks / Sync / Articles（含 Failed 筛选+详情）/ Settings 五 Tab。
+2. 截图+CDP 核对文案与数字；结果写入 `docs/UI_ACCEPTANCE_2026-08-11.md` §5；新增 B-SYNC-REWRITE-STALE。
+
+### 我们遇到了哪些错误？
+
+1. Sync「Rewrite=Running」与 Dashboard Idle 矛盾（API 返回 status=running）。
+2. Logs 仍停在 2026-06-27；SearXNG 未配置；Firecrawl 空 key 显示 ****。
+3. Articles 侧栏 1131 vs 页头 1163；个别坏标题（素材不足/密码保护）。
+
+### 我们是如何解决这些错误的？
+
+1. 本轮只验收记录，未改产品代码；不一致进 BUGS/验收文档，待你决定修复优先级。
+2. Browser unlock，Dashboard 留在 http://127.0.0.1:3001/ 供你继续看。
+
+---
+
+## 2026-08-11 — cursor-ide-browser MCP 不可用根因排查
+
+### 我们实现了哪些功能？
+
+1. 对照本机 MCP 目录、Cursor 日志、官方/论坛文档，定位内置 Browser MCP 失效原因。
+2. 确认：不是 `~/.cursor/mcp.json` 配错；是 Cursor 3.15.6 已知的 **catalog/disk vs live lease 分裂**。
+
+### 我们遇到了哪些错误？
+
+1. `CallMcpTool(cursor-ide-browser)` → `MCP server does not exist`；同时 prompt/`GetMcpTools` catalog 有时可标 `ready`（分裂脑）。
+2. 本仓库 `~/.cursor/projects/.../x-bookmark-reports/mcps/` **无** `cursor-ide-browser/`；`oh-my-cursor` 同机有完整 16 工具描述。
+3. Mcp FileSystem Writer（本会话附近）：`01:24:24` 写入 toolCount=16 → `01:25:25` / `01:26:27` **left the lease + directory removal**。
+4. Browser Automation 日志：本 log 会话内 `No browser view available` ×46，Provider init×25 / disposed×23。
+5. `open_resource` 仍可开 Glass —— **开网页 ≠ agent 可控 MCP**。
+
+### 我们是如何解决这些错误的？
+
+1. 判定为 Cursor 侧已知回归（论坛 [#166850](https://forum.cursor.com/t/cursor-ide-browser-catalog-disk-ready-but-callmcptool-returns-server-not-found-3-13-21-cold-start/166850)，官方确认；3.15.6 仍 repro），**不能**靠往 mcp.json 加项修复。
+2. 建议用户侧恢复：`Cmd+Q` 完全退出 → 等 ~10s → 确认 Browser Automation=Browser Tab 已连接 → **新开 Agent chat**（旧会话不可靠）。
+3. 会话中途再掉线时：当前无可靠 in-session 恢复，只能再 quit + 新 chat。
+
+---
+
+## 2026-08-11 — 产品运作检查 + UI 验收
+
+### 我们实现了哪些功能？
+
+1. 核对管线：最近 `auto_run` success（+3 书签/报告/成品/Notion），`/api/health` healthy。
+2. 发现生产 `.next` 未含 SearXNG/Firecrawl Settings → `npm run build` + launchd 重启 Dashboard。
+3. 逐页对照规划（Dashboard / Bookmarks / Sync / Articles / Settings），用 API+数据层验收；Glass 打开 UI 留给人工复看。
+4. 将不一致写入 `docs/UI_ACCEPTANCE_2026-08-11.md` 与 `BUGS.md` 待修复表。
+
+### 我们遇到了哪些错误？
+
+1. 生产构建过期，Settings 新字段 API 返回 null。
+2. `cursor-ide-browser` MCP 不可用，无法做点击级截图验收。
+3. Shell PATH 偶发丢失（curl/python 找不到），改用绝对路径。
+
+### 我们是如何解决这些错误的？
+
+1. 重建并 `launchctl kickstart` 重启 `com.xbookmarkreports.dashboard`。
+2. 用 `open_resource` / 系统 `open` 打开 Glass/浏览器，并以 API+FS 对照完成验收记录。
+3. 显式 `export PATH=...` + `/usr/bin/curl` 等绝对路径。
+
+---
+
+## 2026-08-11 — rettiwt-api 升级 7.1.2 → 7.1.3
+
+### 我们实现了哪些功能？
+1. 确认 npm 最新为 `7.1.3`（本地原 `7.1.2`，`updateAvailable: true`）。
+2. 执行 `npm install -g rettiwt-api@latest --prefix ~/.local`，与现有 CLI 路径一致。
+3. 重启 Dashboard 后 `/api/system/rettiwt` 显示 `localVersion=7.1.3`，`updateAvailable=false`。
+
+### 我们遇到了哪些错误？
+无。
+
+### 我们是如何解决这些错误的？
+不适用。
+
+---
+
+## 2026-08-11 — 逻辑/数据/文档问题修复（P0–P3）
+
+### 我们实现了哪些功能？
+
+1. **P0-1 Rewrite 状态机**：Idle + failed>0 时返回 `partial`（不再误标 Running）；`PipelineStatus`/`PipelineOverview` 支持橙色 partial。
+2. **P0-2 Articles 口径**：`/api/articles` 附加 `stats:{drafts,finished,failed}`；页头显示 `1163 drafts · 1131 finished · 31 failed`。
+3. **P0-3 Firecrawl 掩码回归**：`maskApiKey("")→""`，已配置显示 `fc-****cac`。
+4. **P1-1 Logs 合并**：新增 `ui/src/lib/log-reader.ts`，`/api/logs` 合并 `logs/bookmark-auto.log`；DB 加 `idx_logs_created_at`。
+5. **P1-2 坏标题防御**：`rewrite.py` 拒绝「素材不足/密码保护/未命名文章」；回退 meta.title 或标 failed；修复 2 篇 frontmatter。
+6. **P2-1 deep-state reconcile**：`bin/reconcile_deep_state.py`，completed 2105→1163，orphaned_ids=942，备份 `.bak.20260811`。
+7. **P2-2 Notion 文案**：StatCards subtext「Notion 总记录（含历史）· 本管线已上传 N」。
+8. **P2-3 Health**：`apiStatus` 扩展 `{xai,searxng,firecrawl,exa}`（实测 searxng/firecrawl/exa=ok）。
+9. **P2-4 Rettiwt**：PATH fallback + 读 `package.json`（CLI 无 `--version`）→ localVersion=`7.1.2`。
+10. **P3-1 文档**：`PROJECT_CONTEXT.md` §五改为 SearXNG 主→Firecrawl 备→Exa 可选。
+
+### 我们遇到了哪些错误？
+
+1. `rettiwt --version` 实际不存在（unknown option），PATH fallback 仍拿不到版本。
+2. 计划验证「Pending Rewrite 从 942→0」——Dashboard 该卡实际来自 `bookmarks - drafts`，与 deep-state orphans 不同口径；reconcile 正确清理的是 state 文件。
+
+### 我们是如何解决这些错误的？
+
+1. 改为 resolve CLI 路径后读 `rettiwt-api/package.json` 的 version。
+2. 以 `completed_ids/orphaned_ids` 数量作为 P2-1 验收标准（1163/942），并在文案层澄清 Notion/Pending 口径。
+
+### 验证结果（API）
+
+- `pipeline.rewrite.status` = `partial`
+- `articles.stats` = `{drafts:1163, finished:1131, failed:31}`
+- logs 可见 `2026-08-11` auto_run 条目
+- health.apiStatus = `{xai:unknown, searxng:ok, firecrawl:ok, exa:ok}`
+- rettiwt.localVersion = `7.1.2`
+- `npm run build` 通过；`Rewriter` import 通过
+
+---
+
 ## 2026-04-28 — 代码审查与修复（B021–B034）
 
 详见 `docs/CHANGELOG.md` 与 `BUGS.md` 已修复表。

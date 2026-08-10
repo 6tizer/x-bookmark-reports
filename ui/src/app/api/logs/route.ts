@@ -1,10 +1,11 @@
 /**
  * GET /api/logs
- * CONTRACT v1.0 — DB 真值化：直接读取 logs 表，不再 fallback mockLogs
+ * CONTRACT v1.0 — DB logs + logs/bookmark-auto.log 合并（按时间倒序去重）
  */
 
 import { NextResponse } from "next/server";
 import { listLogs } from "@/lib/db";
+import { mergeLogEntries, readBookmarkAutoLog } from "@/lib/log-reader";
 import type { ApiResponse, LogEntry, PaginatedResponse, LogComponent, LogLevel } from "@/types/api";
 
 export async function GET(
@@ -20,9 +21,26 @@ export async function GET(
     const component = (searchParams.get("component") as LogComponent) ?? undefined;
     const level = (searchParams.get("level") as LogLevel) ?? undefined;
 
-    // 直接读 DB：DB 真为空时 listLogs 自然返回 items: [], total: 0
-    const result = listLogs(page, limit, component, level);
-    return NextResponse.json({ success: true, data: result });
+    // 多取一些 DB 行，便于与文件日志合并后再分页
+    const fetchLimit = Math.min(500, Math.max(limit * page, 200));
+    const dbResult = listLogs(1, fetchLimit, component, level);
+    const fileLogs = readBookmarkAutoLog(500);
+    const merged = mergeLogEntries(dbResult.items, fileLogs, component, level);
+
+    const total = merged.length;
+    const offset = (page - 1) * limit;
+    const items = merged.slice(offset, offset + limit);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        items,
+        total,
+        page,
+        limit,
+        hasMore: page * limit < total,
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     // 兜底返回空数组，不再回退 mockLogs

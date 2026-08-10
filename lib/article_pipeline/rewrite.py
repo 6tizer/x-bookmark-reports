@@ -177,10 +177,27 @@ class Rewriter:
         # Extract title from the generated body
         gen_title = _extract_title_from_body(article_body)
         if not gen_title:
-            gen_title = meta.get("title") or "未命名文章"
+            gen_title = meta.get("title") or ""
 
         # Clean the title (remove leading # if somehow still there)
         gen_title = gen_title.lstrip("#").strip()
+
+        # 占位/坏标题防御：素材不足、密码保护、未命名文章、空 → 回退 meta.title
+        _BAD_TITLE_MARKERS = ("素材不足", "密码保护", "未命名文章")
+        if (not gen_title) or any(m in gen_title for m in _BAD_TITLE_MARKERS):
+            fallback = (meta.get("title") or "").strip()
+            if fallback and not any(m in fallback for m in _BAD_TITLE_MARKERS):
+                logger.warning(
+                    "Rejecting placeholder title %r; falling back to meta.title %r",
+                    gen_title,
+                    fallback,
+                )
+                gen_title = fallback
+            else:
+                raise ValueError(
+                    f"Invalid article title after rewrite: {gen_title!r} "
+                    f"(meta.title={fallback!r}); marking failed"
+                )
 
         # Remove the H1 from body (it will go into frontmatter)
         article_clean = re.sub(r"^#\s+.+\n?", "", article_body, count=1, flags=re.MULTILINE)

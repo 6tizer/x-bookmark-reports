@@ -51,6 +51,8 @@ export async function GET(
           page,
           limit,
           hasMore: fsResult.hasMore,
+          // 页头口径：drafts / finished / failed（不改动既有 total）
+          stats: fsResult.stats,
         },
       });
     }

@@ -30,6 +30,12 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
   hasMore: boolean;
+  /** Articles 列表口径：drafts / finished / failed（可选，不破坏既有 total） */
+  stats?: {
+    drafts: number;
+    finished: number;
+    failed: number;
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -37,7 +43,7 @@ export interface PaginatedResponse<T> {
 // ─────────────────────────────────────────────
 
 export type PipelineStage = "auth" | "fetching" | "parsing" | "storing" | "done";
-export type PipelineStatus = "pending" | "running" | "completed" | "failed";
+export type PipelineStatus = "pending" | "running" | "completed" | "failed" | "partial";
 
 export interface PipelineNode {
   status: PipelineStatus;

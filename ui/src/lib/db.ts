@@ -122,6 +122,15 @@ export function getDb(): Database.Database {
     migrateLogsComponent(dbInstance);
   }
 
+  // 日志按时间倒序查询索引（幂等）
+  try {
+    dbInstance.exec(
+      `CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(timestamp DESC)`
+    );
+  } catch {
+    /* 旧库偶发不支持 DESC 索引语法时忽略 */
+  }
+
   return dbInstance;
 }
 

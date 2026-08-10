@@ -265,7 +265,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
         </div>
         <ApiKeyField
           label="Firecrawl API Key（可留空走 Keyless）"
-          maskedValue={settings?.firecrawlApiKey || "****"}
+          maskedValue={settings?.firecrawlApiKey || ""}
           keyName="FIRECRAWL_API_KEY"
           onSave={handleApiKeySave}
         />

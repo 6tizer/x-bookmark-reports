@@ -87,7 +87,8 @@ export function updateEnv(updates: Partial<RawEnvConfig>): boolean {
 }
 
 export function maskApiKey(key: string | undefined | null): string {
-  if (!key || key.length < 8) return "****";
+  if (!key || !key.trim()) return ""; // 空/未配置返回空，由 UI 显示「未配置」
+  if (key.length < 8) return "****";
   return `${key.slice(0, 3)}****${key.slice(-3)}`;
 }
 
