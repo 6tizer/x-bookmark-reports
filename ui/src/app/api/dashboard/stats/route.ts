@@ -56,6 +56,8 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
         // 旧字段同义别名
         articlesWritten: totalArticlesLocal,
         notionTotalUploaded: totalArticlesNotion,
+        // 本管线已上传（finished-state），与 Notion DB 总记录区分
+        notionFinishedUploaded: fsStats.notionFinishedUploaded,
         pendingRewrite: pendingRewriteGlobal,
       };
 
@@ -150,6 +152,7 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
       newThisWeek,
       articlesWritten: totalArticles,
       notionTotalUploaded: 0,
+      notionFinishedUploaded: 0,
       pendingRewrite,
       pipeline,
     };
@@ -167,6 +170,7 @@ export async function GET(): Promise<NextResponse<ApiResponse<DashboardStats>>> 
           newThisWeek: 0,
           articlesWritten: 0,
           notionTotalUploaded: 0,
+          notionFinishedUploaded: 0,
           pendingRewrite: 0,
           // 兜底无数据，4 个新字段保持 0
           totalArticlesLocal: 0,

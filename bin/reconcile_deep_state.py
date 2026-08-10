@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
@@ -88,10 +89,13 @@ def reconcile(
     raw["completed_ids"] = kept
     raw["orphaned_ids"] = orphaned
     raw["reconciled_at"] = datetime.now().isoformat(timespec="seconds")
-    state_path.write_text(
-        json.dumps(raw, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    # 原子写：tmp + os.replace，避免与 coordinator 并发时半截文件
+    payload = json.dumps(raw, ensure_ascii=False, indent=2) + "\n"
+    tmp_path = state_path.with_name(
+        f"{state_path.name}.{os.getpid()}.{datetime.now().strftime('%H%M%S%f')}.tmp"
     )
+    tmp_path.write_text(payload, encoding="utf-8")
+    os.replace(tmp_path, state_path)
     return summary
 
 

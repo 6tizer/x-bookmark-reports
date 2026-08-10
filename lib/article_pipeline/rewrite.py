@@ -69,6 +69,19 @@ def _extract_title_from_body(body: str) -> str:
     return ""
 
 
+def _yaml_double_quote(value: str) -> str:
+    """将字符串写成 YAML 双引号标量（转义 \\ \" 与控制字符）。"""
+    escaped = (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+    return f'"{escaped}"'
+
+
 def _extract_tags(title: str, body: str) -> List[str]:
     """Extract plausible tags from title + body content."""
     text = (title + " " + body[:3000]).lower()
@@ -214,12 +227,12 @@ class Rewriter:
 
         frontmatter = (
             f"---\n"
-            f"title: \"{gen_title}\"\n"
-            f"author: \"{author}\"\n"
-            f"source_url: \"{source_url}\"\n"
+            f"title: {_yaml_double_quote(gen_title)}\n"
+            f"author: {_yaml_double_quote(author)}\n"
+            f"source_url: {_yaml_double_quote(source_url)}\n"
             f"tags: {json_dumps_tags(tags)}\n"
-            f"notion_icon: \"{icon}\"\n"
-            f"generated_at: \"{now}\"\n"
+            f"notion_icon: {_yaml_double_quote(icon)}\n"
+            f"generated_at: {_yaml_double_quote(now)}\n"
             f"---\n"
         )
 

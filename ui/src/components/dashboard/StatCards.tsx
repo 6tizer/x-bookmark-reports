@@ -138,8 +138,8 @@ export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
           icon={<CloudUpload size={16} className="text-violet-500" />}
           label="In Notion DB"
           value={stats.totalArticlesNotion}
-          // Notion API 总记录含历史；本管线已上传用本地成品数近似
-          subtext={`Notion 总记录（含历史）· 本管线已上传 ${stats.articlesWritten}`}
+          // Notion API 总记录含历史；本管线已上传来自 .notion-finished-state
+          subtext={`Notion 总记录（含历史）· 本管线已上传 ${stats.notionFinishedUploaded}`}
           trend="neutral"
         />
         <StatCard

@@ -1,6 +1,10 @@
 /**
  * GET /api/logs
  * CONTRACT v1.0 — DB logs + logs/bookmark-auto.log 合并（按时间倒序去重）
+ *
+ * 分页策略：
+ * - page===1：合并 DB 最近条目 + bookmark-auto.log（auto_run 近况）
+ * - page>1：仅 DB 分页（文件日志只覆盖近期，避免深页空窗/total 失真）
  */
 
 import { NextResponse } from "next/server";
@@ -16,20 +20,34 @@ export async function GET(
   let limit = 50;
   try {
     const { searchParams } = new URL(request.url);
-    page = Math.max(parseInt(searchParams.get("page") ?? "1", 10), 1);
-    limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "50", 10), 1), 100);
+    const pageRaw = parseInt(searchParams.get("page") ?? "1", 10);
+    const limitRaw = parseInt(searchParams.get("limit") ?? "50", 10);
+    page = Number.isFinite(pageRaw) ? Math.max(pageRaw, 1) : 1;
+    limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 50;
     const component = (searchParams.get("component") as LogComponent) ?? undefined;
     const level = (searchParams.get("level") as LogLevel) ?? undefined;
 
-    // 多取一些 DB 行，便于与文件日志合并后再分页
-    const fetchLimit = Math.min(500, Math.max(limit * page, 200));
-    const dbResult = listLogs(1, fetchLimit, component, level);
-    const fileLogs = readBookmarkAutoLog(500);
-    const merged = mergeLogEntries(dbResult.items, fileLogs, component, level);
+    if (page > 1) {
+      // 深页：纯 DB，保证 offset/total/hasMore 一致
+      const dbPage = listLogs(page, limit, component, level);
+      return NextResponse.json({ success: true, data: dbPage });
+    }
 
-    const total = merged.length;
-    const offset = (page - 1) * limit;
-    const items = merged.slice(offset, offset + limit);
+    // 首页：合并文件日志与 DB 最近条目
+    const dbRecent = listLogs(1, Math.max(limit, 200), component, level);
+    const fileLogs = readBookmarkAutoLog(500);
+    const merged = mergeLogEntries(dbRecent.items, fileLogs, component, level);
+    const items = merged.slice(0, limit);
+
+    // total ≈ DB 总数 + 仅存在于文件侧的增量（近似，供 UI 翻页）
+    const dbKeys = new Set(dbRecent.items.map((e) => `${e.timestamp}|${e.message}`));
+    let fileOnly = 0;
+    for (const e of fileLogs) {
+      if (component && e.component !== component) continue;
+      if (level && e.level !== level) continue;
+      if (!dbKeys.has(`${e.timestamp}|${e.message}`)) fileOnly++;
+    }
+    const total = Math.max(dbRecent.total + fileOnly, merged.length);
 
     return NextResponse.json({
       success: true,
@@ -43,14 +61,13 @@ export async function GET(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    // 兜底返回空数组，不再回退 mockLogs
     return NextResponse.json(
       {
         success: false,
         data: { items: [], total: 0, page, limit, hasMore: false },
         error: { code: "INTERNAL_ERROR", message, detail: String(err) },
       },
-      { status: 200 }
+      { status: 500 }
     );
   }
 }

@@ -30,8 +30,14 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
   hasMore: boolean;
-  /** Articles 列表口径：drafts / finished / failed（可选，不破坏既有 total） */
+  /**
+   * Articles 列表口径（可选，不破坏既有 total）。
+   * - drafts：pipeline/deep 全集条目数（≠ status===\"draft\" 计数）
+   * - finished：written + uploaded
+   * - failed：status===failed
+   */
   stats?: {
+    /** 全集条目数（deep drafts ∪ pipeline keys），非 draft 状态计数 */
     drafts: number;
     finished: number;
     failed: number;
@@ -92,6 +98,8 @@ export interface DashboardStats {
   // 旧字段保留兼容（同义别名）
   articlesWritten: number;            // = totalArticlesLocal
   notionTotalUploaded: number;        // = totalArticlesNotion
+  /** 本管线已上传（.notion-finished-state.json） */
+  notionFinishedUploaded: number;
   pendingRewrite: number;             // = pendingRewriteGlobal
 }
 
