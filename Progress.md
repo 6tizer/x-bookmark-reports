@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-08-12 — 遗留事项处置：SearXNG 多引擎 + Firecrawl 防线 + 上传节奏
+
+### 我们实现了哪些功能？
+
+1. **SearXNG 实例修复（治本）**：SSH 到 tokyo-4-cqa（`~/searxng-deploy/`），settings.yml 启用 duckduckgo/brave/startpage/mojeek 四个免费 general 引擎（备份 `.bak.20260812`），重启容器。实测两组查询各返回 10 条结果。
+2. **Firecrawl 防线**（`lib/article_pipeline/research.py` + `lib/config.py`）：
+   - 熔断改**模块级**（原实例级，每篇文章新建 Researcher 被重置，08-11 事故 402 报了 866 次）；
+   - 新增 `FIRECRAWL_MAX_CALLS_PER_RUN` 预算帽（默认 50/进程），额度烧穿**之前**拦截；
+   - SearXNG 连续 ≥5 次 0 结果打 WARNING（引擎限流时 HTTP 200 不报错，必须主动告警）。
+3. **Health 增强**（`ui/src/app/api/health/route.ts`）：searxng 检查从"HTTP 200 即 ok"改为真实查询断言 `results` 非空，新增 `degraded` 状态 + 告警文案。
+4. **上传节奏**（`bin/upload_to_notion.py`）：SKIP-DUP 独立状态，只 sleep(0.4) 不计批暂停；`_BATCH_PAUSE_SECONDS` 600→60；批暂停按真实上传数计。
+5. **顺手修**：`ui/src/db/mock.ts` 补 `notionFinishedUploaded`（PR #18 遗留，main 此前 `next build` 类型检查不过）。
+
+### 我们遇到了哪些错误？
+
+1. Dashboard 验证时 3000 端口 404——Dashboard 实际跑在 **3001**（launchd plist `-p 3001`），3000 是别的项目。
+2. `next build` 失败——PR #18 的 mock 类型缺字段（遗留问题，非本次改动引入）。
+
+### 我们是如何解决这些错误的？
+
+1. 查 launchd plist 确认端口，在 3001 验证 health 接口通过（searxng=ok，真实查询断言生效）。
+2. mock 补字段后构建通过，重启 Dashboard 生效。
+
+---
+
 ## 2026-08-11 — 排查「新书签未进 Notion」：reconcile 归档盲区引发全量重跑
 
 ### 我们实现了哪些功能？

@@ -74,8 +74,9 @@ NOTION_API = "https://api.notion.com/v1"
 _BLOCKS_PER_CHUNK = 25
 
 # Batch upload throttle: upload N articles, then pause M seconds
+# Notion 官方限速 ~3 req/s；600s 批暂停曾把 900 篇积压拖成 15h（B-UPLOAD-PACING-AMPLIFY）
 _ARTICLES_PER_BATCH = 10
-_BATCH_PAUSE_SECONDS = 600
+_BATCH_PAUSE_SECONDS = 60
 
 # Finished article defaults
 ARTICLE_FINAL_DIR = ROOT / "output" / "article-final"
@@ -682,7 +683,9 @@ def _check_duplicate_in_notion(source_url: str) -> str | None:
 def upload_finished_file(md_path: Path, live: bool) -> tuple[str, str]:
     """Upload a finished article .md to Notion (status=已发布).
 
-    Returns (status, message) with same semantics as upload_file().
+    Returns (status, message) with same semantics as upload_file(), plus:
+        "skip-dup" - source_url 已存在于 Notion（仅做了 1 次查重读请求，未写入）；
+                     调用方须记入 state 但无需按真实上传节奏限速
     """
     text = md_path.read_text(encoding="utf-8")
     meta, body = _parse_finished_frontmatter(text)
@@ -719,7 +722,8 @@ def upload_finished_file(md_path: Path, live: bool) -> tuple[str, str]:
     existing_page = _check_duplicate_in_notion(source_url)
     if existing_page:
         print(f"  [SKIP-DUP] {md_path.name} already in Notion (page_id={existing_page})")
-        return "ok", f"already_exists page_id={existing_page}"
+        # skip-dup 单独状态：只做了 1 次查重读请求，调用方不必按"真实上传"节奏限速
+        return "skip-dup", f"already_exists page_id={existing_page}"
 
     payload = _build_finished_payload(meta, body)
     try:
@@ -905,14 +909,19 @@ def _run_finished_mode(args: argparse.Namespace, live: bool) -> int:
     ok_count = 0
     partial_count = 0
     failed_count = 0
+    skip_dup_count = 0
+    # 批暂停只统计真实上传：SKIP-DUP 仅 1 次查重读请求，
+    # 若计入节奏会把大积压拖成十几小时（B-UPLOAD-PACING-AMPLIFY）
+    uploads_since_pause = 0
 
-    for idx, md_path in enumerate(pending):
-        if live and idx > 0 and idx % articles_per_batch == 0:
+    for md_path in pending:
+        if live and uploads_since_pause >= articles_per_batch:
             print(
-                f"[upload_to_notion] Batch pause — processed {idx} articles. "
+                f"[upload_to_notion] Batch pause — {uploads_since_pause} uploads. "
                 f"Waiting {batch_pause}s ..."
             )
             time.sleep(batch_pause)
+            uploads_since_pause = 0
             print("[upload_to_notion] Resuming ...")
 
         try:
@@ -920,13 +929,15 @@ def _run_finished_mode(args: argparse.Namespace, live: bool) -> int:
         except Exception as e:
             status, msg = "failed", f"unexpected error: {e}"
 
-        if live and status in ("ok", "partial"):
+        if live and status in ("ok", "partial", "skip-dup"):
             state["uploaded"].append(md_path.name)
             _save_finished_state(state)
 
         if status == "ok":
             ok_count += 1
             print(f"  [OK] {md_path.name} -> {msg}")
+        elif status == "skip-dup":
+            skip_dup_count += 1
         elif status == "partial":
             partial_count += 1
             print(f"  [PARTIAL] {md_path.name} -> {msg}", file=sys.stderr)
@@ -937,14 +948,19 @@ def _run_finished_mode(args: argparse.Namespace, live: bool) -> int:
             print(f"  [FAIL] {md_path.name}: {msg}", file=sys.stderr)
 
         if live:
-            time.sleep(3)
+            if status == "skip-dup":
+                # 查重只发 1 个读请求，轻限速即可（Notion 限速 ~3 req/s）
+                time.sleep(0.4)
+            else:
+                time.sleep(3)
+                uploads_since_pause += 1
 
     uploaded_count = ok_count + partial_count
     error_count = partial_count + failed_count
 
     print(
         f"[upload_to_notion] finished done — uploaded: {uploaded_count}, "
-        f"skipped: {len(uploaded_set)}, errors: {error_count}"
+        f"skipped: {len(uploaded_set) + skip_dup_count}, errors: {error_count}"
     )
     return 0 if error_count == 0 else 1
 

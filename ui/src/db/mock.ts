@@ -510,6 +510,8 @@ export const mockDashboardStats: DashboardStats = {
   newThisWeek: 23,
   articlesWritten: 932,
   notionTotalUploaded: 946,
+  // PR #18 新增：本管线已上传（finished state 口径），与 Notion 总记录区分
+  notionFinishedUploaded: 932,
   pendingRewrite: 14,
   // Stage 2: 4 个新字段与旧字段语义对齐（mock 数值不一定满足真实约束，仅用于 UI 调试）
   totalArticlesLocal: 932,

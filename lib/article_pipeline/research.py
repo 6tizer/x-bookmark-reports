@@ -26,6 +26,15 @@ logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
+# --- 进程级 Firecrawl 防线（模块级：Researcher 每篇文章新建实例，实例级状态会被重置） ---
+# 熔断：遇 402/429 后本进程不再调用；预算帽：本进程调用次数达上限后停止（额度烧穿前拦截）
+_firecrawl_circuit_open = False
+_firecrawl_call_count = 0
+
+# --- SearXNG 连续 0 结果计数（模块级）：实例引擎失效时 HTTP 200 + 空结果，不会报错，需主动告警 ---
+_searxng_zero_streak = 0
+_SEARXNG_ZERO_WARN_THRESHOLD = 5
+
 
 def _load_prompt(name: str) -> str:
     p = _PROMPTS_DIR / name
@@ -178,8 +187,6 @@ class Researcher:
     def __init__(self) -> None:
         self._xai_client: Any = None
         self._system_prompt = _load_prompt("system_research.txt")
-        # Firecrawl 熔断标志：遇 402/429（额度/限流）置开，本实例后续跳过 Firecrawl
-        self._firecrawl_circuit_open = False
 
     def _get_xai_client(self) -> Any:
         if self._xai_client is None:
@@ -197,6 +204,7 @@ class Researcher:
 
     def _search_searxng(self, query: str, limit: int = 10) -> List[Dict[str, str]]:
         """SearXNG 主搜索：GET /search?q=...&format=json，取 results[]。"""
+        global _searxng_zero_streak
         if not SEARXNG_BASE_URL:
             # 未配置（空 URL）不算失败：info 跳过并返回空，让 Firecrawl 备路接管
             logger.info("SearXNG skipped: SEARXNG_BASE_URL not configured")
@@ -215,13 +223,42 @@ class Researcher:
                 "url": str(item.get("url") or ""),
                 "content": str(item.get("content") or ""),
             })
+        # 连续 0 结果告警：实例引擎限流/失效时返回 HTTP 200 + 空结果，
+        # 不告警的话会静默把流量全推给 Firecrawl 备路（08-11 烧穿额度的教训）
+        if results:
+            _searxng_zero_streak = 0
+        else:
+            _searxng_zero_streak += 1
+            if _searxng_zero_streak >= _SEARXNG_ZERO_WARN_THRESHOLD:
+                logger.warning(
+                    "SearXNG returned 0 results for %d consecutive queries — "
+                    "instance engines may be rate-limited or misconfigured "
+                    "(check %s/search?q=test&format=json)",
+                    _searxng_zero_streak,
+                    SEARXNG_BASE_URL.rstrip("/"),
+                )
         return results
 
     def _search_firecrawl(self, query: str, limit: int = 5) -> List[Dict[str, str]]:
         """Firecrawl 备用搜索：POST {base}/search；无 key 时 Keyless（不带 Authorization）。"""
+        global _firecrawl_circuit_open, _firecrawl_call_count
+        # 预算帽：达到单进程上限后打开熔断，在额度烧穿之前拦截（402 熔断是烧完之后才触发）
+        if _firecrawl_call_count >= config.FIRECRAWL_MAX_CALLS_PER_RUN:
+            if not _firecrawl_circuit_open:
+                _firecrawl_circuit_open = True
+                logger.warning(
+                    "Firecrawl budget exhausted (%d calls this process, cap=%d): "
+                    "skipping further Firecrawl calls",
+                    _firecrawl_call_count,
+                    config.FIRECRAWL_MAX_CALLS_PER_RUN,
+                )
+            raise RuntimeError(
+                f"Firecrawl budget cap reached ({config.FIRECRAWL_MAX_CALLS_PER_RUN} calls/run)"
+            )
         headers: Dict[str, str] = {"Content-Type": "application/json"}
         if FIRECRAWL_API_KEY:
             headers["Authorization"] = f"Bearer {FIRECRAWL_API_KEY}"
+        _firecrawl_call_count += 1
         resp = requests.post(
             f"{FIRECRAWL_BASE_URL.rstrip('/')}/search",
             headers=headers,
@@ -231,11 +268,12 @@ class Researcher:
         try:
             resp.raise_for_status()
         except requests.HTTPError:
-            # 402/429 = 额度耗尽/限流：打开熔断，避免批量任务持续烧 Keyless 月额度
+            # 402/429 = 额度耗尽/限流：打开熔断（模块级，跨 Researcher 实例生效——
+            # 08-11 事故中实例级熔断因每篇文章新建实例被重置，402 报了 866 次）
             if resp.status_code in (402, 429):
-                self._firecrawl_circuit_open = True
+                _firecrawl_circuit_open = True
                 logger.warning(
-                    "Firecrawl circuit opened (HTTP %s): skipping further Firecrawl calls this run",
+                    "Firecrawl circuit opened (HTTP %s): skipping further Firecrawl calls this process",
                     resp.status_code,
                 )
             raise
@@ -373,7 +411,7 @@ class Researcher:
 
         # --- Firecrawl（备用：仅 SearXNG 失败或 0 结果且熔断未开时启用） ---
         firecrawl_results: List[Dict[str, str]] = []
-        if not searxng_results and self._firecrawl_circuit_open:
+        if not searxng_results and _firecrawl_circuit_open:
             logger.info("Firecrawl fallback skipped: circuit open")
         elif not searxng_results:
             try:

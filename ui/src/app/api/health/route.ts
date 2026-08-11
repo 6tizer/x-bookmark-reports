@@ -20,7 +20,8 @@ import type { ApiResponse, LogComponent } from "@/types/api";
 export const dynamic = "force-dynamic";
 
 type XaiStatus = "ok" | "forbidden" | "unknown";
-type SearxngStatus = "ok" | "unconfigured" | "error";
+// degraded = 实例可达但搜索返回 0 结果（引擎限流/失效，HTTP 层看不出问题）
+type SearxngStatus = "ok" | "degraded" | "unconfigured" | "error";
 type KeyStatus = "ok" | "keyless";
 
 interface HealthData {
@@ -254,7 +255,11 @@ async function checkSearxngStatus(): Promise<SearxngStatus> {
       headers: { Accept: "application/json" },
     });
     clearTimeout(timer);
-    return res.ok ? "ok" : "error";
+    if (!res.ok) return "error";
+    // HTTP 200 不代表可用：引擎全部限流时返回空 results（08-11 事故盲点），
+    // 必须断言真实查询有结果
+    const data = (await res.json()) as { results?: unknown[] };
+    return (data.results?.length ?? 0) > 0 ? "ok" : "degraded";
   } catch {
     return "error";
   }
@@ -281,6 +286,11 @@ function buildWarnings(data: Omit<HealthData, "healthy" | "warnings">): string[]
   }
   if (data.apiStatus.xai === "forbidden") {
     warnings.push("xAI API 信用额度用完，research 已 fallback 到 Exa");
+  }
+  if (data.apiStatus.searxng === "degraded") {
+    warnings.push(
+      "SearXNG 实例可达但搜索返回 0 结果（引擎可能被限流），研究流量将转向 Firecrawl 消耗额度"
+    );
   }
   if (!data.launchd.loaded) {
     warnings.push("launchd 调度未加载，流水线不会自动运行");

@@ -16,12 +16,12 @@ alwaysApply: true
 - 2026-08-11 实测：从 899 篇"pending"中抽样 8 篇，**8/8 已在 Notion**。
 - 推论：任何"孤儿清理 / 补传 / 重跑"操作前，必须同时核对 `output/归档/` 与 Notion 既有记录，否则会触发几百篇规模的无意义重跑（见 BUGS.md B-RECONCILE-ARCHIVE-BLIND，2026-08-11 事故：942 篇重跑 19.5h，耗尽 xAI + Firecrawl 额度）。
 
-## F2. 研究搜索栈的真实状态（2026-08-11 对齐）
+## F2. 研究搜索栈的真实状态（2026-08-12 更新）
 
-- SearXNG 实例（`http://100.99.184.51:8888`）后端**只有 google cse 一个引擎**，Google CSE 免费额度 100 次/天；超限后 SearXNG 返回 HTTP 200 + 0 结果（不报错）。
-- SearXNG 0 结果时，每篇文章的研究都会 fallback 到 Firecrawl → Firecrawl 免费版 500 credits，`/v2/search` 每次 1 credit。
-- 2026-08-11 事故实测：SearXNG 935/949 次返回 0 结果；Firecrawl 累计成功 499 次后 402（13:40 起），与免费额度 500 精确吻合。
-- xAI 团队额度已耗尽（403），研究链路目前实际无可用搜索后端（全部 fail-soft 降级）。
+- SearXNG 实例（`http://100.99.184.51:8888`）跑在 **Tailscale 机器 tokyo-4-cqa**（SSH 别名 `tokyo`，`~/searxng-deploy/` docker compose，需 sudo）。该实例**属于 cryptoquantalpha 项目共用**，改配置须增量、勿动 news/crypto 引擎。
+- 2026-08-12 已启用 general 引擎：**duckduckgo / brave / startpage / mojeek**（此前只有 google cse 一个，100 查询/天超限后 HTTP 200 + 0 结果，引发 08-11 Firecrawl 烧穿事故）。settings.yml 有 `.bak.20260812` 备份。
+- Firecrawl 免费版 500 credits（一次性），`/v2/search` 每次 1 credit。代码防线（2026-08-12 加）：模块级熔断（402/429）+ `FIRECRAWL_MAX_CALLS_PER_RUN` 预算帽（默认 50）+ SearXNG 连续 5 次 0 结果 WARNING + health `degraded` 状态。
+- xAI 团队额度已耗尽（403），用户未续费；研究主链路走 SearXNG，Exa /search 可选补充。
 
 ## F3. Notion 上传节奏（2026-08-11 对齐）
 

@@ -230,6 +230,12 @@ SEARXNG_BASE_URL = _optional_env("SEARXNG_BASE_URL", "")
 # Firecrawl — 备用搜索（SearXNG 失败或 0 结果时启用；无 key 也可 Keyless 调用）
 FIRECRAWL_API_KEY = _optional_env("FIRECRAWL_API_KEY", "")
 FIRECRAWL_BASE_URL = _optional_env("FIRECRAWL_BASE_URL", "https://api.firecrawl.dev/v2")
+# Firecrawl 单进程调用预算：防止大批量任务把整月额度烧穿（免费版仅 500 credits）
+# 达到预算后本进程内不再调用 Firecrawl（B-SEARXNG-SINGLE-ENGINE 事故防线）
+try:
+    FIRECRAWL_MAX_CALLS_PER_RUN = int(_optional_env("FIRECRAWL_MAX_CALLS_PER_RUN", "50"))
+except ValueError:
+    FIRECRAWL_MAX_CALLS_PER_RUN = 50
 
 # Article pipeline output directories
 ARTICLE_FINAL_DIR = PROJECT_ROOT / _optional_env("ARTICLE_FINAL_DIR", "output/article-final")

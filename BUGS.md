@@ -14,8 +14,6 @@
 | ---- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | -------- |
 | B026 | app.py | `_run_deep_batch_inner` 完整复制了 `BookmarkCoordinator.run_deep` 的核心逻辑。**注：app.py 已于 2026-06-27 删除，本条作废** | MEDIUM | 2026-04-28 | obsolete |
 | B-TITLE-SECTION-HEADER-LEAK | ui/src/lib/fs-data.ts | Articles 列表出现标题「外部链接详情」——deep draft 的 section header 被 extractTitle() 误当标题；DEEP_DRAFT_SECTION_HEADERS 跳过集合有「外部链接」但缺「外部链接详情」（与 PR-1 修过的「主推文」同类）。修复：往 Set 加词条 | LOW | 2026-07-07 | 待修复 |
-| B-UPLOAD-PACING-AMPLIFY | bin/upload_to_notion.py | 上传节奏过保守放大积压：每篇 `sleep(3)` + 每 10 篇暂停 600s（`_BATCH_PAUSE_SECONDS`），且 SKIP-DUP（仅查重不上传）也吃同样节奏 → ~910 篇积压需 ~15h 才能走完 Step 4。Notion 官方限速 3 req/s，远宽于此。修复方向：SKIP-DUP 不 sleep；batch_pause 降到 30–60s 或按 429 自适应 | MEDIUM | 2026-08-11 | 待修复 |
-| B-SEARXNG-SINGLE-ENGINE | SearXNG 实例（100.99.184.51:8888） | 实例后端只有 google cse 一个引擎（免费 100 查询/天）。超限后 SearXNG 返回 HTTP 200 + 0 结果（不报错、不熔断）→ 每篇研究都 fallback 到 Firecrawl。08-11 事故中 935/949 次搜索 0 结果，Firecrawl 496 次调用（1 credit/次）在 13:40 烧完免费版 500 credits（用户下午收到额度告警邮件）。修复方向：SearXNG 加免费引擎（duckduckgo/brave/bing 等）；research.py 对连续 0 结果告警 | HIGH | 2026-08-11 | 待修复 |
 
 
 ---
@@ -26,6 +24,9 @@
 | ID   | 文件                                 | 问题描述                                                                                                   | 严重性    | 发现日期       | 修复日期       | 修复说明                                                    |
 | ---- | ---------------------------------- | ------------------------------------------------------------------------------------------------------ | ------ | ---------- | ---------- | ------------------------------------------------------- |
 | B-RECONCILE-ARCHIVE-BLIND | bin/reconcile_deep_state.py | 孤儿判定只扫 `output/` 顶层，未计入 `output/归档/`；942 篇归档草稿被误判孤儿 → 08-11 全量重跑 19.5h，阻塞 Notion 上传、跳过 6 次 launchd、耗尽 xAI/Firecrawl 额度 | HIGH | 2026-08-11 | 2026-08-11 | `list_disk_tweet_ids` 增加 `output/归档/` 递归扫描；验证归档 942 id 全覆盖，不再误判 |
+| B-SEARXNG-SINGLE-ENGINE | SearXNG 实例 + lib/article_pipeline/research.py | 实例 general 类目仅 google cse 一个引擎（100 查询/天）；超限后 HTTP 200 + 0 结果，全部流量静默转 Firecrawl，烧穿免费 500 credits。且原熔断为实例级、每篇文章新建 Researcher 被重置（402 报了 866 次） | HIGH | 2026-08-11 | 2026-08-12 | 实例启用 duckduckgo/brave/startpage/mojeek（settings.yml 已备份）；熔断改模块级；新增 `FIRECRAWL_MAX_CALLS_PER_RUN`（默认 50）预算帽；SearXNG 连续 5 次 0 结果打 WARNING；health searxng 检查改真实查询断言非空（新增 degraded 状态 + 告警文案） |
+| B-UPLOAD-PACING-AMPLIFY | bin/upload_to_notion.py | SKIP-DUP（仅 1 次查重读）也吃每篇 sleep(3) + 每 10 篇 600s 批暂停 → 900 篇积压需 ~15h | MEDIUM | 2026-08-11 | 2026-08-12 | SKIP-DUP 独立状态：只 sleep(0.4) 且不计入批暂停；`_BATCH_PAUSE_SECONDS` 600→60；批暂停按真实上传数计 |
+| B-MOCK-STATS-BUILD | ui/src/db/mock.ts | PR #18 给 `DashboardStats` 加 `notionFinishedUploaded` 但 mock 未同步，`next build` 类型检查失败（main 不可构建） | MEDIUM | 2026-08-12 | 2026-08-12 | mock 补齐 `notionFinishedUploaded: 932` |
 | B-SYNC-REWRITE-STALE | ui/src/lib/fs-data.ts + PipelineOverview | Idle+failed 时 rewrite 仍标 running | MEDIUM | 2026-08-11 | 2026-08-11 | 状态机改为 running/completed/partial/pending；UI 橙色 partial |
 | B-ARTICLES-TOTAL-MIXED | ui articles API/page | 页头 total 与 Dashboard 口径混用 | MEDIUM | 2026-08-11 | 2026-08-11 | API 附加 `stats:{drafts,finished,failed}`；页头拆分显示 |
 | B-LOG-STALE | ui logs route + log-reader | auto_run 只写文件不进 SQLite，Logs 停在旧数据 | HIGH | 2026-08-11 | 2026-08-11 | 合并 `logs/bookmark-auto.log`；加 logs.timestamp 索引 |
