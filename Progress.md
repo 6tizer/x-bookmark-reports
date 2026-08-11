@@ -5,6 +5,41 @@
 
 ---
 
+## 2026-08-11 — 排查「新书签未进 Notion」：reconcile 归档盲区引发全量重跑
+
+### 我们实现了哪些功能？
+
+本次为故障排查（无代码改动），根因链路已查清并记入 BUGS.md（B-RECONCILE-ARCHIVE-BLIND / B-UPLOAD-PACING-AMPLIFY）：
+
+1. **根因**：PR #18 的 `bin/reconcile_deep_state.py` 判定孤儿时只扫 `output/bookmark-deep-*.md`，未计入 `output/归档/`（943 篇归档草稿）。942 篇被误判为孤儿并从 `completed_ids` 移除（2105→1163）。
+2. **连锁反应**：08-11 03:00 launchd 运行时，coordinator 将这 942 篇视为未处理 → Step 2 重新生成 943 篇报告（03:00–09:05），Step 3 重新研究+撰写 939 篇文章（09:05–22:31，13.5h）。
+3. **用户可见影响**：Step 4（Notion 上传）被阻塞 19.5h；06:00–21:00 六次 launchd 触发因旧进程存活被跳过 → 新书签既没同步也没上传。
+4. **附带损伤**：重跑 939 篇研究耗尽 xAI 额度（403）、触发 Firecrawl 402（Payment Required）。
+5. **验证**：今日批次 943 个 id 与归档草稿 id 交集 = 942，仅 1 篇（2086754553580355673）为真实新书签。
+
+### 我们遇到了哪些错误？
+
+1. Step 4 状态文件一度 10 分钟未更新，疑似挂死。
+2. `auto_run_state.json` 停在 "running/init"，无法反映真实进度。
+
+### 我们是如何解决这些错误的？
+
+1. 实为 `_BATCH_PAUSE_SECONDS=600`（每 10 篇暂停 10 分钟）+ 每篇 sleep(3) 的保守节奏；进程存活且状态文件按批推进（1151→1161），未挂死。但按此节奏 ~910 篇积压需 ~15h 走完，已记 B-UPLOAD-PACING-AMPLIFY。
+2. 状态写入时机问题为已知行为（仅步骤边界写入），本次未改动。
+
+### 补充查证（与用户对齐后，23:00）
+
+1. **重跑的 900+ 篇本来就已在 Notion**：从 899 篇 pending 中抽样 8 篇按 source_url 查 Notion，8/8 已存在。归档草稿对应内容 2026-04 起就分批上传过；本地 `.notion-upload-state.json`（05-05 清空）和 `.notion-finished-state.json`（08-10 重置）都不可作为"是否已上传"的依据。事实已固化到 `.cursor/rules/facts.mdc`（F1）。
+2. **Firecrawl 额度提前烧完的根因**：SearXNG 实例只挂了 google cse 一个引擎（免费 100 查询/天），今天 932 次搜索瞬间超限后全部返回 HTTP 200 + 0 结果 → 每篇研究 fallback Firecrawl → 496 次 × 1 credit，13:40 烧完免费版 500 credits（对应用户下午收到的告警邮件）。已记 B-SEARXNG-SINGLE-ENGINE（HIGH）。
+
+### 处置（00:00–00:20，用户确认后执行）
+
+1. **清积压**：终止卡慢的 Step 4（每 10 篇歇 600s，预计还需 15h）；临时卸载 launchd 防打架；逐篇按 source_url 核验 859 篇 pending——**822 篇已在 Notion 直接回填 state，35 篇确实缺失**（含新书签 2086754553580355673）+2 篇查询超时；用 `--batch-pause 30` 补传 37 篇，全部 OK（2 篇实为 dup 被查重跳过）。终态 `pending=0, already_uploaded=2070`。校正 `auto_run_state.json`（原卡在 running/init），恢复 launchd。
+2. **修 B-RECONCILE-ARCHIVE-BLIND**：`bin/reconcile_deep_state.py::list_disk_tweet_ids` 增加 `output/归档/` 递归扫描。验证：归档 942 个 id 全被新逻辑覆盖，即使顶层文件缺失也不再误判孤儿；当前 state dry-run newly_orphaned=0。
+3. **注意**：逐篇核验证明**并非全部 pending 都在 Notion**（35/859 缺失），盲目回填会造成静默丢失——后续同类操作必须逐篇核验。
+
+---
+
 ## 2026-08-10 — research 栈迁移：SearXNG 主 + Firecrawl 备 + Exa Search 可选
 
 ### 背景

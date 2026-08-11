@@ -1,0 +1,29 @@
+---
+description: 项目事实备忘（已对齐，勿重复求证）
+alwaysApply: true
+---
+
+# 项目事实备忘（FACTS）
+
+> 本文件记录已与用户对齐的关键事实。每次涉及相关话题时以此为准，**不要重复向用户求证**。
+> 有新事实对齐后追加到此文件。
+
+## F1. 归档内容早已在 Notion（2026-08-11 对齐）
+
+- `output/归档/` 的 943 篇深度草稿对应的书签内容**早已全部上传过 Notion**（2026-04 起分批上传，如 4/1 批次 353 篇草稿模式上传后归档）。
+- **本地状态文件 ≠ Notion 真实集合**：`.notion-upload-state.json`（draft 模式）2026-05-05 被清空；`.notion-finished-state.json` 2026-08-10 也重置过（存在 `.bak.empty.20260810` 备份）。本地 state 缺失不代表 Notion 里没有。
+- 判断"是否已在 Notion"的唯一可靠方法：按 `文章链接`（source_url）查 Notion DB（`_check_duplicate_in_notion`）。
+- 2026-08-11 实测：从 899 篇"pending"中抽样 8 篇，**8/8 已在 Notion**。
+- 推论：任何"孤儿清理 / 补传 / 重跑"操作前，必须同时核对 `output/归档/` 与 Notion 既有记录，否则会触发几百篇规模的无意义重跑（见 BUGS.md B-RECONCILE-ARCHIVE-BLIND，2026-08-11 事故：942 篇重跑 19.5h，耗尽 xAI + Firecrawl 额度）。
+
+## F2. 研究搜索栈的真实状态（2026-08-11 对齐）
+
+- SearXNG 实例（`http://100.99.184.51:8888`）后端**只有 google cse 一个引擎**，Google CSE 免费额度 100 次/天；超限后 SearXNG 返回 HTTP 200 + 0 结果（不报错）。
+- SearXNG 0 结果时，每篇文章的研究都会 fallback 到 Firecrawl → Firecrawl 免费版 500 credits，`/v2/search` 每次 1 credit。
+- 2026-08-11 事故实测：SearXNG 935/949 次返回 0 结果；Firecrawl 累计成功 499 次后 402（13:40 起），与免费额度 500 精确吻合。
+- xAI 团队额度已耗尽（403），研究链路目前实际无可用搜索后端（全部 fail-soft 降级）。
+
+## F3. Notion 上传节奏（2026-08-11 对齐）
+
+- `bin/upload_to_notion.py`：每篇 `sleep(3)` + 每 10 篇暂停 600s（`_BATCH_PAUSE_SECONDS`）；SKIP-DUP（查重跳过）也吃同样节奏 → 900 篇积压需 ~15h。
+- Notion 官方限速 3 req/s，此节奏远超保守，可安全调低（见 BUGS.md B-UPLOAD-PACING-AMPLIFY）。

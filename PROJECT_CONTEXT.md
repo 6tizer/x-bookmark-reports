@@ -253,6 +253,10 @@ bash -c "'$SCRIPT_PATH' && ..."  # 单引号包住含空格路径
 `upload_to_notion.py` 在每次上传前会查询 Notion DB 的 `文章链接` 属性。
 若该 source_url 已存在则打印 `[SKIP-DUP]` 跳过，不会创建重复页面。
 
+**重要事实**：`output/归档/` 的 943 篇草稿对应内容早已全部在 Notion（2026-04 起分批上传）。
+本地 `.notion-*-state.json` 曾多次重置，**本地 state ≠ Notion 真实集合**；
+判断是否已上传只能以 source_url 查 Notion 为准。详见 `.cursor/rules/facts.mdc`。
+
 ### 9.3 archive 目录不计入统计
 `output/归档/` 目录下的历史文件不会被 `countDeepDrafts()` 扫描，不影响 Dashboard 计数。
 

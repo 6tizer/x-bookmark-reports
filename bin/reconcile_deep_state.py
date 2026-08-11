@@ -21,13 +21,16 @@ from typing import Any, Dict, List, Set
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = REPO_ROOT / "output"
 STATE_PATH = OUTPUT_DIR / ".deep-run-state.json"
+# 归档目录：历史草稿移入此处后不再计入 Dashboard 统计，但内容已处理过（多已上传 Notion），
+# 判定孤儿时必须计入，否则会被误判为"磁盘缺失"触发全量重跑（B-RECONCILE-ARCHIVE-BLIND）
+ARCHIVE_DIR_NAME = "归档"
 
 # bookmark-deep-{tweetId}.md 或 bookmark-deep-{tweetId}-{timestamp}.md
 _DEEP_RE = re.compile(r"^bookmark-deep-(\d+)(?:-.*)?\.md$")
 
 
 def list_disk_tweet_ids(output_dir: Path) -> Set[str]:
-    """扫描 output/ 下 deep draft 文件，提取 tweet id。"""
+    """扫描 output/（顶层）+ output/归档/（递归）下的 deep draft 文件，提取 tweet id。"""
     ids: Set[str] = set()
     if not output_dir.is_dir():
         return ids
@@ -37,6 +40,15 @@ def list_disk_tweet_ids(output_dir: Path) -> Set[str]:
         m = _DEEP_RE.match(p.name)
         if m:
             ids.add(m.group(1))
+    # 归档目录内可能有子目录（article-final/ 等），递归扫描
+    archive_dir = output_dir / ARCHIVE_DIR_NAME
+    if archive_dir.is_dir():
+        for p in archive_dir.rglob("bookmark-deep-*.md"):
+            if not p.is_file():
+                continue
+            m = _DEEP_RE.match(p.name)
+            if m:
+                ids.add(m.group(1))
     return ids
 
 
