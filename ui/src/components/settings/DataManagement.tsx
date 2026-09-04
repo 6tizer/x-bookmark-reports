@@ -18,6 +18,8 @@ import {
   Loader2,
   Eye,
 } from "lucide-react";
+// 导出文件名按产品时区（Asia/Singapore）取日期，而非 UTC
+import { localDateStamp } from "@/lib/format-date";
 
 // Preview 接口返回的最小结构（只取 UI 需要的 3 个聚合数字）
 interface PreviewData {
@@ -65,9 +67,7 @@ export function DataManagement() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `x-bookmark-reports-export-${new Date()
-        .toISOString()
-        .slice(0, 10)}.tar.gz`;
+      a.download = `x-bookmark-reports-export-${localDateStamp()}.tar.gz`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

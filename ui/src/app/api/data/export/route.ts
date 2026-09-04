@@ -10,6 +10,8 @@ import * as path from "path";
 import Database from "better-sqlite3";
 import { getRepoRoot, getUiPackageRoot } from "@/lib/repo-root";
 import { loadEnv, maskApiKey } from "@/lib/config";
+// 导出文件名按产品时区（Asia/Singapore）取日期，而非 UTC
+import { localDateStamp } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +99,7 @@ export async function GET(): Promise<Response> {
       status: 200,
       headers: {
         "Content-Type": "application/gzip",
-        "Content-Disposition": `attachment; filename="x-bookmark-reports-export-${new Date().toISOString().slice(0, 10)}.tar.gz"`,
+        "Content-Disposition": `attachment; filename="x-bookmark-reports-export-${localDateStamp()}.tar.gz"`,
         "Content-Length": String(stat.size),
       },
     });

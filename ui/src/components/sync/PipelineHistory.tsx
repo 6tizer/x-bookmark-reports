@@ -6,6 +6,8 @@
 
 import { RefreshCw, Loader2, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { usePipelineHistory } from "@/hooks/usePipelineHistory";
+// 统一按产品时区（Asia/Singapore）展示日期
+import { formatDateTime } from "@/lib/format-date";
 
 // 状态映射为颜色 + 图标
 function statusBadge(status: string): { color: string; icon: React.ReactNode } {
@@ -113,7 +115,7 @@ export function PipelineHistory(_: PipelineHistoryProps = {}) {
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {(() => {
-                        try { return new Date(item.startedAt).toLocaleString(); }
+                        try { return formatDateTime(item.startedAt, item.startedAt); }
                         catch { return item.startedAt; }
                       })()}
                     </td>

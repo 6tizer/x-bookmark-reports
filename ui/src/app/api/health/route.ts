@@ -16,6 +16,8 @@ import {
   getNotionFinishedSet,
 } from "@/lib/fs-data";
 import type { ApiResponse, LogComponent } from "@/types/api";
+// 下一次触发时刻按产品时区（Asia/Singapore）计算，不依赖 Node 进程所在机器的时区
+import { localHourMinute } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -90,23 +92,15 @@ function parseCalendarIntervals(plist: PlistJson): Array<{ hour: number; minute:
 function formatNextTrigger(intervals: Array<{ hour: number; minute: number }>): string | null {
   if (intervals.length === 0) return null;
 
-  const now = new Date();
-  const candidates: Date[] = [];
-
-  for (let dayOffset = 0; dayOffset <= 1; dayOffset++) {
-    for (const iv of intervals) {
-      const d = new Date(now);
-      d.setDate(d.getDate() + dayOffset);
-      d.setHours(iv.hour, iv.minute, 0, 0);
-      if (d > now) candidates.push(d);
-    }
-  }
-
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => a.getTime() - b.getTime());
-  const next = candidates[0];
-  const hh = String(next.getHours()).padStart(2, "0");
-  const mm = String(next.getMinutes()).padStart(2, "0");
+  // launchd 的 StartCalendarInterval 是按机器本地时钟触发的；这里用产品时区
+  // （Asia/Singapore，与机器一致）的"当前时分"找下一个触发点，只比较一天内的分钟数，
+  // 不依赖 Node 进程的 TZ 设置。找不到今天的就取明天的第一个。
+  const { hour: nowH, minute: nowM } = localHourMinute();
+  const nowMin = nowH * 60 + nowM;
+  const sorted = [...intervals].sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute));
+  const next = sorted.find((iv) => iv.hour * 60 + iv.minute > nowMin) ?? sorted[0];
+  const hh = String(next.hour).padStart(2, "0");
+  const mm = String(next.minute).padStart(2, "0");
 
   if (intervals.length === 8) return `每 3h（下一次 ${hh}:${mm}）`;
   if (intervals.length === 4) return `每 6h（下一次 ${hh}:${mm}）`;

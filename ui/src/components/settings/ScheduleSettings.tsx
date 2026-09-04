@@ -7,6 +7,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Clock, Play, Square, Terminal, RefreshCw, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import type { Settings, UpdateSettingsRequest } from "@/types/api";
+// 统一按产品时区（Asia/Singapore）展示日期
+import { formatDateTime } from "@/lib/format-date";
 
 interface ScheduleSettingsProps {
   settings: Settings | null;
@@ -158,11 +160,7 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
 
   const formatTime = (iso: string | null) => {
     if (!iso) return "Never";
-    try {
-      return new Date(iso).toLocaleString();
-    } catch {
-      return iso;
-    }
+    return formatDateTime(iso, iso);
   };
 
   /** 将 launchd schedule 格式化为可读中文描述 */

@@ -60,6 +60,9 @@ except ImportError:
 import urllib.request
 import urllib.error
 
+# 产品时区工具：Notion「发布时间」等日期一律按 Asia/Singapore 取日历日（B-NOTION-PUBDATE-UTC）
+from lib.tz import local_date_str
+
 # ------------------------------------------------------------------ config
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 NOTION_DB_ID = os.getenv("NOTION_DB_ID", "")
@@ -233,23 +236,16 @@ def _extract_title(body: str) -> str:
 
 
 def _parse_published_at(raw: str) -> Optional[str]:
-    """Convert published-at string to ISO 8601 date (YYYY-MM-DD).
+    """Convert published-at string to ISO 8601 date (YYYY-MM-DD) **in product timezone**.
 
     Accepts both formats found in bookmarks.json:
     - rettiwt-api v4 (Twitter native): 'Tue Mar 31 09:39:04 +0000 2026'
     - rettiwt-api v7 (ISO 8601):       '2026-04-20T01:30:35.000Z'
+
+    旧实现直接对 UTC 取 ``.date()``，新加坡 00:00–08:00 发的推文会记成前一天；
+    现改为先转 Asia/Singapore（APP_TIMEZONE）再取日期。
     """
-    if not raw:
-        return None
-    for fmt in ("%a %b %d %H:%M:%S %z %Y", "%a %b %d %H:%M:%S +0000 %Y"):
-        try:
-            return datetime.strptime(raw, fmt).date().isoformat()
-        except ValueError:
-            continue
-    try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00")).date().isoformat()
-    except ValueError:
-        return None
+    return local_date_str(raw)
 
 
 def _extract_author_handle(raw: str) -> str:
@@ -426,7 +422,9 @@ def _md_to_blocks(body: str) -> list[dict]:
 
 def _build_page_payload(meta: dict, body: str, blocks_chunk: list[dict]) -> dict:
     """Build the Notion create-page request body."""
-    title = _extract_title(body) or f"书签草稿（{meta.get('StartedAt', '')[:10]}）"
+    # 标题回退用的日期也按产品时区取（StartedAt 是 UTC ISO）
+    started_local = local_date_str(meta.get("StartedAt", "")) or meta.get("StartedAt", "")[:10]
+    title = _extract_title(body) or f"书签草稿（{started_local}）"
     author = _extract_author_handle(meta.get("Author", ""))
     tweet_url = _extract_tweet_url(body)
     pub_date = _parse_published_at(meta.get("PublishedAt", ""))
@@ -617,15 +615,12 @@ def _build_finished_payload(meta: dict[str, str], body: str) -> dict[str, Any]:
     if source_url:
         properties["\u6587\u7ae0\u94fe\u63a5"] = {"url": source_url}
 
-    # Published date from generated_at
+    # Published date from generated_at —— 按产品时区（Asia/Singapore）取日历日，
+    # 不能直接 UTC .date()，否则新加坡凌晨成文会记到前一天（B-NOTION-PUBDATE-UTC）
     gen_at = meta.get("generated_at", "")
-    if gen_at:
-        try:
-            from datetime import datetime as _dt
-            dt = _dt.fromisoformat(gen_at.replace("Z", "+00:00"))
-            properties["\u53d1\u5e03\u65f6\u95f4"] = {"date": {"start": dt.date().isoformat()}}
-        except (ValueError, ImportError):
-            pass
+    pub_local = local_date_str(gen_at) if gen_at else None
+    if pub_local:
+        properties["\u53d1\u5e03\u65f6\u95f4"] = {"date": {"start": pub_local}}
 
     # Tags — use multi_select if the DB property exists and is multi_select
     if tags and tag_prop:

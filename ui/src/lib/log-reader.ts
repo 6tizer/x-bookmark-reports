@@ -20,7 +20,7 @@ const LEVEL_COMPONENT =
   /^\[(INFO|WARN|ERROR|DEBUG|info|warn|error)\]\s*([a-zA-Z0-9_-]+):\s*(.*)$/;
 
 function toIsoTimestamp(raw: string): string {
-  // auto_run 日志为本地时间（Asia/Shanghai）
+  // auto_run 日志前缀是机器本地时间，按产品时区 Asia/Singapore（UTC+8，无夏令时）补偏移
   const normalized = raw.trim().replace(" ", "T");
   if (/[zZ]|[+-]\d{2}:\d{2}$/.test(normalized)) return normalized;
   return `${normalized}+08:00`;

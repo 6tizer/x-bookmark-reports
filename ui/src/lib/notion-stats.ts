@@ -92,10 +92,14 @@ async function queryAllPages(
     if (filter) body.filter = filter;
     if (nextCursor) body.start_cursor = nextCursor;
 
+    // cache: "no-store" 必须加：Next.js 14 会把 Route Handler 里的 fetch 结果写进
+    // .next/cache/fetch-cache（磁盘 Data Cache），跨构建/重启复用，导致 Dashboard 的
+    // Notion 计数长期停在旧快照（B-DASHBOARD-STALE-BUILD 真因：不是旧构建，是 fetch 缓存）
     const res = await fetch(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
+      cache: "no-store",
     });
 
     if (!res.ok) {

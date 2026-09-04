@@ -95,6 +95,9 @@ CACHE_TTL: dict[str, int] = {
 }
 CACHE_DIR = PROJECT_ROOT / "cache"
 
+# 产品时区（面向用户的日期一律按此时区展示；详见 lib/tz.py）
+from lib.tz import APP_TIMEZONE, LOCAL_TZ  # noqa: E402,F401  re-export 方便统一从 config 取
+
 # Report Configuration
 REPORT: dict[str, str] = {
     "title": "Twitter Bookmark Report",

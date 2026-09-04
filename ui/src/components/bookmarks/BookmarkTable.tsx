@@ -18,6 +18,8 @@ import {
 import type { Bookmark, BookmarkStatus, BookmarkLifecycle } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BookmarkToolbar } from "./BookmarkToolbar";
+// 统一按产品时区（Asia/Singapore）展示日期
+import { formatDate } from "@/lib/format-date";
 
 interface BookmarkTableProps {
   bookmarks: Bookmark[];
@@ -178,7 +180,7 @@ export function BookmarkTable({
                   </Link>
                 </td>
                 <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">
-                  {new Date(bookmark.bookmarkedAt).toLocaleDateString()}
+                  {formatDate(bookmark.bookmarkedAt)}
                 </td>
                 <td className="px-3 py-3">
                   <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground">

@@ -24,3 +24,12 @@ __pycache__/
 /logs/
 logs/*.log
 logs/*.err
+
+# 过程类文档：仅本地维护，不上 GitHub（2026-09-05 决定）
+BUGS.md
+Progress.md
+
+# 本地调试/多 agent 流程留痕
+.debug-journal.md
+.omo/
+.tmp-*

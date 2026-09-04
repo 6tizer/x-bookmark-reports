@@ -16,6 +16,8 @@ import {
 import type { Bookmark, BookmarkStatus, BookmarkLifecycle } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BookmarkToolbar } from "./BookmarkToolbar";
+// 统一按产品时区（Asia/Singapore）展示日期
+import { formatDate } from "@/lib/format-date";
 
 interface BookmarkCardProps {
   bookmarks: Bookmark[];
@@ -123,7 +125,7 @@ export function BookmarkCard({
 
           {/* Date */}
           <p className="mt-2 text-[10px] text-muted-foreground">
-            {new Date(bookmark.bookmarkedAt).toLocaleDateString()}
+            {formatDate(bookmark.bookmarkedAt)}
           </p>
 
           {/* Floating toolbar */}

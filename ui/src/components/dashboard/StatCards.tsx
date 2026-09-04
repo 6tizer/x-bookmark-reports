@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import type { DashboardStats, RettiwtStatus } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
+// 统一按产品时区（Asia/Singapore）展示日期，不跟浏览器时区
+import { formatDate, formatDateTime } from "@/lib/format-date";
 
 function formatDistanceToNowSimple(dateStr: string): string {
   const date = new Date(dateStr);
@@ -26,7 +28,7 @@ function formatDistanceToNowSimple(dateStr: string): string {
   const diffHour = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHour / 24);
 
-  if (diffDay > 7) return date.toLocaleDateString();
+  if (diffDay > 7) return formatDate(date);
   if (diffDay > 0) return `${diffDay}d ago`;
   if (diffHour > 0) return `${diffHour}h ago`;
   if (diffMin > 0) return `${diffMin}m ago`;
@@ -155,7 +157,7 @@ export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
           value={lastSyncText}
           subtext={
             stats.lastSyncAt
-              ? new Date(stats.lastSyncAt).toLocaleString()
+              ? formatDateTime(stats.lastSyncAt)
               : undefined
           }
           trend="neutral"

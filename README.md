@@ -135,7 +135,15 @@ BOOKMARKS_PATH=../twitter_data/bookmarks.json
 XAI_MODEL=grok-4.3
 DEEPSEEK_MODEL=deepseek-chat
 NOTION_UPLOAD_LIVE=true          # 默认 false（dry-run）
+APP_TIMEZONE=Asia/Singapore      # 产品时区（默认新加坡）；面向用户的日期一律按此取日历日
 ```
+
+### 🕒 时区约定
+
+- **面向用户的日期统一按新加坡时间（`Asia/Singapore`，UTC+8）**：Notion「发布时间」、深度报告 `Bookmarked`/回复日期、成文 `generated_at`、Dashboard 所有日期时间展示、导出文件名、日志按日切分。
+- **机器时间戳保持 ISO 8601 带偏移**（`auto_run_state.json` 的 `last_run`、state 文件 `updated_at` 等），前端/脚本读取后再按产品时区格式化。
+- Python 侧统一入口 `lib/tz.py`（`local_date_str` / `to_local` / `now_local`），UI 侧 `ui/src/lib/format-date.ts`（`formatDate` / `formatDateTime` / `localDateStamp`）。**新增日期展示请走这两个模块，不要直接 `.date()` / `toLocaleString()`。**
+- 历史页回填：`bin/backfill_notion_pubdate.py`（默认 dry-run，`--live` 写入；只修「现值 == 来源 UTC 日」的页面，来源对不上的跳过）。
 
 ---
 

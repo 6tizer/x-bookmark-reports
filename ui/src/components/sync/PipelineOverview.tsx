@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import type { DashboardPipelineFour, PipelineStatus } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
+// 统一按产品时区（Asia/Singapore）展示日期
+import { formatDateTime } from "@/lib/format-date";
 
 type NodeKey = keyof DashboardPipelineFour;
 
@@ -151,7 +153,7 @@ export function PipelineOverview() {
 
               {data.lastRun && (
                 <p className="text-[10px] text-muted-foreground">
-                  {new Date(data.lastRun).toLocaleString()}
+                  {formatDateTime(data.lastRun)}
                 </p>
               )}
 

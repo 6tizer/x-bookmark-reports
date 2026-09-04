@@ -18,6 +18,8 @@ import {
   triggerPipelineRun,
 } from "@/lib/api";
 import { Skeleton } from "@/components/ui/Skeleton";
+// 统一按产品时区（Asia/Singapore）展示日期
+import { formatDate, formatDateTime } from "@/lib/format-date";
 import {
   ArrowLeft,
   Save,
@@ -228,7 +230,7 @@ export default function ArticleDetailPage() {
             {article.generatedAt && (
               <>
                 <span className="text-muted-foreground">·</span>
-                <span className="text-muted-foreground">Generated {new Date(article.generatedAt).toLocaleString()}</span>
+                <span className="text-muted-foreground">Generated {formatDateTime(article.generatedAt)}</span>
               </>
             )}
           </div>
@@ -387,7 +389,7 @@ export default function ArticleDetailPage() {
               {versions.map((v) => (
                 <div key={v.id} className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">
-                    {v.title} — {new Date(v.createdAt).toLocaleDateString()}
+                    {v.title} — {formatDate(v.createdAt)}
                   </span>
                   <span className="text-muted-foreground">{v.wordCount} words</span>
                 </div>

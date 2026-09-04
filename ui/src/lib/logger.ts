@@ -8,6 +8,8 @@ import path from "path";
 import type { LogComponent, LogLevel } from "@/types/api";
 import { createLog, listLogs } from "./db";
 import { getUiPackageRoot } from "@/lib/repo-root";
+// 日志文件按产品时区（Asia/Singapore）的日历日切分
+import { localDateStamp } from "@/lib/format-date";
 
 const LOG_DIR = path.join(getUiPackageRoot(), "data", "logs");
 
@@ -45,8 +47,8 @@ class Logger {
   private log(level: LogLevel, message: string, detail?: string): void {
     const timestamp = new Date().toISOString();
 
-    // Write to file
-    const date = timestamp.slice(0, 10);
+    // Write to file（按新加坡日历日切分文件，timestamp 本身仍是 UTC ISO）
+    const date = localDateStamp(timestamp);
     const logFile = path.join(LOG_DIR, `${date}.log`);
     const line = `[${timestamp}] [${this.component}] [${level.toUpperCase()}] ${message}${detail ? ` | ${detail}` : ""}\n`;
     try {

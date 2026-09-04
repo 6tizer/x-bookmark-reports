@@ -11,6 +11,8 @@ import { getArticles, triggerPipelineRun, triggerPipelineBatch } from "@/lib/api
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Newspaper, Clock, Search, RefreshCw, PenLine, Play, Layers } from "lucide-react";
 import type { Article, ArticleStatus, PaginatedResponse } from "@/types/api";
+// 统一按产品时区（Asia/Singapore）展示日期
+import { formatDate } from "@/lib/format-date";
 
 const PIPELINE_FILTER_STATUSES: ArticleStatus[] = [
   "draft",
@@ -312,7 +314,7 @@ export default function ArticlesPage() {
                     <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
                       <span className="flex items-center gap-0.5">
                         <Clock size={11} />
-                        {new Date(article.updatedAt).toLocaleDateString()}
+                        {formatDate(article.updatedAt)}
                       </span>
                       <span>{article.wordCount.toLocaleString()} words</span>
                       <span className="font-mono text-[10px] opacity-70 truncate max-w-[120px]">

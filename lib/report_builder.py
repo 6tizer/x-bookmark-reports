@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from lib.external_client import html_to_text
+from lib.tz import local_date_str, to_local
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,8 @@ class BookmarkReport:
         Returns:
             Formatted timestamp string.
         """
-        dt = self._parse_timestamp(timestamp)
+        # 面向用户的日期一律转产品时区（Asia/Singapore）再格式化，避免 UTC 截日错一天
+        dt = to_local(self._parse_timestamp(timestamp))
         return dt.strftime(self.options.date_format)
 
     def _calculate_stats(self) -> BookmarkStats:
@@ -321,8 +323,9 @@ class BookmarkReport:
             indent = "  " * depth
             prefix = f"{i}. " if depth == 0 else ""
 
-            # 提取时间的前10个字符（日期部分）
-            time_str = reply.get('time', '')[:10]
+            # 回复日期按产品时区取；解析不了再退回前 10 个字符
+            raw_time = reply.get('time', '')
+            time_str = local_date_str(raw_time) or raw_time[:10]
 
             lines.append(
                 f"{indent}{prefix}@{reply['author']} ({reply.get('name', '')}) "
@@ -1339,8 +1342,9 @@ class SingleBookmarkReport:
                 f"| 描述 | {_md_table_escape(meta.get('description', ''))} |",
                 f"| 语言 | {_md_table_escape(meta.get('language', ''))} |",
                 f"| Stars | {_md_table_escape(meta.get('stargazers_count', ''))} |",
-                f"| 创建 | {_md_table_escape(meta.get('created_at', ''))} |",
-                f"| 最后更新 | {_md_table_escape(meta.get('updated_at', ''))} |",
+                # GitHub API 返回 UTC ISO，转产品时区日期展示
+                f"| 创建 | {_md_table_escape(local_date_str(meta.get('created_at', '')) or meta.get('created_at', ''))} |",
+                f"| 最后更新 | {_md_table_escape(local_date_str(meta.get('updated_at', '')) or meta.get('updated_at', ''))} |",
                 f"| Topics | {_md_table_escape(', '.join(meta.get('topics') or []))} |",
                 f"| License | {_md_table_escape(meta.get('license', ''))} |",
                 "",

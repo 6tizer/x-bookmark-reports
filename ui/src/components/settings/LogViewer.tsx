@@ -14,6 +14,8 @@ import { Filter, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import type { LogEntry, LogLevel, LogComponent } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
+// 统一按产品时区（Asia/Singapore）展示日期
+import { formatDateTime } from "@/lib/format-date";
 
 interface LogViewerProps {
   logs: LogEntry[];
@@ -165,7 +167,7 @@ export function LogViewer({
               logs.map((log) => (
                 <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors">
                   <td className="px-3 py-2 whitespace-nowrap text-[11px] text-muted-foreground font-mono">
-                    {new Date(log.timestamp).toLocaleString()}
+                    {formatDateTime(log.timestamp)}
                   </td>
                   <td className="px-3 py-2">
                     <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium">

@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import type { BatchProgress, DashboardPipelineFour, PipelineStatus } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
+// 统一按产品时区（Asia/Singapore）展示日期
+import { formatDateTime, formatTime } from "@/lib/format-date";
 
 interface PipelineProps {
   pipeline: DashboardPipelineFour | null;
@@ -247,7 +249,7 @@ export function Pipeline({
                 {pipeline[selectedNode].lastRun && (
                   <p>
                     Last run:{" "}
-                    {new Date(pipeline[selectedNode].lastRun!).toLocaleString()}
+                    {formatDateTime(pipeline[selectedNode].lastRun!)}
                   </p>
                 )}
                 {pipeline[selectedNode].progress !== undefined && (
@@ -304,7 +306,7 @@ export function Pipeline({
               </span>{" "}
               · step {bp.currentStep ?? "—"}
               {bp.estimatedEnd && (
-                <> · est. end {new Date(bp.estimatedEnd).toLocaleTimeString()}</>
+                <> · est. end {formatTime(bp.estimatedEnd)}</>
               )}
             </p>
           )}

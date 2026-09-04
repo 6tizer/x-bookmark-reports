@@ -29,6 +29,8 @@ import type {
 } from "@/types/api";
 import { getArticlesDir } from "@/lib/fs-data";
 import { getRepoRoot, getUiPackageRoot } from "@/lib/repo-root";
+// 日志文件按产品时区（Asia/Singapore）的日历日切分
+import { localDateStamp } from "@/lib/format-date";
 
 // ─────────────────────────────────────────────
 // Paths
@@ -883,7 +885,8 @@ function writeLogToFile(
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
   }
-  const date = (timestamp ?? nowIso()).slice(0, 10);
+  // 按产品时区（Asia/Singapore）的日历日切分日志文件，而非 UTC 日
+  const date = localDateStamp(timestamp ?? nowIso());
   const logFile = path.join(logDir, `${date}.log`);
   const line = `[${timestamp ?? nowIso()}] [${component}] [${level}] ${message}${detail ? ` | ${detail}` : ""}\n`;
   fs.appendFileSync(logFile, line);

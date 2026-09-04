@@ -5,7 +5,6 @@ from __future__ import annotations
 import json as _json
 import logging
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -15,6 +14,7 @@ from lib.config import (
     DEEPSEEK_BASE_URL,
     DEEPSEEK_MODEL,
 )
+from lib.tz import now_local
 
 logger = logging.getLogger(__name__)
 
@@ -220,8 +220,9 @@ class Rewriter:
         icon = _pick_icon(gen_title, article_clean)
         tags = _extract_tags(gen_title, article_clean)
 
-        # Build frontmatter
-        now = datetime.now(timezone.utc).isoformat()
+        # Build frontmatter —— generated_at 带 +08:00 偏移（产品时区），仍是合法 ISO，
+        # 下游 upload_to_notion 用 fromisoformat 解析后再转时区，前后一致
+        now = now_local().isoformat()
         source_url = meta.get("url") or ""
         author = meta.get("author") or ""
 
