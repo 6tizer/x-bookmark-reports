@@ -7,6 +7,7 @@
 #   bash auto_run.sh --force  # 跳过代理检测，直接运行
 #
 # 被 launchd 定时调用。运行状态写入 output/auto_run_state.json，日志写入 logs/bookmark-auto.log。
+# 单实例锁（B-AUTO-RUN-NO-LOCK）：output/auto_run.lock；第二实例立即 SKIP 退出，不改 auto_run_state.json。
 #
 # 新管线流程（5 步）:
 #   Step 0: 代理检测
@@ -26,6 +27,15 @@ LOG_FILE="$SCRIPT_DIR/logs/bookmark-auto.log"
 SYNC_LOG="$PROJECT_ROOT/twitter_data/sync_log.txt"
 PROXY_URL="http://127.0.0.1:7897"
 PYTHON3="/usr/bin/python3"
+
+# 让 Node 原生 fetch（rettiwt 的 x-client-transaction-id）走同一代理；否则 launchd
+# 环境无 HTTPS_PROXY 时同步会静默返回 {}。详见 sync_bookmarks.sh 注释。
+export HTTP_PROXY="$PROXY_URL"
+export HTTPS_PROXY="$PROXY_URL"
+export ALL_PROXY="$PROXY_URL"
+export NODE_USE_ENV_PROXY=1
+export NO_PROXY="${NO_PROXY:-127.0.0.1,localhost,::1}"
+export PATH="${HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:${PATH:-/usr/bin:/bin}"
 # article_pipeline.py 需要 openai 包，用 .venv 的 python
 VENV_PYTHON3="$SCRIPT_DIR/.venv/bin/python3"
 
@@ -119,19 +129,78 @@ PYEOF
     fi
 }
 
+# ========== 单实例锁（B-AUTO-RUN-NO-LOCK）==========
+# macOS 无 flock(1)，用 mkdir 原子建目录。锁必须在 write_state running 之前拿，
+# 否则第二实例会把「running/init」盖掉正在跑的那份（09-01 18:00 事故）。
+LOCK_DIR="$SCRIPT_DIR/output/auto_run.lock"
+LOCK_HELD=0
+
+release_lock() {
+    # 只删自己拿到的锁，避免 SKIP 实例清掉正在跑的持有者
+    if [ "$LOCK_HELD" = 1 ]; then
+        rm -rf "$LOCK_DIR"
+        LOCK_HELD=0
+    fi
+}
+
+_lock_holder_alive() {
+    # 持有者 PID 仍在，且命令行里能看到 auto_run.sh（避免 PID 回收误判）
+    local pid="$1"
+    local cmd
+    [ -n "$pid" ] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    case "$cmd" in
+        *auto_run.sh*) return 0 ;;
+    esac
+    return 1
+}
+
+acquire_lock() {
+    mkdir -p "$(dirname "$LOCK_DIR")"
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+        echo $$ > "$LOCK_DIR/pid"
+        LOCK_HELD=1
+        return 0
+    fi
+    local old_pid
+    old_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+    if _lock_holder_alive "$old_pid"; then
+        return 1
+    fi
+    # 过期锁（进程已死或 PID 已回收给无关进程）：清掉再抢
+    rm -rf "$LOCK_DIR"
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+        echo $$ > "$LOCK_DIR/pid"
+        LOCK_HELD=1
+        return 0
+    fi
+    return 1
+}
+
 # ========== 主流程 ==========
 
 # 确保日志目录存在
 mkdir -p "$(dirname "$LOG_FILE")"
+# 记录开始时间用于历史 duration（PR-3 Commit 5）；SKIP 路径也要用
+START_TS=$(date +%s)
 
-# 日志轮转（超过 5MB 清空）
+trap release_lock EXIT
+
+if ! acquire_lock; then
+    # 不调用 write_state：避免把正在跑的那份 running 状态盖成 skipped
+    SKIP_PID="$(cat "$LOCK_DIR/pid" 2>/dev/null || echo unknown)"
+    log "SKIP: 另一份 auto_run.sh 正在运行 (pid=$SKIP_PID)，本实例退出以免抢 state"
+    append_history "skipped" "lock" 0 0 0 0 "another auto_run.sh running (pid=$SKIP_PID)"
+    exit 0
+fi
+
+# 日志轮转（超过 5MB 清空）——拿到锁之后才做，避免清空正在写的日志
 if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE")" -gt $((5 * 1024 * 1024)) ]; then
     > "$LOG_FILE"
 fi
 
 log "===== 书签自动化流水线启动 ====="
-# 记录开始时间用于历史 duration（PR-3 Commit 5）
-START_TS=$(date +%s)
 write_state "running" "init" 0 0 0 0 ""
 
 # ========== Step 0: 代理检测 ==========
