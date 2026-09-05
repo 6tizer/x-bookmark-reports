@@ -240,6 +240,32 @@ try:
 except ValueError:
     FIRECRAWL_MAX_CALLS_PER_RUN = 50
 
+# X 官方 bookmarks 对账（探测 rettiwt 漏抓；默认关闭，避免官方 API 按条计费）
+# 成本口径：Owned Reads $0.001/条（24h UTC 去重），非 Owned Reads $0.005/条
+# 禁止加 expansions（User/Media 会当额外资源计费）
+OFFICIAL_RECONCILE_ENABLED = (
+    _optional_env("OFFICIAL_RECONCILE_ENABLED", "0").strip() == "1"
+)
+try:
+    OFFICIAL_RECONCILE_MAX_RESULTS = int(
+        _optional_env("OFFICIAL_RECONCILE_MAX_RESULTS", "50")
+    )
+except ValueError:
+    OFFICIAL_RECONCILE_MAX_RESULTS = 50
+try:
+    OFFICIAL_RECONCILE_MAX_PAGES = int(
+        _optional_env("OFFICIAL_RECONCILE_MAX_PAGES", "1")
+    )
+except ValueError:
+    OFFICIAL_RECONCILE_MAX_PAGES = 1
+OFFICIAL_RECONCILE_USER_ID = _optional_env(
+    "OFFICIAL_RECONCILE_USER_ID", "1815247565119778816"
+)
+OFFICIAL_RECONCILE_XURL_APP = _optional_env("OFFICIAL_RECONCILE_XURL_APP", "hl-agent")
+OFFICIAL_RECONCILE_XURL_USER = _optional_env(
+    "OFFICIAL_RECONCILE_XURL_USER", "HowardLouisHL"
+)
+
 # Article pipeline output directories
 ARTICLE_FINAL_DIR = PROJECT_ROOT / _optional_env("ARTICLE_FINAL_DIR", "output/article-final")
 ARTICLE_RESEARCH_DIR = PROJECT_ROOT / "output/article-research"

@@ -40,7 +40,8 @@ x-bookmark-reports/
 ├── bin/
 │   ├── coordinator.py          # 深度报告生成主入口
 │   ├── article_pipeline.py     # 成品文章管线 CLI（研究 + 成文）
-│   └── upload_to_notion.py     # Notion 上传脚本（草稿 + 成品）
+│   ├── upload_to_notion.py     # Notion 上传脚本（草稿 + 成品）
+│   └── reconcile_official_bookmarks.py  # 官方 API 对账 + rettiwt 回填（默认关）
 ├── lib/
 │   ├── config.py               # 配置（从 .env 读取）
 │   ├── coordinator.py          # 书签处理核心逻辑
@@ -94,6 +95,9 @@ Twitter 书签
     │
     ▼  sync_bookmarks.sh
 bookmarks.json（增量同步）
+    │
+    ▼  bin/reconcile_official_bookmarks.py   ← 可选，默认关
+官方 API 探测漏抓 + rettiwt 按 id 回填
     │
     ▼  coordinator.py --deep-batch
 深度报告草稿（bookmark-deep-*.md）
@@ -194,6 +198,29 @@ python3 bin/coordinator.py --id <tweet_id>
 .venv/bin/python3 bin/upload_to_notion.py --mode finished --live \
   --file output/article-final/<tweet_id>.md
 ```
+
+### 官方书签对账（reconcile_official_bookmarks.py）
+
+rettiwt 增量同步偶发漏抓时，可用 X 官方 `GET /2/users/:id/bookmarks` 拉 id 做差集，再按 id 调 `rettiwt tweet details` 回填完整对象（官方 schema 与 `bookmarks.json` 不兼容，禁止直接写入）。
+
+**成本口径**（官方按返回条数计费，禁止加 `expansions`）：
+
+| 类型 | 单价 | 说明 |
+|---|---|---|
+| Owned Reads | $0.001 / 条 | 24h UTC 窗口内同一资源去重计费 |
+| 非 Owned Reads | $0.005 / 条 | OAuth 用户 ≠ App owner 时按标准 Posts: Read 计费（资格待核实，见 BUGS.md B-OWNED-READS-OWNER-UNVERIFIED） |
+
+默认关闭。启用：在 `.env` 设 `OFFICIAL_RECONCILE_ENABLED=1`（`auto_run.sh` 会在 Step 1 与 Step 2 之间调用）。也可手动：
+
+```bash
+# dry-run：只算差集，不改 bookmarks.json
+python3 bin/reconcile_official_bookmarks.py --dry-run
+
+# 回填（默认最多 1 页 × 50 条；fail-soft 退出码 0）
+python3 bin/reconcile_official_bookmarks.py --max-pages 1
+```
+
+相关配置：`OFFICIAL_RECONCILE_MAX_RESULTS` / `MAX_PAGES` / `USER_ID` / `XURL_APP` / `XURL_USER`。state 写在 `output/.official-reconcile-state.json`。遇 401/402/429 模块级熔断，本进程不再调官方 API。
 
 ### 手动触发全流程
 

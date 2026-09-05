@@ -9,9 +9,10 @@
 # 被 launchd 定时调用。运行状态写入 output/auto_run_state.json，日志写入 logs/bookmark-auto.log。
 # 单实例锁（B-AUTO-RUN-NO-LOCK）：output/auto_run.lock；第二实例立即 SKIP 退出，不改 auto_run_state.json。
 #
-# 新管线流程（5 步）:
+# 新管线流程（5 步 + 可选对账）:
 #   Step 0: 代理检测
 #   Step 1: sync_bookmarks.sh      — 从 Twitter 拉取新书签
+#   Step 1.5: reconcile_official_bookmarks.py — 官方 API 探测漏抓（默认关）
 #   Step 2: coordinator.py         — 生成深度草稿（deep reports）
 #   Step 3: article_pipeline.py    — 研究(SearXNG+Firecrawl+Exa) + 撰写成品文章
 #   Step 4: upload_to_notion.py    — 上传成品文章到 Notion（finished 模式）
@@ -259,6 +260,27 @@ if [ -f "$SYNC_LOG" ]; then
     fi
 fi
 log "Step 1: 同步完成，本次新增 $SYNC_NEW 条书签"
+
+# ========== Step 1.5: 官方 API 对账（可选，默认关，避免按条计费）==========
+# auto_run.sh 本身不 source .env（Python 侧靠 dotenv）；此处只抽开关，沿用 grep 以免污染代理变量。
+_OFFICIAL_RECONCILE_ENABLED="${OFFICIAL_RECONCILE_ENABLED:-}"
+if [ -z "$_OFFICIAL_RECONCILE_ENABLED" ] && [ -f "$SCRIPT_DIR/.env" ]; then
+    _OFFICIAL_RECONCILE_ENABLED="$(
+        grep -E '^[[:space:]]*OFFICIAL_RECONCILE_ENABLED=' "$SCRIPT_DIR/.env" 2>/dev/null \
+        | tail -1 | cut -d= -f2- | tr -d '[:space:]' | tr -d '"' | tr -d "'" || true
+    )"
+fi
+if [ "$_OFFICIAL_RECONCILE_ENABLED" = "1" ]; then
+    log "Step 1.5: 官方书签对账（OFFICIAL_RECONCILE_ENABLED=1）..."
+    if ! "$PYTHON3" "$SCRIPT_DIR/bin/reconcile_official_bookmarks.py" >> "$LOG_FILE" 2>&1; then
+        # 脚本本身 fail-soft 退出 0；非零只可能是语法/导入崩溃，仍不阻断后续步骤
+        log "WARN: 官方书签对账异常退出（fail-soft，不阻断后续步骤）"
+    else
+        log "Step 1.5: 官方书签对账完成"
+    fi
+else
+    log "Step 1.5: 跳过官方书签对账（OFFICIAL_RECONCILE_ENABLED!=1）"
+fi
 
 # ========== Step 2: 批量生成深度报告 ==========
 log "Step 2: 批量生成深度报告..."
