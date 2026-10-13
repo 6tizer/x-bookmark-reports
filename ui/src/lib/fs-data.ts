@@ -37,10 +37,14 @@ const BOOKMARKS_JSON = path.join(REPO_ROOT, "..", "twitter_data", "bookmarks.jso
 // deep draft 中需要被 extractTitle 跳过的 section header（H2）
 const DEEP_DRAFT_SECTION_HEADERS = new Set([
   "主推文",
+  "引用推文",
   "媒体",
   "回复",
   "回复线程",
   "外部链接",
+  "外部链接详情",
+  "外部链接汇总",
+  "质量检查",
   "深度报告",
   "成品文章",
 ]);
@@ -112,9 +116,53 @@ export function readPipelineArticles(): Record<string, PipelineArticleEntry> {
 // ─────────────────────────────────────────────
 
 /**
- * Draft bookmark title: **bold** line → `#` H1 → `##` H2 (跳过 section headers) → first non-empty (80 chars) → basename.
+ * 从深度草稿中切出 `## 主推文` 段落（到下一个已知顶级段落或 `### 主推文媒体` 之前），
+ * 防止在全文搜索 **粗体** 时误抓 GitHub README 或外部链接详情里的粗体词（修复 B-METADATA-TITLE-POLLUTION）。
+ */
+function sliceMainTweetSection(body: string): string | null {
+  const mainMatch = body.match(/^##\s+主推文\s*$/m);
+  if (!mainMatch || mainMatch.index === undefined) return null;
+  const start = mainMatch.index + mainMatch[0].length;
+  const rest = body.slice(start);
+  const lines = rest.split("\n");
+  const out: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^###\s+主推文媒体/.test(trimmed)) break;
+    if (/^##\s+/.test(trimmed)) {
+      const h2 = trimmed.replace(/^##\s+/, "").trim();
+      if (DEEP_DRAFT_SECTION_HEADERS.has(h2)) break;
+    }
+    out.push(line);
+  }
+  const sliced = out.join("\n").trim();
+  return sliced.length > 0 ? sliced : null;
+}
+
+/**
+ * Draft bookmark title: 优先在 `## 主推文` 段落内提取 **bold** 或首行；
+ * 若无主推文段则回退全文 **bold** line → `#` H1 → `##` H2 (跳过 section headers) → first non-empty (80 chars) → basename.
  */
 export function extractTitle(body: string, filename: string): string {
+  const mainSection = sliceMainTweetSection(body);
+  if (mainSection) {
+    const mBold = mainSection.match(/\*\*(.+?)\*\*/);
+    if (mBold && mBold[1]) {
+      const candidate = mBold[1].replace(/\*/g, "").trim();
+      if (candidate && !DEEP_DRAFT_SECTION_HEADERS.has(candidate)) {
+        return candidate;
+      }
+    }
+    for (const line of mainSection.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (/^[#>!\-|[]/.test(trimmed)) continue;
+      if (/^(原文推文|作者)[：:]/.test(trimmed)) continue;
+      if (DEEP_DRAFT_SECTION_HEADERS.has(trimmed.replace(/^##?\s+/, ""))) continue;
+      return trimmed.slice(0, 80);
+    }
+  }
+
   const lines = body.split("\n");
   // 1) **bold** line (保持现状)
   for (const line of lines) {
@@ -128,12 +176,14 @@ export function extractTitle(body: string, filename: string): string {
       return trimmed.replace(/\*\*/g, "").trim();
     }
   }
-  // 2) # H1 (保持现状)
+  // 2) # H1 (保持现状，但跳过 "# 书签深度报告")
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     if (/^#\s+/.test(trimmed) && !/^##/.test(trimmed)) {
-      return trimmed.replace(/^#\s+/, "").trim();
+      const h1 = trimmed.replace(/^#\s+/, "").trim();
+      if (h1 === "书签深度报告" || DEEP_DRAFT_SECTION_HEADERS.has(h1)) continue;
+      return h1;
     }
   }
   // 3) ## H2 — 跳过 section headers (新增过滤)
@@ -150,7 +200,8 @@ export function extractTitle(body: string, filename: string): string {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    if (DEEP_DRAFT_SECTION_HEADERS.has(trimmed.replace(/^##?\s+/, ""))) continue;
+    const strippedHeader = trimmed.replace(/^##?\s+/, "").trim();
+    if (strippedHeader === "书签深度报告" || DEEP_DRAFT_SECTION_HEADERS.has(strippedHeader)) continue;
     return trimmed.slice(0, 80);
   }
   return filename.replace(/\.md$/i, "");

@@ -240,6 +240,50 @@ try:
 except ValueError:
     FIRECRAWL_MAX_CALLS_PER_RUN = 50
 
+
+def _resolve_cf_browser_token() -> str:
+    """读取 Cloudflare Browser Run API Token：优先环境变量，回退本地 0600 缓存文件（避免直接改动 .env）。"""
+    env_tok = _optional_env("CF_BROWSER_API_TOKEN", "").strip()
+    if env_tok:
+        return env_tok
+    token_file = CACHE_DIR / ".cf_browser_token"
+    try:
+        if token_file.exists():
+            return token_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        pass
+    return ""
+
+
+# Cloudflare Browser Run — 无头浏览器渲染提取 Markdown（Step 2 外链兜底）
+CF_ACCOUNT_ID = _optional_env("CF_ACCOUNT_ID", "cf735771bb6be4e5d1f177841c6835ce")
+CF_BROWSER_API_TOKEN = _resolve_cf_browser_token()
+CF_BROWSER_ENABLED = _optional_env("CF_BROWSER_ENABLED", "1").strip().lower() not in (
+    "0",
+    "false",
+    "no",
+)
+CF_BROWSER_API_PATH = _optional_env("CF_BROWSER_API_PATH", "browser-rendering")
+try:
+    CF_BROWSER_MAX_CALLS_PER_RUN = int(
+        _optional_env("CF_BROWSER_MAX_CALLS_PER_RUN", "20")
+    )
+except ValueError:
+    CF_BROWSER_MAX_CALLS_PER_RUN = 20
+try:
+    # 默认每日安全预算 480,000ms（8 分钟），为免费层 10 分钟/天留出 2 分钟余量
+    CF_BROWSER_DAILY_MS_BUDGET = int(
+        _optional_env("CF_BROWSER_DAILY_MS_BUDGET", "480000")
+    )
+except ValueError:
+    CF_BROWSER_DAILY_MS_BUDGET = 480000
+
+# 成品文章最短正文字符数门槛（rewrite 写盘前校验与 upload_to_notion 共用）
+try:
+    ARTICLE_MIN_BODY_CHARS = int(_optional_env("ARTICLE_MIN_BODY_CHARS", "300"))
+except ValueError:
+    ARTICLE_MIN_BODY_CHARS = 300
+
 # X 官方 bookmarks 对账（探测 rettiwt 漏抓；默认关闭，避免官方 API 按条计费）
 # 成本口径：Owned Reads $0.001/条（24h UTC 去重），非 Owned Reads $0.005/条
 # 禁止加 expansions（User/Media 会当额外资源计费）

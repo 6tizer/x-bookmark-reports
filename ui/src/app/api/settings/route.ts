@@ -11,7 +11,13 @@
 
 import { NextResponse } from "next/server";
 import path from "path";
-import { loadEnv, updateEnv, maskApiKey } from "@/lib/config";
+import {
+  loadEnv,
+  updateEnv,
+  maskApiKey,
+  getCfBrowserTokenFallback,
+  getCfBrowserDailyUsage,
+} from "@/lib/config";
 import { getArticlesDir } from "@/lib/fs-data";
 import { getRepoRoot } from "@/lib/repo-root";
 import { getLogger } from "@/lib/logger";
@@ -40,6 +46,9 @@ function buildSettingsFromEnv(): Settings {
   const bookmarksPathAbs = toAbsolutePath(env.BOOKMARKS_PATH, repoRoot, "");
   const articlesDirAbs = toAbsolutePath(env.ARTICLES_DIR, repoRoot, getArticlesDir());
   const dataPathAbs = toAbsolutePath(env.DATA_PATH, repoRoot, path.join(repoRoot, "data"));
+  const cfTokenRaw = env.CF_BROWSER_API_TOKEN || getCfBrowserTokenFallback();
+  const cfEnabledRaw = (env.CF_BROWSER_ENABLED ?? "1").trim().toLowerCase();
+  const cfUsage = getCfBrowserDailyUsage();
   return {
     twitterApiKey: maskApiKey(env.TWITTER_API_IO_KEY || env.API_KEY),
     notionToken: maskApiKey(env.NOTION_TOKEN),
@@ -55,6 +64,11 @@ function buildSettingsFromEnv(): Settings {
     searxngBaseUrl: env.SEARXNG_BASE_URL || "",
     firecrawlApiKey: maskApiKey(env.FIRECRAWL_API_KEY),
     firecrawlBaseUrl: env.FIRECRAWL_BASE_URL || "https://api.firecrawl.dev/v2",
+    cfAccountId: env.CF_ACCOUNT_ID || "cf735771bb6be4e5d1f177841c6835ce",
+    cfBrowserApiKey: maskApiKey(cfTokenRaw),
+    cfBrowserEnabled: !["0", "false", "no"].includes(cfEnabledRaw),
+    cfBrowserDailyUsedMs: cfUsage.usedMs,
+    cfBrowserDailyBudgetMs: cfUsage.budgetMs,
     bookmarksPath: bookmarksPathAbs,
     articlesDir: articlesDirAbs,
     dataPath: dataPathAbs,
@@ -132,6 +146,12 @@ export async function PUT(
     }
     if (body.firecrawlBaseUrl !== undefined) {
       envUpdates.FIRECRAWL_BASE_URL = body.firecrawlBaseUrl;
+    }
+    if (body.cfAccountId !== undefined) {
+      envUpdates.CF_ACCOUNT_ID = body.cfAccountId.trim();
+    }
+    if (body.cfBrowserEnabled !== undefined) {
+      envUpdates.CF_BROWSER_ENABLED = body.cfBrowserEnabled ? "1" : "0";
     }
 
     if (Object.keys(envUpdates).length > 0) {

@@ -481,6 +481,12 @@ export interface Settings {
   searxngBaseUrl: string;
   firecrawlApiKey: string;
   firecrawlBaseUrl: string;
+  // Cloudflare Browser Run (Markdown 渲染兜底)
+  cfAccountId: string;
+  cfBrowserApiKey: string;
+  cfBrowserEnabled: boolean;
+  cfBrowserDailyUsedMs?: number;
+  cfBrowserDailyBudgetMs?: number;
   // Paths
   bookmarksPath: string;
   articlesDir: string;
@@ -512,9 +518,18 @@ export interface UpdateSettingsRequest {
   exaBaseUrl?: string;
   searxngBaseUrl?: string;
   firecrawlBaseUrl?: string;
+  cfAccountId?: string;
+  cfBrowserEnabled?: boolean;
 }
 
-export type ApiKeyName = "TWITTER_API_IO_KEY" | "NOTION_TOKEN" | "DEEPSEEK_API_KEY" | "XAI_API_KEY" | "EXA_API_KEY" | "FIRECRAWL_API_KEY";
+export type ApiKeyName =
+  | "TWITTER_API_IO_KEY"
+  | "NOTION_TOKEN"
+  | "DEEPSEEK_API_KEY"
+  | "XAI_API_KEY"
+  | "EXA_API_KEY"
+  | "FIRECRAWL_API_KEY"
+  | "CF_BROWSER_API_TOKEN";
 
 export interface UpdateApiKeyRequest {
   keyName: ApiKeyName;

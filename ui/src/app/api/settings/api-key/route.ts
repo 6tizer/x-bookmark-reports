@@ -17,13 +17,42 @@ const API_KEY_ENV_MAP: Record<ApiKeyName, string> = {
   XAI_API_KEY: "XAI_API_KEY",
   EXA_API_KEY: "EXA_API_KEY",
   FIRECRAWL_API_KEY: "FIRECRAWL_API_KEY",
+  CF_BROWSER_API_TOKEN: "CF_BROWSER_API_TOKEN",
 };
+
+/**
+ * 校验请求是否来自本机回环地址（防止 Dashboard 监听 0.0.0.0 时局域网/tailnet 越权查看明文 API Key）。
+ */
+function isLoopbackRequest(request: Request): boolean {
+  const url = new URL(request.url);
+  const hostHeader = (request.headers.get("host") || url.hostname || "").toLowerCase();
+  const hostname = hostHeader.split(":")[0];
+  const isLocalHost =
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
+  const xff = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const xffOk = !xff || xff === "127.0.0.1" || xff === "::1" || xff === "::ffff:127.0.0.1";
+  return isLocalHost && xffOk;
+}
 
 // ── GET: Reveal a single key's plaintext value ─────────────────────
 export async function GET(
   request: Request
 ): Promise<NextResponse<ApiResponse<{ keyName: string; value: string }>>> {
   try {
+    if (!isLoopbackRequest(request)) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: "FORBIDDEN_NON_LOOPBACK",
+            message: "Plaintext API key reveal is only allowed from localhost (127.0.0.1)",
+          },
+        },
+        { status: 403 }
+      );
+    }
+
     const url = new URL(request.url);
     const keyName = url.searchParams.get("keyName") as ApiKeyName | null;
 

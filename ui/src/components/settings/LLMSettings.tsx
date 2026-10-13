@@ -129,6 +129,8 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
   const [exaBaseUrl, setExaBaseUrl] = useState("https://api.exa.ai");
   const [searxngBaseUrl, setSearxngBaseUrl] = useState("");
   const [firecrawlBaseUrl, setFirecrawlBaseUrl] = useState("https://api.firecrawl.dev/v2");
+  const [cfAccountId, setCfAccountId] = useState("cf735771bb6be4e5d1f177841c6835ce");
+  const [cfBrowserEnabled, setCfBrowserEnabled] = useState(true);
 
   useEffect(() => {
     if (settings) {
@@ -139,6 +141,8 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
       setExaBaseUrl(settings.exaBaseUrl || "https://api.exa.ai");
       setSearxngBaseUrl(settings.searxngBaseUrl || "");
       setFirecrawlBaseUrl(settings.firecrawlBaseUrl || "https://api.firecrawl.dev/v2");
+      setCfAccountId(settings.cfAccountId || "cf735771bb6be4e5d1f177841c6835ce");
+      setCfBrowserEnabled(settings.cfBrowserEnabled ?? true);
     }
   }, [settings]);
 
@@ -151,6 +155,8 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
       exaBaseUrl,
       searxngBaseUrl,
       firecrawlBaseUrl,
+      cfAccountId,
+      cfBrowserEnabled,
     });
   };
 
@@ -302,6 +308,57 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
             onChange={(e) => setExaBaseUrl(e.target.value)}
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
+        </div>
+      </div>
+
+      {/* Cloudflare Browser Run (Markdown 渲染兜底) */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Cloudflare Browser Run (Markdown 渲染兜底)
+            </h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              当 Step 2 书签外链为纯前端 SPA 或静态抓取不足 300 字时，调用 Cloudflare 无头浏览器提取干净 Markdown
+            </p>
+          </div>
+          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={cfBrowserEnabled}
+              onChange={(e) => setCfBrowserEnabled(e.target.checked)}
+              className="rounded border-border"
+            />
+            <span>{cfBrowserEnabled ? "已启用" : "已禁用"}</span>
+          </label>
+        </div>
+
+        <ApiKeyField
+          label="Browser Run API Token（权限：Browser Run Write / Read）"
+          maskedValue={settings?.cfBrowserApiKey || ""}
+          keyName="CF_BROWSER_API_TOKEN"
+          onSave={handleApiKeySave}
+        />
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">
+            Cloudflare Account ID
+          </label>
+          <input
+            type="text"
+            value={cfAccountId}
+            onChange={(e) => setCfAccountId(e.target.value)}
+            placeholder="cf735771bb6be4e5d1f177841c6835ce"
+            className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm font-mono outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+
+        <div className="text-[11px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/60">
+          <span>今日浏览器累计用时（UTC 每日重置）</span>
+          <span className="font-mono">
+            {((settings?.cfBrowserDailyUsedMs ?? 0) / 1000).toFixed(1)}s /{" "}
+            {((settings?.cfBrowserDailyBudgetMs ?? 480000) / 1000).toFixed(0)}s 安全预算
+          </span>
         </div>
       </div>
 

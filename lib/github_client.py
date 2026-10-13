@@ -27,7 +27,8 @@ from lib.config import (
 
 logger = logging.getLogger(__name__)
 
-OWNER_REPO_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+# 允许 GitHub 仓库名包含点号（如 llama.cpp、grok-bot-0.18），同时在提取时拦截图 . / .. 与 .git 后缀（B-GITHUB-REPO-DOT）
+OWNER_REPO_PATTERN = re.compile(r'^[a-zA-Z0-9_.-]+$')
 
 
 class GitHubNotFound(Exception):
@@ -157,7 +158,9 @@ class GitHubClient:
                 if len(path_parts) >= 2:
                     owner = path_parts[0]
                     repo = path_parts[1].split("?")[0].split("#")[0]
-                    if owner and repo:
+                    if repo.endswith(".git") and len(repo) > 4:
+                        repo = repo[:-4]
+                    if owner and repo and owner not in (".", "..") and repo not in (".", ".."):
                         return owner, repo
             raise ValueError(f"Cannot extract owner/repo from URL: {url_or_owner_repo}")
 
@@ -165,7 +168,11 @@ class GitHubClient:
         if "/" in url_or_owner_repo:
             parts = url_or_owner_repo.split("/")
             if len(parts) == 2 and parts[0] and parts[1]:
-                return parts[0], parts[1]
+                owner, repo = parts[0], parts[1]
+                if repo.endswith(".git") and len(repo) > 4:
+                    repo = repo[:-4]
+                if owner not in (".", "..") and repo not in (".", ".."):
+                    return owner, repo
             raise ValueError(f"Cannot extract owner/repo from: {url_or_owner_repo}")
 
         raise ValueError(f"Cannot extract owner/repo from: {url_or_owner_repo}")

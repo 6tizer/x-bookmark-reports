@@ -169,10 +169,15 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 - **注意**：旧 `exa-research` chat completions 路径已降级；若仍启用需取最后一个非空 choice，并有重试（最多 2 次，间隔 3s）
 
 ### 7. DeepSeek（文章成文）
-- **Endpoint**：`https://api.deepseek.com/v1`（OpenAI 兼容）
-- **模型**：`deepseek-chat`
+- **Endpoint**：`https://api.deepseek.com`（OpenAI 兼容）
+- **模型**：`deepseek-v4-flash`
 
-### 8. Notion API（上传）
+### 8. Cloudflare Browser Run（动态外链渲染提取 Markdown）
+- **Endpoint**：`POST https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/browser-rendering/markdown`
+- **认证**：`Authorization: Bearer {CF_BROWSER_API_TOKEN}`（支持回退读取 `cache/.cf_browser_token`）
+- **触发策略**：仅在 Step 2（主推文/引用推文外链）静态 `urllib` 抓回正文 `< 300 字` 或命中 SPA 空壳/403/5xx 时调用；每日 UTC 账本 `cache/cf_browser_usage.json` 安全上限 480s
+
+### 9. Notion API（上传）
 - **Endpoint**：`https://api.notion.com/v1/`
 - **认证**：`Authorization: Bearer {NOTION_TOKEN}`
 - **去重**：上传前查 `文章链接`（source_url）属性，已存在则跳过
@@ -184,9 +189,9 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 | 项目 | 当前状态 |
 |---|---|
 | Python（系统） | 3.9.6（`/usr/bin/python3`，用于 coordinator / upload） |
-| Python（venv） | `/Users/.../x-bookmark-reports/.venv/bin/python3`（含 openai，用于 article_pipeline） |
+| Python（venv） | `/Users/.../x-bookmark-reports/.venv/bin/python3`（3.12，含 openai，用于 article_pipeline） |
 | Node.js | v24.14.0 |
-| rettiwt-api | v7.0.1（全局，`~/.local/bin/rettiwt`，书签同步用） |
+| rettiwt-api | v7.1.4（全局，`~/.local/bin/rettiwt`，书签同步用） |
 | gh CLI | v2.89.0（已认证 account: 6tizer） |
 | 代理 | `http://127.0.0.1:7897`（在 `.env` 中配置） |
 

@@ -11,10 +11,11 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from lib.article_client import ArticleClient, ArticleNotFound
 from lib.config import PROJECT_ROOT, REPORT
-from lib.external_client import ExternalClient
+from lib.external_client import ExternalClient, sanitize_url
 from lib.github_client import GitHubClient
 from lib.media_utils import extract_media_details
 from lib.quoted_client import QuotedClient
@@ -46,6 +47,28 @@ DEFAULT_BOOKMARKS_PATH = _resolve_default_bookmarks_path()
 OUTPUT_DIR = PROJECT_ROOT / "output"
 
 
+def _is_twitter_host(url: str) -> bool:
+    """精确判断 URL 的 hostname 是否属于 Twitter/X（避免 'x.com/' 子串误匹配 dropbox.com / nginx.com）。"""
+    if not url:
+        return False
+    try:
+        host = (urlparse(url).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    return host in ("x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com", "t.co")
+
+
+def _is_github_host(url: str) -> bool:
+    """精确判断 URL 的 hostname 是否属于 github.com。"""
+    if not url:
+        return False
+    try:
+        host = (urlparse(url).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    return host in ("github.com", "www.github.com")
+
+
 def classify_url(url: str) -> str:
     """
     Classify a URL into 'article', 'quoted', 'github', or 'external'.
@@ -70,22 +93,39 @@ def classify_url(url: str) -> str:
 
     url_lower = url.lower()
 
-    # GitHub
-    if "github.com/" in url_lower:
+    # GitHub（精确匹配域名）
+    if _is_github_host(url_lower):
         return "github"
 
-    # Twitter / X URLs
-    if "x.com/" in url_lower or "twitter.com/" in url_lower:
+    # Twitter / X URLs（精确匹配域名，避免误伤 dropbox.com / box.com）
+    if _is_twitter_host(url_lower):
         # Article URL pattern - handle both /i/article/ and /i/articles/
         if "/i/article" in url_lower:
             return "article"
         # Status URL pattern - needs API check to differentiate
         if "/status/" in url_lower or "/i/status/" in url_lower:
             return "needs_api_check"
-        return "external"  # other x/twitter URLs
+        return "external"  # other x/twitter URLs (or unresolved t.co)
 
     # Everything else is external
     return "external"
+
+
+def _is_self_or_media_twitter_url(url: str, bookmark_id: Optional[str]) -> bool:
+    """判断解析后的 URL 是否为当前书签自身的推文/媒体链接（/photo/1、/video/1），
+    若是则必须过滤掉，防止主循环将书签误判为「引用了自己」或白抓 x.com 页面（修复 B-TCO-UNSHORTEN-BROKEN）。
+    """
+    if not url or not _is_twitter_host(url):
+        return False
+    u_lower = url.lower()
+    # 任何推文的附属图片/视频链接都已由 media 字段处理，不应作为独立外链或引用推文抓取
+    if "/photo/" in u_lower or "/video/" in u_lower:
+        return True
+    if bookmark_id:
+        tid = extract_tweet_id(url)
+        if tid and str(tid) == str(bookmark_id):
+            return True
+    return False
 
 
 def extract_tweet_id(url: str) -> Optional[str]:
@@ -386,18 +426,48 @@ class BookmarkCoordinator:
 
         return urls
 
+    def _resolve_and_filter_urls(
+        self,
+        raw_urls: list[tuple[str, str]],
+        bookmark_id: Optional[str] = None,
+    ) -> list[tuple[str, str]]:
+        """先清洗并解包 t.co 短链，过滤掉指向书签自身或媒体（/photo/、/video/）的链接，再交给下游按真实域名分流。"""
+        resolved_list: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for raw_url, source in raw_urls:
+            clean = sanitize_url(raw_url)
+            if not clean:
+                continue
+            # 若是 t.co 短链，先解包成真实落地 URL 再做分类
+            if clean.lower().startswith(("https://t.co/", "http://t.co/")):
+                try:
+                    clean = self.external_client.unshorten(clean) or clean
+                except Exception as exc:
+                    logger.debug("Unshorten failed for %s: %s", clean, exc)
+            clean = sanitize_url(clean) or clean
+            if _is_self_or_media_twitter_url(clean, bookmark_id):
+                logger.debug("Skipping self/media Twitter URL %s (bookmark=%s)", clean, bookmark_id)
+                continue
+            dedup_key = f"{source}:{clean}"
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+            resolved_list.append((clean, source))
+        return resolved_list
+
     def _enrich_deep_links(self, bookmark: dict, result: dict) -> None:
         """Fetch GitHub meta + README excerpt and external previews for all URLs."""
         seen_gh: set[str] = set()
         seen_ext: set[str] = set()
+        bookmark_id = str(bookmark.get("id") or "")
 
         # Build URL list: bookmark entities/fullText + article body
         url_sources: list[tuple[str, str]] = list(self._extract_urls_from_bookmark(bookmark))
 
         article_text = (result.get("article") or {}).get("content_text", "")
         if article_text:
-            for m in re.finditer(r'https?://[^\s\]）),]+', article_text):
-                raw = m.group(0).rstrip(".,;:'\")")
+            for m in re.finditer(r'https?://[^\s\]）),"\'<>]+', article_text):
+                raw = sanitize_url(m.group(0))
                 if raw:
                     url_sources.append((raw, "article_body"))
 
@@ -406,15 +476,22 @@ class BookmarkCoordinator:
         if rep_data:
             for reply in (rep_data.get("replies") or []):
                 for m in re.finditer(
-                    r'https?://[^\s\]）),]+',
+                    r'https?://[^\s\]）),"\'<>]+',
                     reply.get("text") or "",
                 ):
-                    raw = m.group(0).rstrip(".,;:'\")")
+                    raw = sanitize_url(m.group(0))
                     if raw:
                         url_sources.append((raw, "reply"))
                 for tco, expanded in (reply.get("url_map") or {}).items():
                     if expanded and expanded != tco:
-                        url_sources.append((expanded, "reply"))
+                        clean_exp = sanitize_url(expanded)
+                        if clean_exp:
+                            url_sources.append((clean_exp, "reply"))
+
+        # 关键修复（B-TCO-UNSHORTEN-BROKEN）：在 Pass 1（GitHub）和 Pass 2（External）之前，
+        # 统一解包所有 t.co 短链并过滤自引用，确保指向 GitHub 的短链进入 Pass 1 抓 README，
+        # 指向自身配图的短链被直接丢弃。
+        url_sources = self._resolve_and_filter_urls(url_sources, bookmark_id)
 
         # Pass 1: process all GitHub URLs first so seen_gh is fully populated
         # before any external-URL filtering runs (avoids ordering-dependent misses).
@@ -457,6 +534,8 @@ class BookmarkCoordinator:
 
         # Pass 2: process external URLs; seen_gh is now complete so GitHub-dup
         # filtering works correctly regardless of source ordering.
+        # 仅对主推文/引用推文/文章正文来源的前 5 条外链开启 CF Browser Run 渲染兜底，回复外链不调浏览器
+        browser_eligible_count = 0
         for url, source in url_sources:
             url = (url or "").strip()
             if not url:
@@ -466,18 +545,21 @@ class BookmarkCoordinator:
                 continue
 
             if ut == "external":
+                if _is_twitter_host(url):
+                    continue
                 key = url.split("?")[0].rstrip("/").lower()
                 if key in seen_ext:
                     continue
                 seen_ext.add(key)
+                allow_cf = source in ("main", "quoted", "fulltext", "article_body") and browser_eligible_count < 5
+                if allow_cf:
+                    browser_eligible_count += 1
                 try:
                     content = self.external_client.get_content(
-                        url, skip_cache=self.skip_cache
+                        url,
+                        skip_cache=self.skip_cache,
+                        allow_browser=allow_cf,
                     )
-                    # If a t.co shortlink ultimately redirects to an X Article URL,
-                    # skip it — article content is already handled by ArticleClient.
-                    # Check both final_url and title (some t.co links store the
-                    # article URL in the page title when redirect doesn't fully resolve).
                     final = content.get("final_url", "")
                     title_url = content.get("title", "")
                     # Skip if the resolved URL is an X Article (already in article section)
@@ -486,17 +568,10 @@ class BookmarkCoordinator:
                         or classify_url(title_url) == "article"
                     )
                     # Skip if the resolved URL is any Twitter/X page (video, status, profile…)
-                    # Check both final_url and title because some t.co links store the redirect
-                    # destination in the title field when final_url is not fully resolved.
-                    _is_twitter_url = lambda u: bool(
-                        u and ("twitter.com/" in u or "x.com/" in u)
-                    )
                     final_is_twitter = (
-                        _is_twitter_url(final) or _is_twitter_url(title_url)
+                        _is_twitter_host(final) or _is_twitter_host(title_url)
                     )
                     # Skip if the resolved URL is a GitHub repo already tracked.
-                    # Check both final and title independently — when t.co doesn't fully
-                    # resolve, the GitHub URL ends up in title, not final_url.
                     _is_known_gh = lambda u: bool(
                         u
                         and classify_url(u) == "github"
@@ -661,8 +736,11 @@ class BookmarkCoordinator:
             "quality_checks": {},
         }
 
-        # Extract URLs
-        urls = self._extract_urls_from_bookmark(bookmark)
+        # Extract URLs（先解包 t.co 短链并过滤指向书签自身/媒体图片的链接，再按真实域名分流）
+        raw_urls = self._extract_urls_from_bookmark(bookmark)
+        urls = self._resolve_and_filter_urls(
+            raw_urls, str(bookmark_id) if bookmark_id else None
+        )
         result["urls"] = [u[0] for u in urls]
 
         # Process each URL type
@@ -800,12 +878,16 @@ class BookmarkCoordinator:
                     logger.error(f"Failed to fetch GitHub README: {e}")
 
             elif url_type == "external":
+                if _is_twitter_host(url):
+                    continue
                 if not result["url"]:  # Only set if not already set
                     result["url"] = url
                     result["type"] = "external"
                 try:
                     external = self.external_client.get_content(
-                        url, skip_cache=self.skip_cache
+                        url,
+                        skip_cache=self.skip_cache,
+                        allow_browser=True,
                     )
                     result["external_content"] = external
                     self._stats["external"] += 1
@@ -987,17 +1069,11 @@ class BookmarkCoordinator:
                 bid = str(bookmark.get("id", "") or "")
                 if bid and bid in completed:
                     self._stats["deep_skipped"] += 1
-                    logger.info(
+                    # 降为 debug 级别，避免每轮打印 2600+ 行刷爆 bookmark-auto.log（修复 B-LOG-DUPLICATE-NOISE）
+                    logger.debug(
                         "Skipping already completed bookmark %s (%s/%s)",
                         bid, i, n,
                     )
-                    if i % log_interval == 0 or i == n:
-                        elapsed = time.time() - start_time
-                        rate = i / elapsed if elapsed > 0 else 0
-                        logger.info(
-                            "Progress: %s/%s (%.1f%%) — %.2f bookmarks/sec",
-                            i, n, 100 * i / n if n else 0, rate,
-                        )
                     continue
 
                 self._stats["total"] += 1
@@ -1068,6 +1144,12 @@ class BookmarkCoordinator:
             self.include_replies = prev_replies
 
         elapsed = time.time() - start_time
+        if self._stats.get("deep_skipped", 0) > 0:
+            logger.info(
+                "Skipped %d already completed bookmarks (total=%d)",
+                self._stats["deep_skipped"],
+                n,
+            )
         # PR-3：无论本次是否有新增 deep report，都更新 last_run（B-SYNC-DEEP-TIMESTAMP-MISLEADING）
         state["last_run"] = datetime.now(timezone.utc).isoformat()
         self._save_deep_state_file(state, resume_path)

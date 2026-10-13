@@ -9,7 +9,7 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { getRepoRoot } from "@/lib/repo-root";
-import { loadEnv } from "@/lib/config";
+import { loadEnv, getCfBrowserTokenFallback, getCfBrowserDailyUsage } from "@/lib/config";
 import { listLogsSince } from "@/lib/db";
 import {
   readPipelineArticles,
@@ -25,6 +25,12 @@ type XaiStatus = "ok" | "forbidden" | "unknown";
 // degraded = 实例可达但搜索返回 0 结果（引擎限流/失效，HTTP 层看不出问题）
 type SearxngStatus = "ok" | "degraded" | "unconfigured" | "error";
 type KeyStatus = "ok" | "keyless";
+type CfBrowserStatus = "ok" | "unconfigured" | "disabled" | "exhausted";
+
+// 模块级 SearXNG 状态内存缓存（15 分钟 TTL）：
+// 防止 HealthBanner 每 60s 轮询触发真实搜索并扇出到上游引擎打出验证码（修复 B-HEALTH-SEARXNG-CACHED）
+let searxngMemo: { at: number; base: string; status: SearxngStatus } | null = null;
+const SEARXNG_MEMO_TTL_MS = 15 * 60 * 1000;
 
 interface HealthData {
   healthy: boolean;
@@ -38,6 +44,7 @@ interface HealthData {
     searxng: SearxngStatus;
     firecrawl: KeyStatus;
     exa: KeyStatus;
+    cfBrowser: CfBrowserStatus;
   };
   warnings: string[];
 }
@@ -214,6 +221,10 @@ function countPendingArticles(): number {
 
 function checkXaiStatus(): XaiStatus {
   try {
+    const env = loadEnv();
+    if (!(env.XAI_API_KEY || "").trim()) {
+      return "unknown";
+    }
     const sinceIso = new Date(Date.now() - 3600_000).toISOString();
     const components: LogComponent[] = ["article_pipeline", "agent"];
     let hasRecent = false;
@@ -230,31 +241,67 @@ function checkXaiStatus(): XaiStatus {
       }
     }
 
+    // 同时检查 logs/bookmark-auto.log 尾部（auto_run.sh 只写文件日志不写 SQLite）
+    const logPath = path.join(getRepoRoot(), "logs", "bookmark-auto.log");
+    if (fs.existsSync(logPath)) {
+      const stat = fs.statSync(logPath);
+      const readSize = Math.min(stat.size, 128 * 1024);
+      const fd = fs.openSync(logPath, "r");
+      const buf = Buffer.alloc(readSize);
+      fs.readSync(fd, buf, 0, readSize, Math.max(0, stat.size - readSize));
+      fs.closeSync(fd);
+      const tailText = buf.toString("utf-8");
+      if (
+        tailText.includes("x.ai") &&
+        (tailText.includes("permission-denied") || tailText.includes("403 Forbidden"))
+      ) {
+        return "forbidden";
+      }
+    }
+
     return hasRecent ? "ok" : "unknown";
   } catch {
     return "unknown";
   }
 }
 
-/** SearXNG：配置且 /search?q=test 返回 200 → ok */
+/** SearXNG：配置且 /search?q=test 返回 200 且结果非空 → ok（带 cache: "no-store" + 15min 内存节流） */
 async function checkSearxngStatus(): Promise<SearxngStatus> {
   const env = loadEnv();
   const base = (env.SEARXNG_BASE_URL || "").trim().replace(/\/$/, "");
   if (!base) return "unconfigured";
+
+  const now = Date.now();
+  if (
+    searxngMemo &&
+    searxngMemo.base === base &&
+    now - searxngMemo.at < SEARXNG_MEMO_TTL_MS &&
+    searxngMemo.status === "ok"
+  ) {
+    return searxngMemo.status;
+  }
+
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const timer = setTimeout(() => ctrl.abort(), 6000);
     const res = await fetch(`${base}/search?q=test&format=json`, {
+      cache: "no-store",
       signal: ctrl.signal,
       headers: { Accept: "application/json" },
     });
     clearTimeout(timer);
-    if (!res.ok) return "error";
+    if (!res.ok) {
+      searxngMemo = { at: now, base, status: "error" };
+      return "error";
+    }
     // HTTP 200 不代表可用：引擎全部限流时返回空 results（08-11 事故盲点），
     // 必须断言真实查询有结果
     const data = (await res.json()) as { results?: unknown[] };
-    return (data.results?.length ?? 0) > 0 ? "ok" : "degraded";
+    const status: SearxngStatus = (data.results?.length ?? 0) > 0 ? "ok" : "degraded";
+    searxngMemo = { at: now, base, status };
+    return status;
   } catch {
+    searxngMemo = { at: now, base, status: "error" };
     return "error";
   }
 }
@@ -269,6 +316,20 @@ function checkExaStatus(): KeyStatus {
   return (env.EXA_API_KEY || "").trim() ? "ok" : "keyless";
 }
 
+function checkCfBrowserStatus(): CfBrowserStatus {
+  const env = loadEnv();
+  const enabledRaw = (env.CF_BROWSER_ENABLED ?? "1").trim().toLowerCase();
+  if (["0", "false", "no"].includes(enabledRaw)) {
+    return "disabled";
+  }
+  const token = (env.CF_BROWSER_API_TOKEN || getCfBrowserTokenFallback()).trim();
+  if (!token) {
+    return "unconfigured";
+  }
+  const usage = getCfBrowserDailyUsage();
+  return usage.exhausted ? "exhausted" : "ok";
+}
+
 function buildWarnings(data: Omit<HealthData, "healthy" | "warnings">): string[] {
   const warnings: string[] = [];
 
@@ -278,8 +339,10 @@ function buildWarnings(data: Omit<HealthData, "healthy" | "warnings">): string[]
   if (data.pendingUploads > 10) {
     warnings.push(`${data.pendingUploads} 篇文章积压未上传到 Notion`);
   }
-  if (data.apiStatus.xai === "forbidden") {
-    warnings.push("xAI API 信用额度用完，research 已 fallback 到 Exa");
+  if (data.apiStatus.searxng === "error") {
+    warnings.push(
+      "SearXNG 实例不可达，研究流量已回退至 Firecrawl / Exa（请检查 tokyo-4-cqa 容器与 Tailscale）"
+    );
   }
   if (data.apiStatus.searxng === "degraded") {
     warnings.push(
@@ -305,6 +368,7 @@ export async function GET(): Promise<NextResponse<ApiResponse<HealthData>>> {
   const searxng = await checkSearxngStatus();
   const firecrawl = checkFirecrawlStatus();
   const exa = checkExaStatus();
+  const cfBrowser = checkCfBrowserStatus();
 
   const partial: Omit<HealthData, "healthy" | "warnings"> = {
     launchd,
@@ -312,7 +376,7 @@ export async function GET(): Promise<NextResponse<ApiResponse<HealthData>>> {
     recentFailStreak,
     pendingUploads,
     pendingArticles,
-    apiStatus: { xai, searxng, firecrawl, exa },
+    apiStatus: { xai, searxng, firecrawl, exa, cfBrowser },
   };
 
   const warnings = buildWarnings(partial);

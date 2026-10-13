@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -31,9 +32,67 @@ _PROMPTS_DIR = Path(__file__).parent / "prompts"
 _firecrawl_circuit_open = False
 _firecrawl_call_count = 0
 
+# --- 进程级 xAI 熔断：当 xAI 返回 403（permission-denied / 额度耗尽）时，后续文章不再白调 2 次接口 ---
+_xai_circuit_open = False
+
+# --- SearXNG 免代理直连 Session（模块级复用连接，trust_env=False 免疫 HTTP_PROXY 环境变量污染） ---
+_searxng_session: Optional[requests.Session] = None
+
 # --- SearXNG 连续 0 结果计数（模块级）：实例引擎失效时 HTTP 200 + 空结果，不会报错，需主动告警 ---
 _searxng_zero_streak = 0
 _SEARXNG_ZERO_WARN_THRESHOLD = 5
+
+
+def _get_searxng_session() -> requests.Session:
+    """获取不读取系统/环境变量代理（trust_env=False）的 Session，确保 Tailscale 内网直连 SearXNG。"""
+    global _searxng_session
+    if _searxng_session is None:
+        s = requests.Session()
+        s.trust_env = False
+        _searxng_session = s
+    return _searxng_session
+
+
+def _clean_search_query(raw: str, max_len: int = 80) -> str:
+    """清洗推文标题生成的搜索词：移除 URL、Emoji、@提及、开头的口语感叹词，避免传统搜索引擎返回 0 结果。"""
+    if not raw:
+        return ""
+    q = re.sub(r"https?://\S+", " ", raw)
+    # 剔除四字节 Emoji 与常见装饰符号
+    q = re.sub(r"[\U00010000-\U0010ffff\u2600-\u27bf\ufe0f]", " ", q)
+    # 剔除常见口水前缀
+    q = re.sub(
+        r"^(发现一个很(实用|有意思)的(开源)?项目[：:]?|卧槽[，,]?|刚刚|再补充一点[，,]?|看到很多朋友还是不懂[，,]?)",
+        "",
+        q.strip(),
+    )
+    q = re.sub(r"[“”\"'【】\[\]《》<>!！?？。；;：:]+", " ", q)
+    q = re.sub(r"\s+", " ", q).strip()
+    if len(q) > max_len:
+        q = q[:max_len].rsplit(" ", 1)[0] if " " in q[:max_len] else q[:max_len]
+    return q.strip() or raw[:max_len].strip()
+
+
+def _extract_keyword_fallback_query(raw: str, body_excerpt: str) -> str:
+    """当长句查询词在 SearXNG 返回 0 结果时，提取其中的 GitHub 仓库名或英文技术专有名词做二次查询。"""
+    combined = f"{raw}\n{body_excerpt[:1000]}"
+    m_gh = re.search(r"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)", combined)
+    if m_gh:
+        repo_slug = m_gh.group(1).rstrip(".")
+        if repo_slug.endswith(".git"):
+            repo_slug = repo_slug[:-4]
+        return repo_slug.replace("/", " ")
+    # 提取连续的英文/数字专有名词（排除常见停用词）
+    stop = {
+        "the", "and", "for", "with", "that", "this", "from", "your", "have",
+        "are", "was", "not", "but", "can", "all", "you", "just", "how", "why",
+        "what", "when", "into", "out", "use", "using", "new", "more", "https", "http",
+    }
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9_.-]{2,25}", raw)
+    kept = [t for t in tokens if t.lower() not in stop]
+    if len(kept) >= 2:
+        return " ".join(kept[:6])
+    return ""
 
 
 def _load_prompt(name: str) -> str:
@@ -203,15 +262,21 @@ class Researcher:
     # --- 搜索后端（全部 fail-soft：异常由调用方捕获记录，不向上抛） ---
 
     def _search_searxng(self, query: str, limit: int = 10) -> List[Dict[str, str]]:
-        """SearXNG 主搜索：GET /search?q=...&format=json，取 results[]。"""
+        """SearXNG 主搜索：使用免代理 Session 直连 GET /search?q=...&format=json，取 results[]。"""
         global _searxng_zero_streak
         if not SEARXNG_BASE_URL:
             # 未配置（空 URL）不算失败：info 跳过并返回空，让 Firecrawl 备路接管
             logger.info("SearXNG skipped: SEARXNG_BASE_URL not configured")
             return []
-        resp = requests.get(
+        session = _get_searxng_session()
+        resp = session.get(
             f"{SEARXNG_BASE_URL.rstrip('/')}/search",
-            params={"q": query, "format": "json"},
+            params={
+                "q": query,
+                "format": "json",
+                "categories": "general",
+                "language": "auto",
+            },
             timeout=20,
         )
         resp.raise_for_status()
@@ -343,14 +408,18 @@ class Researcher:
         topic = meta.get("title") or meta.get("url") or "unknown topic"
         bundle.topic = topic
         query = self._build_query(meta, body_excerpt)
-        # 搜索引擎用简洁查询词（标题优先），区别于喂给 xAI 的长 prompt
-        search_query = meta.get("title") or body_excerpt[:200] or topic
+        # 搜索引擎用清洗后的简洁查询词（标题优先），区别于喂给 xAI 的长 prompt
+        raw_search_query = meta.get("title") or body_excerpt[:200] or topic
+        search_query = _clean_search_query(raw_search_query)
 
-        # --- x.ai（可选：无 key 时 info 跳过，与 Exa 的 key 守卫模式一致，不算失败） ---
+        # --- x.ai（可选：无 key 或已触发 403 熔断时直接跳过，避免每篇白调 2 次） ---
+        global _xai_circuit_open
         xai_text = ""
         xai_sources: List[str] = []
         if not XAI_API_KEY:
             logger.info("x.ai research skipped: XAI_API_KEY not configured")
+        elif _xai_circuit_open:
+            logger.info("x.ai research skipped: circuit open (403 credits exhausted)")
         else:
             try:
                 client = self._get_xai_client()
@@ -374,6 +443,14 @@ class Researcher:
                     xai_text = _extract_text_from_responses(response)
                     xai_sources = _extract_sources_from_responses(response)
                 except Exception as resp_err:
+                    err_str = str(resp_err).lower()
+                    if "403" in err_str or "permission-denied" in err_str or "spending limit" in err_str:
+                        _xai_circuit_open = True
+                        logger.warning(
+                            "x.ai credits exhausted / 403 (%s); opening xAI circuit for this process",
+                            resp_err,
+                        )
+                        raise resp_err
                     # Fallback: chat.completions without search tools
                     logger.warning(
                         "x.ai responses.create() failed (%s), falling back to chat.completions",
@@ -395,14 +472,19 @@ class Researcher:
                 logger.info("x.ai research done: %d chars, %d sources", len(xai_text), len(xai_sources))
 
             except Exception as exc:
-                logger.error("x.ai research failed: %s", exc)
+                logger.warning("x.ai research unavailable: %s", exc)
                 bundle.raw_xai_response = f"[x.ai error: {exc}]"
 
-        # --- SearXNG（主搜索，必跑；失败 fail-soft 仅记录） ---
+        # --- SearXNG（主搜索，必跑；若首查 0 结果则提取关键词二次重试；失败 fail-soft） ---
         searxng_results: List[Dict[str, str]] = []
         try:
             logger.info("SearXNG search: '%s'", search_query[:60])
             searxng_results = self._search_searxng(search_query, limit=10)
+            if not searxng_results:
+                fallback_q = _extract_keyword_fallback_query(raw_search_query, body_excerpt)
+                if fallback_q and fallback_q.lower() != search_query.lower():
+                    logger.info("SearXNG 0 results, retrying with keyword query: '%s'", fallback_q[:60])
+                    searxng_results = self._search_searxng(fallback_q, limit=10)
             bundle.raw_searxng_response = json.dumps(searxng_results, ensure_ascii=False)
             logger.info("SearXNG search done: %d results", len(searxng_results))
         except Exception as exc:

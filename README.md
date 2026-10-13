@@ -48,7 +48,8 @@ x-bookmark-reports/
 │   ├── article_client.py       # TwitterAPI.io Article 客户端
 │   ├── quoted_client.py        # FxTwitter 引用推文客户端
 │   ├── github_client.py        # GitHub README 客户端
-│   ├── external_client.py      # 外部链接抓取客户端
+│   ├── external_client.py      # 外部链接抓取客户端（urllib + CF Browser Run 兜底）
+│   ├── cf_browser_client.py    # Cloudflare Browser Run (/browser-rendering/markdown) 客户端与每日账本
 │   ├── report_builder.py       # Markdown 报告生成器
 │   └── article_pipeline/       # 成品文章管线模块
 │       ├── state.py            # 管线状态（幂等、可续跑）
@@ -136,8 +137,11 @@ XAI_API_KEY=your_key             # 可选；额度不足时 fail-soft
 # 可选
 PROXY=http://127.0.0.1:7897
 BOOKMARKS_PATH=../twitter_data/bookmarks.json
-XAI_MODEL=grok-4.3
-DEEPSEEK_MODEL=deepseek-chat
+XAI_MODEL=grok-4.5
+DEEPSEEK_MODEL=deepseek-v4-flash
+CF_ACCOUNT_ID=cf735771bb6be4e5d1f177841c6835ce
+CF_BROWSER_API_TOKEN=your_cf_browser_token
+CF_BROWSER_ENABLED=1
 NOTION_UPLOAD_LIVE=true          # 默认 false（dry-run）
 APP_TIMEZONE=Asia/Singapore      # 产品时区（默认新加坡）；面向用户的日期一律按此取日历日
 ```

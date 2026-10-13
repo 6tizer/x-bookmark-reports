@@ -35,7 +35,12 @@ export HTTP_PROXY="$PROXY_URL"
 export HTTPS_PROXY="$PROXY_URL"
 export ALL_PROXY="$PROXY_URL"
 export NODE_USE_ENV_PROXY=1
-export NO_PROXY="${NO_PROXY:-127.0.0.1,localhost,::1}"
+# 无条件追加 Tailscale 内网地址到 NO_PROXY/no_proxy（launchd plist 的默认 NO_PROXY 会覆盖 :- 默认值语法），
+# 防止内网 SearXNG 请求被送进 7897 代理返回 502（修复 B-SEARXNG-INSTANCE-GONE 第一层根因）
+export NO_PROXY="${NO_PROXY:-127.0.0.1,localhost,::1},100.99.184.51,100.64.0.0/10,.ts.net"
+export no_proxy="$NO_PROXY"
+export PYTHONIOENCODING=utf-8
+export LANG="${LANG:-en_US.UTF-8}"
 export PATH="${HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:${PATH:-/usr/bin:/bin}"
 # article_pipeline.py 需要 openai 包，用 .venv 的 python
 VENV_PYTHON3="$SCRIPT_DIR/.venv/bin/python3"
@@ -76,7 +81,12 @@ PYEOF
 log() {
     local ts
     ts="$(date '+%Y-%m-%d %H:%M:%S')"
-    echo "[$ts] $*" | tee -a "$LOG_FILE"
+    # 当 launchd StandardOutPath 已指向 LOG_FILE 时，直接 echo 即可，避免 tee 造成每行重复写两遍（修复 B-LOG-DUPLICATE-NOISE）
+    if [ /dev/stdout -ef "$LOG_FILE" ]; then
+        echo "[$ts] $*"
+    else
+        echo "[$ts] $*" | tee -a "$LOG_FILE"
+    fi
 }
 
 # ========== 历史记录（PR-3 Commit 5）==========

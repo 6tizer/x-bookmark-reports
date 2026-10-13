@@ -687,10 +687,11 @@ def upload_finished_file(md_path: Path, live: bool) -> tuple[str, str]:
 
     # 最小正文字数门槛（PR-6）：rewrite 产出空/过短正文（如 reasoning 模型 max_tokens 被
     # reasoning_content 吃光导致 content=0）时不上传 Notion，避免产生空页面。
+    # 返回独立状态 "skip-short"（不计入 Notion API errors，避免单篇残片让整条流水线每轮报 failed）。
     MIN_BODY_CHARS = 300
     if len(body.strip()) < MIN_BODY_CHARS:
         print(f"  [SKIP-SHORT] {md_path.name} body too short ({len(body.strip())} chars < {MIN_BODY_CHARS})")
-        return "failed", f"body_too_short {len(body.strip())} chars"
+        return "skip-short", f"body_too_short {len(body.strip())} chars"
 
     blocks = _md_to_blocks(body)
 
@@ -905,6 +906,7 @@ def _run_finished_mode(args: argparse.Namespace, live: bool) -> int:
     partial_count = 0
     failed_count = 0
     skip_dup_count = 0
+    skip_short_count = 0
     # 批暂停只统计真实上传：SKIP-DUP 仅 1 次查重读请求，
     # 若计入节奏会把大积压拖成十几小时（B-UPLOAD-PACING-AMPLIFY）
     uploads_since_pause = 0
@@ -933,6 +935,8 @@ def _run_finished_mode(args: argparse.Namespace, live: bool) -> int:
             print(f"  [OK] {md_path.name} -> {msg}")
         elif status == "skip-dup":
             skip_dup_count += 1
+        elif status == "skip-short":
+            skip_short_count += 1
         elif status == "partial":
             partial_count += 1
             print(f"  [PARTIAL] {md_path.name} -> {msg}", file=sys.stderr)
@@ -946,6 +950,9 @@ def _run_finished_mode(args: argparse.Namespace, live: bool) -> int:
             if status == "skip-dup":
                 # 查重只发 1 个读请求，轻限速即可（Notion 限速 ~3 req/s）
                 time.sleep(0.4)
+            elif status == "skip-short":
+                # 本地前置校验跳过，未发任何 Notion 请求，无需 sleep
+                pass
             else:
                 time.sleep(3)
                 uploads_since_pause += 1
@@ -955,7 +962,7 @@ def _run_finished_mode(args: argparse.Namespace, live: bool) -> int:
 
     print(
         f"[upload_to_notion] finished done — uploaded: {uploaded_count}, "
-        f"skipped: {len(uploaded_set) + skip_dup_count}, errors: {error_count}"
+        f"skipped: {len(uploaded_set) + skip_dup_count + skip_short_count}, errors: {error_count}"
     )
     return 0 if error_count == 0 else 1
 

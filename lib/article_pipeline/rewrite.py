@@ -10,10 +10,12 @@ from typing import Any, Dict, List, Optional
 
 from lib.config import (
     ARTICLE_FINAL_DIR,
+    ARTICLE_MIN_BODY_CHARS,
     DEEPSEEK_API_KEY,
     DEEPSEEK_BASE_URL,
     DEEPSEEK_MODEL,
 )
+from lib.article_pipeline.metadata import split_deep_sections
 from lib.tz import now_local
 
 logger = logging.getLogger(__name__)
@@ -216,6 +218,16 @@ class Rewriter:
         article_clean = re.sub(r"^#\s+.+\n?", "", article_body, count=1, flags=re.MULTILINE)
         article_clean = article_clean.strip()
 
+        # 最短正文校验（修复 B-SHORT-ARTICLE-RETRY-LOOP）：
+        # 若去掉标题后正文不足 ARTICLE_MIN_BODY_CHARS（默认 300 字），直接抛错标 failed，
+        # 绝不将 46 字截断残片标为 written 流向 upload_to_notion 造成无限重试死循环。
+        if len(article_clean) < ARTICLE_MIN_BODY_CHARS:
+            finish = getattr(resp.choices[0], "finish_reason", "?")
+            raise ValueError(
+                f"DeepSeek article body too short ({len(article_clean)} chars < "
+                f"{ARTICLE_MIN_BODY_CHARS}, finish_reason={finish}); marking failed"
+            )
+
         # Pick icon and tags
         icon = _pick_icon(gen_title, article_clean)
         tags = _extract_tags(gen_title, article_clean)
@@ -254,11 +266,75 @@ class Rewriter:
         if meta.get("url"):
             parts.append(f"链接: {meta['url']}")
 
-        # Truncate body to avoid excessive token usage
-        max_body = 8000
-        body_text = body[:max_body]
-        if len(body) > max_body:
-            body_text += "\n\n... (原始素材已截断)"
+    @staticmethod
+    def _truncate_section_safely(text: str, limit: int) -> str:
+        """在行边界截断段落，并确保未闭合的 ``` 代码块被补齐。"""
+        if len(text) <= limit:
+            return text
+        cut = text[:limit]
+        last_nl = cut.rfind("\n")
+        if last_nl > limit // 2:
+            cut = cut[:last_nl]
+        cut = cut.rstrip() + "\n\n... (本段已截断)"
+        fence_count = sum(1 for ln in cut.splitlines() if ln.strip().startswith("```"))
+        if fence_count % 2 == 1:
+            cut += "\n```"
+        return cut
+
+    @classmethod
+    def _prioritize_and_cap_body(cls, body: str, total_cap: int = 14000) -> str:
+        """按段落价值重排并分配字符配额（修复 B-REWRITE-EXTLINK-TRUNCATED）：
+        将原本排在「回复线程」之后的「外部链接详情」（含 GitHub README 与 CF 渲染正文）提至前面，
+        按「主推文(7000) -> 引用推文(1500) -> 外部链接详情(5000) -> 回复线程(3000)」分配额度，
+        前段未用完的预算自动顺延给后段，总长控制在 total_cap（默认 14,000 字）以内。
+        """
+        sections = split_deep_sections(body)
+        if not sections:
+            return cls._truncate_section_safely(body, total_cap)
+
+        plan = [
+            ("主推文", 7000),
+            ("引用推文", 1500),
+            ("外部链接详情", 5000),
+            ("回复线程", 3000),
+        ]
+        selected_parts: List[str] = []
+        remaining_total = total_cap
+        rollover = 0
+
+        for sec_name, base_budget in plan:
+            sec_text = sections.get(sec_name, "").strip()
+            if not sec_text or remaining_total <= 0:
+                rollover += base_budget
+                continue
+            allowed = min(remaining_total, base_budget + rollover)
+            clipped = cls._truncate_section_safely(sec_text, allowed)
+            selected_parts.append(clipped)
+            used = len(clipped)
+            remaining_total -= used
+            rollover = max(0, allowed - used)
+
+        if not selected_parts:
+            return cls._truncate_section_safely(body, total_cap)
+        return "\n\n".join(selected_parts)
+
+    def _build_user_message(
+        self,
+        meta: Dict[str, Any],
+        body: str,
+        research_text: str,
+    ) -> str:
+        parts: List[str] = []
+        parts.append("## 原始素材\n")
+        if meta.get("title"):
+            parts.append(f"标题: {meta['title']}")
+        if meta.get("author"):
+            parts.append(f"作者: {meta['author']}")
+        if meta.get("url"):
+            parts.append(f"链接: {meta['url']}")
+
+        # 按优先级重排并截断深报正文（总预算 14,000 字，确保外部链接详情不被回复线程挤掉）
+        body_text = self._prioritize_and_cap_body(body, total_cap=14000)
         parts.append(f"\n{body_text}")
 
         if research_text:
