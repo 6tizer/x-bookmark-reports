@@ -143,7 +143,7 @@ spawn('.venv/bin/python3', ['bin/upload_to_notion.py', '--mode', 'finished', '--
 
 Each API route uses `pgrep` + `kill -9` to terminate same-type old processes before spawning a new one, preventing concurrent writes to shared state files.
 
-The full 4-step pipeline runs automatically every 3 hours via `launchd (com.tizer.bookmark-auto)` calling `auto_run.sh` from the project root.
+The full 4-step pipeline runs automatically every 3 hours via `launchd (com.x-bookmark-reports.auto-run)` calling `auto_run.sh` from the project root.
 
 ## Tech Stack
 

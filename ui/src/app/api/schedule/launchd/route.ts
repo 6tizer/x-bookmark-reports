@@ -77,25 +77,37 @@ interface PlistJson {
 }
 
 /**
- * 在 4 个候选路径中查找已存在的 plist，与 POST handler 共用
+ * 在 ~/Library/LaunchAgents 与仓库根目录中查找定时任务 plist
  */
 function findPlist(): PlistInfo | null {
   const repoRoot = getRepoRoot();
   const homeDir = process.env.HOME || "~";
-  const plistCandidates = [
-    path.join(homeDir, "Library", "LaunchAgents", "com.tizer.bookmark-auto.plist"),
-    path.join(homeDir, "Library", "LaunchAgents", "com.x-bookmark-reports.auto-run.plist"),
-    path.join(repoRoot, "com.tizer.bookmark-auto.plist"),
-    path.join(repoRoot, "com.x-bookmark-reports.auto-run.plist"),
-  ];
+  const agentsDir = path.join(homeDir, "Library", "LaunchAgents");
 
-  for (const candidate of plistCandidates) {
-    if (fs.existsSync(candidate)) {
-      return {
-        plistPath: candidate,
-        plistName: path.basename(candidate, ".plist"),
-      };
+  if (fs.existsSync(agentsDir)) {
+    try {
+      for (const file of fs.readdirSync(agentsDir)) {
+        if (
+          file === "com.x-bookmark-reports.auto-run.plist" ||
+          /^com\.[^.]+\.bookmark-auto\.plist$/.test(file)
+        ) {
+          return {
+            plistPath: path.join(agentsDir, file),
+            plistName: path.basename(file, ".plist"),
+          };
+        }
+      }
+    } catch {
+      /* ignore */
     }
+  }
+
+  const repoDefault = path.join(repoRoot, "com.x-bookmark-reports.auto-run.plist");
+  if (fs.existsSync(repoDefault)) {
+    return {
+      plistPath: repoDefault,
+      plistName: "com.x-bookmark-reports.auto-run",
+    };
   }
   return null;
 }
@@ -134,19 +146,11 @@ export async function GET(): Promise<NextResponse<ApiResponse<LaunchdStatusData>
   try {
     const plistInfo = findPlist();
     if (!plistInfo) {
-      const repoRoot = getRepoRoot();
-      const homeDir = process.env.HOME || "~";
-      const checked = [
-        path.join(homeDir, "Library", "LaunchAgents", "com.tizer.bookmark-auto.plist"),
-        path.join(homeDir, "Library", "LaunchAgents", "com.x-bookmark-reports.auto-run.plist"),
-        path.join(repoRoot, "com.tizer.bookmark-auto.plist"),
-        path.join(repoRoot, "com.x-bookmark-reports.auto-run.plist"),
-      ].join(", ");
       return NextResponse.json(
         {
           success: false,
           data: null,
-          error: { code: "PLIST_NOT_FOUND", message: "No launchd plist found. Checked: " + checked },
+          error: { code: "PLIST_NOT_FOUND", message: "No launchd plist found in ~/Library/LaunchAgents" },
         },
         { status: 404 }
       );
@@ -207,19 +211,11 @@ export async function POST(
     const plistInfo = findPlist();
 
     if (!plistInfo) {
-      const repoRoot = getRepoRoot();
-      const homeDir = process.env.HOME || "~";
-      const checked = [
-        path.join(homeDir, "Library", "LaunchAgents", "com.tizer.bookmark-auto.plist"),
-        path.join(homeDir, "Library", "LaunchAgents", "com.x-bookmark-reports.auto-run.plist"),
-        path.join(repoRoot, "com.tizer.bookmark-auto.plist"),
-        path.join(repoRoot, "com.x-bookmark-reports.auto-run.plist"),
-      ].join(", ");
       return NextResponse.json(
         {
           success: false,
           data: null,
-          error: { code: "PLIST_NOT_FOUND", message: "No launchd plist found. Checked: " + checked },
+          error: { code: "PLIST_NOT_FOUND", message: "No launchd plist found in ~/Library/LaunchAgents" },
         },
         { status: 404 }
       );
@@ -310,19 +306,11 @@ export async function PUT(
     // 2. 定位 plist 文件
     const plistInfo = findPlist();
     if (!plistInfo) {
-      const repoRoot = getRepoRoot();
-      const homeDir = process.env.HOME || "~";
-      const checked = [
-        path.join(homeDir, "Library", "LaunchAgents", "com.tizer.bookmark-auto.plist"),
-        path.join(homeDir, "Library", "LaunchAgents", "com.x-bookmark-reports.auto-run.plist"),
-        path.join(repoRoot, "com.tizer.bookmark-auto.plist"),
-        path.join(repoRoot, "com.x-bookmark-reports.auto-run.plist"),
-      ].join(", ");
       return NextResponse.json(
         {
           success: false,
           data: null,
-          error: { code: "PLIST_NOT_FOUND", message: "No launchd plist found. Checked: " + checked },
+          error: { code: "PLIST_NOT_FOUND", message: "No launchd plist found in ~/Library/LaunchAgents" },
         },
         { status: 404 }
       );

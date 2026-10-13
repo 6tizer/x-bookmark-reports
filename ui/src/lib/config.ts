@@ -11,6 +11,7 @@ import { getRepoRoot } from "@/lib/repo-root";
 
 const ENV_PATH = path.join(getRepoRoot(), ".env");
 const CF_TOKEN_CACHE_PATH = path.join(getRepoRoot(), "cache", ".cf_browser_token");
+const CF_ACCOUNT_CACHE_PATH = path.join(getRepoRoot(), "cache", ".cf_account_id");
 const CF_USAGE_LEDGER_PATH = path.join(getRepoRoot(), "cache", "cf_browser_usage.json");
 
 export interface RawEnvConfig {
@@ -70,6 +71,20 @@ export function getCfBrowserTokenFallback(): string {
   try {
     if (fs.existsSync(CF_TOKEN_CACHE_PATH)) {
       return fs.readFileSync(CF_TOKEN_CACHE_PATH, "utf-8").trim();
+    }
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
+/**
+ * 读取本地 0600 缓存文件中的 Cloudflare Account ID（当 .env 未填时作为默认回退）。
+ */
+export function getCfAccountIdFallback(): string {
+  try {
+    if (fs.existsSync(CF_ACCOUNT_CACHE_PATH)) {
+      return fs.readFileSync(CF_ACCOUNT_CACHE_PATH, "utf-8").trim();
     }
   } catch {
     /* ignore */

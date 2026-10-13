@@ -18,7 +18,7 @@ alwaysApply: true
 
 ## F2. 研究搜索与网页渲染栈的真实状态（2026-10-13 更新）
 
-- **SearXNG 实例（`http://100.99.184.51:8888`）**：跑在 **Tailscale 机器 tokyo-4-cqa**（SSH 别名 `tokyo` 或 `cqa-tokyo-ts`，`~/searxng-deploy/` docker compose）。2026-09-19 CQA 退役转 B 模式时曾被误拔除，**2026-10-13 已原位恢复为单容器瘦身调优版**（去掉 Redis，端口仅绑 `127.0.0.1:8888:8080` 并通过 `tailscale serve --bg --tcp 8888 tcp://127.0.0.1:8888` 暴露给 tailnet，常驻内存 ~120MiB）。启用 `bing / startpage / mojeek / google / bing news / google news / github / arxiv / wikipedia / hackernews`（均归入 `general`），禁用在东京机易 429/202 的 `brave / duckduckgo / reddit / presearch`。
+- **SearXNG 实例（`<SEARXNG_BASE_URL>`）**：跑在 **Tailscale 内网节点**（`~/searxng-deploy/` docker compose）。2026-10-13 部署为单容器瘦身调优版（去掉 Redis，端口仅绑 `127.0.0.1:8888:8080` 并通过 `tailscale serve --bg --tcp 8888 tcp://127.0.0.1:8888` 暴露给 tailnet，常驻内存 ~120MiB）。启用 `bing / startpage / mojeek / google / bing news / google news / github / arxiv / wikipedia / hackernews`（均归入 `general`），禁用在机房 IP 易 429/202 的 `brave / duckduckgo / reddit / presearch`。
 - **Cloudflare Browser Run（`/browser-rendering/markdown`）**：2026-10-13 接入 `lib/cf_browser_client.py` + `lib/external_client.py`。仅在 Step 2（主推文/引用外链）静态 `urllib` 抓回正文 `< 300 字` 或遇 SPA 空壳/403/5xx 时触发无头浏览器渲染提取 Markdown。专用最小权限 Token 存 `cache/.cf_browser_token`（0600），每日安全预算 480s（`cache/cf_browser_usage.json` 按 UTC 日记账）。
 - **Firecrawl**：现为月度 1000 credits 套餐（`/v2/search` 每次 1 credit），仅在 SearXNG 0 结果时作备用兜底。
 - **xAI**：团队额度已耗尽（403），`research.py` 已加进程级 `_xai_circuit_open` 熔断；研究主链路走 SearXNG（免代理 `Session(trust_env=False)` 直连）+ Exa `/search` 补充。

@@ -16,6 +16,7 @@ import {
   updateEnv,
   maskApiKey,
   getCfBrowserTokenFallback,
+  getCfAccountIdFallback,
   getCfBrowserDailyUsage,
 } from "@/lib/config";
 import { getArticlesDir } from "@/lib/fs-data";
@@ -64,7 +65,7 @@ function buildSettingsFromEnv(): Settings {
     searxngBaseUrl: env.SEARXNG_BASE_URL || "",
     firecrawlApiKey: maskApiKey(env.FIRECRAWL_API_KEY),
     firecrawlBaseUrl: env.FIRECRAWL_BASE_URL || "https://api.firecrawl.dev/v2",
-    cfAccountId: env.CF_ACCOUNT_ID || "cf735771bb6be4e5d1f177841c6835ce",
+    cfAccountId: env.CF_ACCOUNT_ID || getCfAccountIdFallback(),
     cfBrowserApiKey: maskApiKey(cfTokenRaw),
     cfBrowserEnabled: !["0", "false", "no"].includes(cfEnabledRaw),
     cfBrowserDailyUsedMs: cfUsage.usedMs,

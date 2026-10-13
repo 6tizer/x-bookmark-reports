@@ -8,7 +8,7 @@
 ## 一、项目位置与结构
 
 ```
-/Users/tizer_mac_studio/work/Cursor/Twitter Bookmark/
+/Users/<user>/work/Cursor/Twitter Bookmark/
 ├── twitter_data/
 │   └── bookmarks.json          ← 书签数据源（主数据，不提交 git）
 ├── sync_bookmarks.sh            ← 书签同步脚本（rettiwt-api v7）
@@ -61,7 +61,7 @@
 
 ## 二、书签数据详情（bookmarks.json）
 
-- **路径**：`/Users/tizer_mac_studio/work/Cursor/Twitter Bookmark/twitter_data/bookmarks.json`
+- **路径**：`/Users/<user>/work/Cursor/Twitter Bookmark/twitter_data/bookmarks.json`
 - **格式**：JSON 数组，当前约 **1584 条**书签记录（每次 sync 追加到数组头部）
 - **排序**：数组靠前 ≈ 最近加入的书签，不严格按时间排序
 
@@ -115,7 +115,7 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
         → 进度：output/.notion-finished-state.json
 ```
 
-**自动化**：`launchd (com.tizer.bookmark-auto)` 每 3 小时运行 `auto_run.sh` 执行完整 4 步流程。
+**自动化**：`launchd (com.x-bookmark-reports.auto-run)` 每 3 小时运行 `auto_run.sh` 执行完整 4 步流程。
 
 **UI 手动触发**：Sync 页面分别触发「同步书签」（Step 1+2）、「Run Pipeline」（Step 3）、「Upload to Notion」（Step 4）。
 
@@ -192,7 +192,7 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 | Python（venv） | `/Users/.../x-bookmark-reports/.venv/bin/python3`（3.12，含 openai，用于 article_pipeline） |
 | Node.js | v24.14.0 |
 | rettiwt-api | v7.1.4（全局，`~/.local/bin/rettiwt`，书签同步用） |
-| gh CLI | v2.89.0（已认证 account: 6tizer） |
+| gh CLI | v2.89.0（已认证 GitHub CLI） |
 | 代理 | `http://127.0.0.1:7897`（在 `.env` 中配置） |
 
 **Python 版本注意**：代码必须兼容 Python 3.9，禁止使用：
@@ -228,7 +228,7 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 
 ## 八、launchd 定时任务
 
-- **Plist**：`~/Library/LaunchAgents/com.tizer.bookmark-auto.plist`
+- **Plist**：`~/Library/LaunchAgents/com.x-bookmark-reports.auto-run.plist`
 - **脚本**：`auto_run.sh`（项目根目录）
 - **频率**：每 3 小时（00:00 / 03:00 / 06:00 / 09:00 / 12:00 / 15:00 / 18:00 / 21:00）
 - **日志**：`logs/bookmark-auto.log`（项目内，gitignore，重启不丢）
@@ -236,8 +236,8 @@ Step 4: .venv/bin/python3 bin/upload_to_notion.py --mode finished --live
 
 管理命令：
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.tizer.bookmark-auto.plist
-launchctl load ~/Library/LaunchAgents/com.tizer.bookmark-auto.plist
+launchctl unload ~/Library/LaunchAgents/com.x-bookmark-reports.auto-run.plist
+launchctl load ~/Library/LaunchAgents/com.x-bookmark-reports.auto-run.plist
 launchctl list | grep bookmark
 tail -f logs/bookmark-auto.log     # 实时查看日志
 cat output/auto_run_state.json     # 查看最近一次状态
@@ -250,7 +250,7 @@ cat output/auto_run_state.json     # 查看最近一次状态
 ### 9.1 路径引号
 项目路径含空格，bash 命令必须引用：
 ```bash
-cd "/Users/tizer_mac_studio/work/Cursor/Twitter Bookmark/x-bookmark-reports"
+cd "/Users/<user>/work/Cursor/Twitter Bookmark/x-bookmark-reports"
 bash -c "'$SCRIPT_PATH' && ..."  # 单引号包住含空格路径
 ```
 

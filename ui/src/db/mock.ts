@@ -581,7 +581,7 @@ export const mockSettings: Settings = {
   searxngBaseUrl: "",
   firecrawlApiKey: "****",
   firecrawlBaseUrl: "https://api.firecrawl.dev/v2",
-  cfAccountId: "cf735771bb6be4e5d1f177841c6835ce",
+  cfAccountId: "",
   cfBrowserApiKey: "",
   cfBrowserEnabled: true,
   bookmarksPath: "/Users/<user>/Library/Application Support/Google/Chrome/Default/Bookmarks",

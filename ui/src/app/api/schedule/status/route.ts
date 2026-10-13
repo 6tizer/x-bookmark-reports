@@ -38,9 +38,21 @@ function readAutoRunState(): Record<string, unknown> {
 
 function checkLaunchdStatus(): { loaded: boolean; plistPath: string | null } {
   const repoRoot = getRepoRoot();
+  const homeDir = process.env.HOME || "~";
+  const agentsDir = path.join(homeDir, "Library", "LaunchAgents");
 
-  // Check both possible plist names (legacy + current)
-  const plistNames = ["com.tizer.bookmark-auto", "com.x-bookmark-reports.auto-run"];
+  const plistNames = ["com.x-bookmark-reports.auto-run"];
+  if (fs.existsSync(agentsDir)) {
+    try {
+      for (const file of fs.readdirSync(agentsDir)) {
+        if (/^com\.[^.]+\.bookmark-auto\.plist$/.test(file)) {
+          plistNames.unshift(path.basename(file, ".plist"));
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 
   for (const plistName of plistNames) {
     const repoPlistPath = path.join(repoRoot, `${plistName}.plist`);

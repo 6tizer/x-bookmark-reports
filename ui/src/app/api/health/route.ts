@@ -58,23 +58,43 @@ interface PlistJson {
   StartCalendarInterval?: PlistCalendarInterval | PlistCalendarInterval[];
 }
 
-const LAUNCHD_NAMES = ["com.tizer.bookmark-auto", "com.x-bookmark-reports.auto-run"];
-
-function findPlist(): { plistPath: string; plistName: string } | null {
+function discoverLaunchdCandidates(): Array<{ plistPath: string; plistName: string }> {
   const repoRoot = getRepoRoot();
   const homeDir = process.env.HOME || "~";
-  const candidates = [
-    path.join(homeDir, "Library", "LaunchAgents", "com.tizer.bookmark-auto.plist"),
-    path.join(homeDir, "Library", "LaunchAgents", "com.x-bookmark-reports.auto-run.plist"),
-    path.join(repoRoot, "com.tizer.bookmark-auto.plist"),
-    path.join(repoRoot, "com.x-bookmark-reports.auto-run.plist"),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return { plistPath: candidate, plistName: path.basename(candidate, ".plist") };
+  const agentsDir = path.join(homeDir, "Library", "LaunchAgents");
+  const candidates: Array<{ plistPath: string; plistName: string }> = [];
+
+  if (fs.existsSync(agentsDir)) {
+    try {
+      for (const file of fs.readdirSync(agentsDir)) {
+        if (
+          file === "com.x-bookmark-reports.auto-run.plist" ||
+          /^com\.[^.]+\.bookmark-auto\.plist$/.test(file)
+        ) {
+          candidates.push({
+            plistPath: path.join(agentsDir, file),
+            plistName: path.basename(file, ".plist"),
+          });
+        }
+      }
+    } catch {
+      /* ignore */
     }
   }
-  return null;
+
+  const repoDefault = path.join(repoRoot, "com.x-bookmark-reports.auto-run.plist");
+  if (fs.existsSync(repoDefault)) {
+    candidates.push({
+      plistPath: repoDefault,
+      plistName: "com.x-bookmark-reports.auto-run",
+    });
+  }
+  return candidates;
+}
+
+function findPlist(): { plistPath: string; plistName: string } | null {
+  const list = discoverLaunchdCandidates();
+  return list.length > 0 ? list[0] : null;
 }
 
 function isLaunchdLoaded(plistName: string): boolean {
@@ -119,8 +139,9 @@ function formatNextTrigger(intervals: Array<{ hour: number; minute: number }>): 
 function checkLaunchd(): { loaded: boolean; nextTrigger: string | null } {
   try {
     let loaded = false;
-    for (const name of LAUNCHD_NAMES) {
-      if (isLaunchdLoaded(name)) {
+    const candidates = discoverLaunchdCandidates();
+    for (const item of candidates) {
+      if (isLaunchdLoaded(item.plistName)) {
         loaded = true;
         break;
       }
@@ -341,7 +362,7 @@ function buildWarnings(data: Omit<HealthData, "healthy" | "warnings">): string[]
   }
   if (data.apiStatus.searxng === "error") {
     warnings.push(
-      "SearXNG 实例不可达，研究流量已回退至 Firecrawl / Exa（请检查 tokyo-4-cqa 容器与 Tailscale）"
+      "SearXNG 实例不可达，研究流量已回退至 Firecrawl / Exa（请检查 SearXNG 容器与网络连接）"
     );
   }
   if (data.apiStatus.searxng === "degraded") {

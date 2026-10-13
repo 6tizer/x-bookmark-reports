@@ -129,7 +129,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
   const [exaBaseUrl, setExaBaseUrl] = useState("https://api.exa.ai");
   const [searxngBaseUrl, setSearxngBaseUrl] = useState("");
   const [firecrawlBaseUrl, setFirecrawlBaseUrl] = useState("https://api.firecrawl.dev/v2");
-  const [cfAccountId, setCfAccountId] = useState("cf735771bb6be4e5d1f177841c6835ce");
+  const [cfAccountId, setCfAccountId] = useState("");
   const [cfBrowserEnabled, setCfBrowserEnabled] = useState(true);
 
   useEffect(() => {
@@ -141,7 +141,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
       setExaBaseUrl(settings.exaBaseUrl || "https://api.exa.ai");
       setSearxngBaseUrl(settings.searxngBaseUrl || "");
       setFirecrawlBaseUrl(settings.firecrawlBaseUrl || "https://api.firecrawl.dev/v2");
-      setCfAccountId(settings.cfAccountId || "cf735771bb6be4e5d1f177841c6835ce");
+      setCfAccountId(settings.cfAccountId || "");
       setCfBrowserEnabled(settings.cfBrowserEnabled ?? true);
     }
   }, [settings]);
@@ -348,7 +348,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
             type="text"
             value={cfAccountId}
             onChange={(e) => setCfAccountId(e.target.value)}
-            placeholder="cf735771bb6be4e5d1f177841c6835ce"
+            placeholder="your_cloudflare_account_id"
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm font-mono outline-none focus:ring-1 focus:ring-ring"
           />
         </div>

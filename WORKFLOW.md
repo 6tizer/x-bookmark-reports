@@ -138,7 +138,7 @@ BUGS.md 中的 B001: `GitHubNotFound` 未被 fallback 捕获
 
 ### 验证
 ```bash
-cd "/Users/tizer_mac_studio/work/Cursor/Twitter Bookmark/x-bookmark-reports"
+cd "/Users/<user>/work/Cursor/Twitter Bookmark/x-bookmark-reports"
 python3 -c "from lib.github_client import GitHubClient; ..."
 ```
 
@@ -204,7 +204,7 @@ python3 -c "from lib.github_client import GitHubClient; ..."
 ### 5.2 验证脚本标准格式
 
 ```bash
-cd "/Users/tizer_mac_studio/work/Cursor/Twitter Bookmark/x-bookmark-reports"
+cd "/Users/<user>/work/Cursor/Twitter Bookmark/x-bookmark-reports"
 python3 -c "
 # 1. 导入测试
 from lib.xxx import ...

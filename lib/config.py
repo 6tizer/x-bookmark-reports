@@ -255,8 +255,37 @@ def _resolve_cf_browser_token() -> str:
     return ""
 
 
+def _resolve_cf_account_id() -> str:
+    """读取 Cloudflare Account ID：优先环境变量，回退本地 0600 缓存文件（避免仓库硬编码个人账号 ID）。"""
+    env_id = _optional_env("CF_ACCOUNT_ID", "").strip()
+    if env_id:
+        return env_id
+    id_file = CACHE_DIR / ".cf_account_id"
+    try:
+        if id_file.exists():
+            return id_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        pass
+    return ""
+
+
+def _resolve_reconcile_default(field: str, fallback: str = "") -> str:
+    """读取官方书签对账的本地默认参数（存放在 gitignore 的 cache/.official_reconcile_defaults.json）。"""
+    cfg_file = CACHE_DIR / ".official_reconcile_defaults.json"
+    try:
+        if cfg_file.exists():
+            import json as _json
+
+            data = _json.loads(cfg_file.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get(field):
+                return str(data[field]).strip()
+    except Exception:
+        pass
+    return fallback
+
+
 # Cloudflare Browser Run — 无头浏览器渲染提取 Markdown（Step 2 外链兜底）
-CF_ACCOUNT_ID = _optional_env("CF_ACCOUNT_ID", "cf735771bb6be4e5d1f177841c6835ce")
+CF_ACCOUNT_ID = _resolve_cf_account_id()
 CF_BROWSER_API_TOKEN = _resolve_cf_browser_token()
 CF_BROWSER_ENABLED = _optional_env("CF_BROWSER_ENABLED", "1").strip().lower() not in (
     "0",
@@ -303,11 +332,13 @@ try:
 except ValueError:
     OFFICIAL_RECONCILE_MAX_PAGES = 1
 OFFICIAL_RECONCILE_USER_ID = _optional_env(
-    "OFFICIAL_RECONCILE_USER_ID", "1815247565119778816"
+    "OFFICIAL_RECONCILE_USER_ID", _resolve_reconcile_default("user_id", "")
 )
-OFFICIAL_RECONCILE_XURL_APP = _optional_env("OFFICIAL_RECONCILE_XURL_APP", "hl-agent")
+OFFICIAL_RECONCILE_XURL_APP = _optional_env(
+    "OFFICIAL_RECONCILE_XURL_APP", _resolve_reconcile_default("xurl_app", "default")
+)
 OFFICIAL_RECONCILE_XURL_USER = _optional_env(
-    "OFFICIAL_RECONCILE_XURL_USER", "HowardLouisHL"
+    "OFFICIAL_RECONCILE_XURL_USER", _resolve_reconcile_default("xurl_user", "")
 )
 
 # Article pipeline output directories

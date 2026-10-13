@@ -43,7 +43,7 @@
 ```mermaid
 flowchart TB
     subgraph Trigger["⏰ 触发层 (每 3 小时自动 / UI 手动)"]
-        L["macOS launchd<br/>com.tizer.bookmark-auto"] --> AR["auto_run.sh<br/>(目录原子锁 + 代理环境探测)"]
+        L["macOS launchd<br/>com.x-bookmark-reports.auto-run"] --> AR["auto_run.sh<br/>(目录原子锁 + 代理环境探测)"]
         UI["Next.js 14 Dashboard (:3001)<br/>Sync / Articles / Settings / Health"] -.->|"手动触发 / SSE 实时日志"| AR
     end
 
@@ -223,7 +223,7 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 # ==========================================
 # 3. 研究搜索栈（SearXNG 主 → Firecrawl 备 → Exa 补充）
 # ==========================================
-SEARXNG_BASE_URL=http://100.99.184.51:8888
+SEARXNG_BASE_URL=http://<searxng-tailscale-ip>:8888
 FIRECRAWL_API_KEY=fc-xxxxxxxxxxxx
 FIRECRAWL_BASE_URL=https://api.firecrawl.dev/v2
 FIRECRAWL_MAX_CALLS_PER_RUN=50
@@ -325,7 +325,7 @@ python3 bin/reconcile_official_bookmarks.py --max-pages 1
 
 | 服务 Label | 职责 | 常用运维命令 |
 | :--- | :--- | :--- |
-| **`com.tizer.bookmark-auto`** | 每 3 小时（00/03/06/09/12/15/18/21 点）执行 `auto_run.sh` | `tail -f logs/bookmark-auto.log`<br/>`cat output/auto_run_state.json` |
+| **`com.x-bookmark-reports.auto-run`** | 每 3 小时（00/03/06/09/12/15/18/21 点）执行 `auto_run.sh` | `tail -f logs/bookmark-auto.log`<br/>`cat output/auto_run_state.json` |
 | **`com.xbookmarkreports.dashboard`** | 常驻运行 Next.js 生产控制台（`next start -p 3001`） | `curl -s http://127.0.0.1:3001/api/health \| python3 -m json.tool` |
 
 **前端代码更新后的标准重建流程**：

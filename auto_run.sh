@@ -35,9 +35,16 @@ export HTTP_PROXY="$PROXY_URL"
 export HTTPS_PROXY="$PROXY_URL"
 export ALL_PROXY="$PROXY_URL"
 export NODE_USE_ENV_PROXY=1
-# 无条件追加 Tailscale 内网地址到 NO_PROXY/no_proxy（launchd plist 的默认 NO_PROXY 会覆盖 :- 默认值语法），
-# 防止内网 SearXNG 请求被送进 7897 代理返回 502（修复 B-SEARXNG-INSTANCE-GONE 第一层根因）
-export NO_PROXY="${NO_PROXY:-127.0.0.1,localhost,::1},100.99.184.51,100.64.0.0/10,.ts.net"
+# 无条件追加 Tailscale 内网网段与 .env 中配置的 SEARXNG 主机到 NO_PROXY/no_proxy
+# （launchd plist 的默认 NO_PROXY 会覆盖 :- 默认值语法），防止内网 SearXNG 请求被送进代理返回 502
+_SEARXNG_HOST=""
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    _SEARXNG_HOST="$(
+        grep -E '^[[:space:]]*SEARXNG_BASE_URL=' "$SCRIPT_DIR/.env" 2>/dev/null \
+        | tail -1 | sed -E 's|^[^=]+=||; s|["'\''[:space:]]||g; s|^https?://||; s|[:/].*$||' || true
+    )"
+fi
+export NO_PROXY="${NO_PROXY:-127.0.0.1,localhost,::1}${_SEARXNG_HOST:+,$_SEARXNG_HOST},100.64.0.0/10,.ts.net"
 export no_proxy="$NO_PROXY"
 export PYTHONIOENCODING=utf-8
 export LANG="${LANG:-en_US.UTF-8}"
