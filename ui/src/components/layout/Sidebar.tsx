@@ -59,7 +59,9 @@ export function Sidebar({ counts }: { counts?: SidebarCounts }) {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-notion-sidebar transition-all duration-300",
+        // 底色必须带 dark:。notion-sidebar 是写死的浅色 #f7f6f3，
+        // 菜单文字在 .dark 下会变成浅色，否则就是浅字落在白底上。
+        "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-notion-sidebar dark:bg-notion-sidebar-dark transition-all duration-300",
         sidebarOpen ? "w-60" : "w-14"
       )}
     >
@@ -69,7 +71,7 @@ export function Sidebar({ counts }: { counts?: SidebarCounts }) {
             <div className="flex h-6 w-6 items-center justify-center rounded bg-twitter-blue text-white text-xs font-bold">
               X
             </div>
-            <span className="text-sm font-semibold text-notion-text truncate">
+            <span className="text-sm font-semibold text-notion-text dark:text-notion-text-dark truncate">
               {t("layout.sidebar.brand")}
             </span>
           </>
