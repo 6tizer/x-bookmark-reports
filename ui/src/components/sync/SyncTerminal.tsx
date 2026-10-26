@@ -8,6 +8,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { Copy, Check, Square } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 interface SyncTerminalProps {
   /** 订阅哪个 component 的 SSE；未设置时只显示空状态 */
@@ -51,6 +52,7 @@ function parseLogColor(log: string): React.ReactNode {
 }
 
 export function SyncTerminal({ component, startedAt, title, onStop }: SyncTerminalProps) {
+  const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   // 内部 state：保留最近 200 条滑动窗口
@@ -129,10 +131,10 @@ export function SyncTerminal({ component, startedAt, title, onStop }: SyncTermin
               type="button"
               onClick={onStop}
               className="flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-400 hover:bg-red-500/20 transition-colors"
-              title="停止终端日志订阅（不终止后台进程）"
+              title={t("sync.terminal.stopTitle")}
             >
               <Square size={11} fill="currentColor" />
-              Stop
+              {t("sync.terminal.stop")}
             </button>
           )}
           <button
@@ -140,13 +142,13 @@ export function SyncTerminal({ component, startedAt, title, onStop }: SyncTermin
             className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white transition-colors"
           >
             {copied ? <Check size={12} /> : <Copy size={12} />}
-            {copied ? "Copied" : "Copy"}
+            {copied ? t("common.action.copied") : t("common.action.copy")}
           </button>
         </div>
       </div>
       <div className="max-h-[300px] overflow-y-auto p-3 font-mono text-xs leading-relaxed space-y-0.5">
         {logs.length === 0 ? (
-          <p className="text-gray-500 italic">Waiting for pipeline output...</p>
+          <p className="text-gray-500 italic">{t("sync.terminal.waiting")}</p>
         ) : (
           logs.map((log, i) => (
             <div key={i} className="break-all">

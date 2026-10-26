@@ -2,22 +2,31 @@
 
 /**
  * HealthBanner — 顶部健康警告条（PR-5）
- * 每 60s 轮询 /api/health，仅在有 warnings 时渲染
+ * 每 60s 轮询 /api/health，仅在有告警时渲染；告警按 issues[].code 走 health 词典，随界面语言切换
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, X } from "lucide-react";
+import { hasMessage, useT, type MessageKey } from "@/lib/i18n";
+
+interface HealthIssue {
+  code: string;
+  params: Record<string, string | number>;
+}
 
 interface HealthResp {
   healthy: boolean;
   recentFailStreak: number;
   suggestNetworkFix?: boolean;
+  issues?: HealthIssue[];
   warnings: string[];
 }
 
 export function HealthBanner() {
-  const [warnings, setWarnings] = useState<string[]>([]);
+  const t = useT();
+  const [issues, setIssues] = useState<HealthIssue[]>([]);
+  const [fallbackWarnings, setFallbackWarnings] = useState<string[]>([]);
   const [failStreak, setFailStreak] = useState(0);
   const [suggestNetworkFix, setSuggestNetworkFix] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -29,7 +38,8 @@ export function HealthBanner() {
         const res = await fetch("/api/health");
         const json = (await res.json()) as { success: boolean; data?: HealthResp };
         if (!cancelled && json.success && json.data) {
-          setWarnings(json.data.warnings ?? []);
+          setIssues(json.data.issues ?? []);
+          setFallbackWarnings(json.data.warnings ?? []);
           setFailStreak(json.data.recentFailStreak ?? 0);
           setSuggestNetworkFix(json.data.suggestNetworkFix ?? false);
         }
@@ -40,7 +50,15 @@ export function HealthBanner() {
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
-  if (dismissed || warnings.length === 0) return null;
+  // 词典里没有的 code（服务端新增而前端未更新）回退到服务端中文文本
+  const lines = issues.length > 0
+    ? issues.map((issue, i) => {
+        const key = `health.issue.${issue.code}`;
+        return hasMessage(key) ? t(key as MessageKey, issue.params) : fallbackWarnings[i] ?? issue.code;
+      })
+    : fallbackWarnings;
+
+  if (dismissed || lines.length === 0) return null;
 
   // 连续失败 ≥3 次或流水线停摆/网络不可用时红色，否则黄色
   const isCritical = failStreak >= 3 || suggestNetworkFix;
@@ -53,18 +71,18 @@ export function HealthBanner() {
     }`}>
       <AlertTriangle size={14} className="shrink-0 mt-0.5" />
       <div className="flex-1 space-y-0.5">
-        {warnings.map((w, i) => (
+        {lines.map((w, i) => (
           <p key={i}>{w}</p>
         ))}
         {suggestNetworkFix && (
           <p>
             <Link href="/settings" className="font-medium underline underline-offset-2">
-              去设置页「一键检测并修复网络」→
+              {t("health.fixNetworkLink")}
             </Link>
           </p>
         )}
       </div>
-      <button type="button" onClick={() => setDismissed(true)} className="shrink-0 opacity-60 hover:opacity-100" title="本次会话内忽略">
+      <button type="button" onClick={() => setDismissed(true)} className="shrink-0 opacity-60 hover:opacity-100" title={t("common.action.dismiss")}>
         <X size={14} />
       </button>
     </div>

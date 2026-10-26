@@ -137,6 +137,8 @@ npm run dev
 | **Articles (`/articles`)** | 成品文章管理：阅读/编辑 Markdown、切换单篇重跑模型、查看关联研究来源与 Notion 同步状态 |
 | **Settings (`/settings`)** | 五合一配置面板：**General** / **LLM & Web Search（含 Cloudflare Browser Run 卡片与今日时长监控）** / **Schedule（launchd 预设）** / **Logs** / **Data** |
 
+> 🌏 **中英双语**：右上角「中 / EN」按钮切换界面语言，偏好存在浏览器 localStorage，首次访问按浏览器语言自动选择。文案在 `ui/src/lib/i18n/messages/<命名空间>.ts`，以英文为基准，中文必须逐键对应（缺键时 `tsc` 报错）；组件中用 `const t = useT(); t("settings.tab.general")` 取文案。服务端返回的告警、诊断结果等提供 `code + params`，由前端按当前语言渲染。
+
 > 💡 **macOS 快捷方式**：直接双击仓库根目录下的 `Open Dashboard UI.command` 即可自动检查构建并打开浏览器。
 
 ### 2. 运行全自动流水线

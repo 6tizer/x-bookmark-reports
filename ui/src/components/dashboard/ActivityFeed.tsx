@@ -16,6 +16,18 @@ import {
 } from "lucide-react";
 import type { ActivityItem, ActivityType, ActivityAction } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { hasMessage, useT, type MessageKey, type TFunction } from "@/lib/i18n";
+
+/** fs-state 派生的运行事件按 type + action 翻译；DB 里的历史日志是数据，原样显示 */
+function activityMessage(activity: ActivityItem, t: TFunction): string {
+  if (activity.metadata?.source !== "fs-state") return activity.message;
+  const runKey = `dashboard.activity.run.${activity.type}`;
+  const actionKey = `dashboard.activity.action.${activity.action}`;
+  if (!hasMessage(runKey) || !hasMessage(actionKey)) return activity.message;
+  const base = `${t(runKey as MessageKey)} — ${t(actionKey as MessageKey)}`;
+  const error = activity.metadata?.error;
+  return typeof error === "string" && error ? `${base} (${error.slice(0, 80)})` : base;
+}
 
 interface ActivityFeedProps {
   activities: ActivityItem[];
@@ -55,7 +67,7 @@ const typeColor: Record<ActivityType, string> = {
   auto_run: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
 };
 
-function formatTime(dateStr: string): string {
+function formatTime(dateStr: string, t: TFunction): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -63,13 +75,15 @@ function formatTime(dateStr: string): string {
   const diffHour = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHour / 24);
 
-  if (diffDay > 0) return `${diffDay}d ago`;
-  if (diffHour > 0) return `${diffHour}h ago`;
-  if (diffMin > 0) return `${diffMin}m ago`;
-  return "Just now";
+  if (diffDay > 0) return t("dashboard.time.daysAgo", { n: diffDay });
+  if (diffHour > 0) return t("dashboard.time.hoursAgo", { n: diffHour });
+  if (diffMin > 0) return t("dashboard.time.minutesAgo", { n: diffMin });
+  return t("dashboard.time.justNow");
 }
 
 export function ActivityFeed({ activities, isLoading }: ActivityFeedProps) {
+  const t = useT();
+
   if (isLoading) {
     return (
       <div className="rounded-lg border border-border bg-card p-4">
@@ -92,14 +106,14 @@ export function ActivityFeed({ activities, isLoading }: ActivityFeedProps) {
   if (activities.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card p-6 text-center">
-        <p className="text-sm text-muted-foreground">No recent activity</p>
+        <p className="text-sm text-muted-foreground">{t("dashboard.activity.empty")}</p>
       </div>
     );
   }
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <h2 className="text-sm font-semibold text-foreground mb-3">Recent Activity</h2>
+      <h2 className="text-sm font-semibold text-foreground mb-3">{t("dashboard.activity.title")}</h2>
       <ul className="space-y-2">
         {activities.map((activity) => (
           <li
@@ -114,10 +128,10 @@ export function ActivityFeed({ activities, isLoading }: ActivityFeedProps) {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 {actionIcon[activity.action]}
-                <p className="text-sm text-foreground truncate">{activity.message}</p>
+                <p className="text-sm text-foreground truncate">{activityMessage(activity, t)}</p>
               </div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {formatTime(activity.timestamp)}
+                {formatTime(activity.timestamp, t)}
               </p>
             </div>
           </li>

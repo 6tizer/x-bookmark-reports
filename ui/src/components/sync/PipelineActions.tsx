@@ -13,6 +13,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { PipelineOperationType } from "@/types/api";
+import { useT } from "@/lib/i18n";
 
 interface PipelineActionsProps {
   onTriggerSyncBookmarks: (opts?: {
@@ -52,6 +53,7 @@ function ActionCard({
   onTrigger: () => void;
   children: React.ReactNode;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(true);
   const active = isRunning && currentType === type;
 
@@ -74,6 +76,9 @@ function ActionCard({
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
+          title={t("sync.actions.toggleOptions")}
+          aria-label={t("sync.actions.toggleOptions")}
+          aria-expanded={expanded}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronDown
@@ -94,6 +99,7 @@ export function PipelineActions({
   isRunning,
   currentType,
 }: PipelineActionsProps) {
+  const t = useT();
   const [syncLimit, setSyncLimit] = useState("");
 
   const [pipelineLimit, setPipelineLimit] = useState("");
@@ -104,11 +110,11 @@ export function PipelineActions({
 
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold text-foreground">Actions</h2>
+      <h2 className="text-sm font-semibold text-foreground">{t("sync.actions.title")}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* Sync Bookmarks */}
         <ActionCard
-          label="Sync Bookmarks"
+          label={t("sync.actions.syncBookmarks")}
           icon={<RefreshCw size={16} />}
           type="sync_bookmarks"
           currentType={currentType}
@@ -121,13 +127,13 @@ export function PipelineActions({
         >
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Limit
+              {t("sync.actions.limit")}
               <input
                 type="number"
                 min={1}
                 value={syncLimit}
                 onChange={(e) => setSyncLimit(e.target.value)}
-                placeholder="all"
+                placeholder={t("sync.actions.limitAll")}
                 className="w-20 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
               />
             </label>
@@ -136,7 +142,7 @@ export function PipelineActions({
 
         {/* Run Pipeline */}
         <ActionCard
-          label="Run Pipeline"
+          label={t("sync.actions.runPipeline")}
           icon={<PenTool size={16} />}
           type="article_pipeline"
           currentType={currentType}
@@ -152,13 +158,13 @@ export function PipelineActions({
         >
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Limit
+              {t("sync.actions.limit")}
               <input
                 type="number"
                 min={1}
                 value={pipelineLimit}
                 onChange={(e) => setPipelineLimit(e.target.value)}
-                placeholder="all"
+                placeholder={t("sync.actions.limitAll")}
                 className="w-20 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
               />
             </label>
@@ -169,15 +175,15 @@ export function PipelineActions({
                 onChange={(e) => setPipelineResume(e.target.checked)}
                 className="rounded"
               />
-              Resume
+              {t("sync.actions.resume")}
             </label>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Model
+              {t("sync.actions.model")}
               <input
                 type="text"
                 value={pipelineModel}
                 onChange={(e) => setPipelineModel(e.target.value)}
-                placeholder="default"
+                placeholder={t("sync.actions.modelDefault")}
                 className="w-24 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
               />
             </label>
@@ -186,7 +192,7 @@ export function PipelineActions({
 
         {/* Upload to Notion */}
         <ActionCard
-          label="Upload to Notion"
+          label={t("sync.actions.uploadNotion")}
           icon={<CloudUpload size={16} />}
           type="notion_upload"
           currentType={currentType}
@@ -199,12 +205,12 @@ export function PipelineActions({
         >
           <div className="space-y-2">
             <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-              Tweet IDs (comma-separated)
+              {t("sync.actions.tweetIds")}
               <input
                 type="text"
                 value={notionIds}
                 onChange={(e) => setNotionIds(e.target.value)}
-                placeholder="e.g. 123,456,789"
+                placeholder={t("sync.actions.tweetIdsPlaceholder")}
                 className="w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
               />
             </label>

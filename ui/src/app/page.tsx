@@ -16,8 +16,10 @@ import {
   getBatchProgress as fetchBatchProgress,
 } from "@/lib/api";
 import type { BatchProgress, DashboardStats, ActivityItem, RettiwtStatus } from "@/types/api";
+import { useT } from "@/lib/i18n";
 
 export default function DashboardPage() {
+  const t = useT();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [rettiwtStatus, setRettiwtStatus] = useState<RettiwtStatus | null>(null);
@@ -55,16 +57,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!batchProgress?.isRunning) return;
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       void loadProgress();
     }, 5000);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
   }, [batchProgress?.isRunning, loadProgress]);
 
   return (
     <ClientLayout>
       <div className="space-y-6 max-w-6xl">
-        <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
+        <h1 className="text-xl font-bold text-foreground">{t("common.nav.dashboard")}</h1>
 
         <StatCards stats={stats} isLoading={isLoading} rettiwt={rettiwtStatus} />
 

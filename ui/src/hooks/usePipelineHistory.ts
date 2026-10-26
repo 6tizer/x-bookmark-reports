@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "@/lib/i18n";
 
 /** 与 /api/pipeline/history 一致的数据契约 */
 export interface PipelineHistoryItem {
@@ -29,6 +30,10 @@ export function usePipelineHistory(limit = 20): UsePipelineHistoryReturn {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 用 ref 取最新的 t，切换语言不触发重新拉取
+  const t = useT();
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -40,10 +45,10 @@ export function usePipelineHistory(limit = 20): UsePipelineHistoryReturn {
         setItems(json.data.items);
         setTotal(json.data.total);
       } else {
-        setError(json.error?.message ?? "Unknown error");
+        setError(json.error?.message ?? tRef.current("sync.history.unknownError"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error");
+      setError(err instanceof Error ? err.message : tRef.current("sync.history.networkError"));
     } finally {
       setIsLoading(false);
     }

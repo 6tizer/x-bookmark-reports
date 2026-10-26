@@ -8,6 +8,7 @@ import { RefreshCw, Loader2, CheckCircle, XCircle, AlertTriangle } from "lucide-
 import { usePipelineHistory } from "@/hooks/usePipelineHistory";
 // 统一按产品时区（Asia/Singapore）展示日期
 import { formatDateTime } from "@/lib/format-date";
+import { useT, hasMessage, type MessageKey, type TFunction } from "@/lib/i18n";
 
 // 状态映射为颜色 + 图标
 function statusBadge(status: string): { color: string; icon: React.ReactNode } {
@@ -17,12 +18,18 @@ function statusBadge(status: string): { color: string; icon: React.ReactNode } {
   return { color: "text-muted-foreground", icon: <Loader2 size={12} className="animate-spin" /> };
 }
 
+// 未知状态（服务端新增值）回退显示原文
+function statusLabel(status: string, t: TFunction): string {
+  const key = `sync.history.status.${status}`;
+  return hasMessage(key) ? t(key as MessageKey) : status;
+}
+
 // 秒数格式化为 1m30s 风格
-function formatDuration(sec: number): string {
-  if (sec < 60) return `${sec}s`;
+function formatDuration(sec: number, t: TFunction): string {
+  if (sec < 60) return t("sync.history.durationSec", { s: sec });
   const m = Math.floor(sec / 60);
   const s = sec % 60;
-  return `${m}m${s.toString().padStart(2, "0")}s`;
+  return t("sync.history.durationMin", { m, s: s.toString().padStart(2, "0") });
 }
 
 interface PipelineHistoryProps {
@@ -31,6 +38,7 @@ interface PipelineHistoryProps {
 }
 
 export function PipelineHistory(_: PipelineHistoryProps = {}) {
+  const t = useT();
   const { items, total, isLoading, error, refresh } = usePipelineHistory(20);
 
   // 首次加载中且无数据
@@ -38,7 +46,7 @@ export function PipelineHistory(_: PipelineHistoryProps = {}) {
     return (
       <div className="rounded-lg border border-border bg-card p-6 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
         <Loader2 size={12} className="animate-spin" />
-        Loading history...
+        {t("sync.history.loading")}
       </div>
     );
   }
@@ -47,9 +55,9 @@ export function PipelineHistory(_: PipelineHistoryProps = {}) {
   if (error && items.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card p-6 text-center">
-        <p className="text-xs text-red-500">Failed to load history: {error}</p>
+        <p className="text-xs text-red-500">{t("sync.history.loadFailed", { error })}</p>
         <button onClick={refresh} className="mt-2 text-xs text-twitter-blue hover:underline">
-          Retry
+          {t("common.action.retry")}
         </button>
       </div>
     );
@@ -59,9 +67,9 @@ export function PipelineHistory(_: PipelineHistoryProps = {}) {
   if (items.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card p-6 text-center">
-        <p className="text-sm text-muted-foreground">No history yet</p>
+        <p className="text-sm text-muted-foreground">{t("sync.history.empty")}</p>
         <p className="text-[10px] text-muted-foreground mt-1">
-          auto_run.sh 跑完后会写入 output/auto_run_history.jsonl
+          {t("sync.history.emptyHint")}
         </p>
       </div>
     );
@@ -71,7 +79,7 @@ export function PipelineHistory(_: PipelineHistoryProps = {}) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">
-          History
+          {t("sync.history.title")}
           <span className="ml-2 text-[11px] text-muted-foreground font-normal">
             {items.length} / {total}
           </span>
@@ -83,7 +91,7 @@ export function PipelineHistory(_: PipelineHistoryProps = {}) {
           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
         >
           {isLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-          Refresh
+          {t("common.action.refresh")}
         </button>
       </div>
 
@@ -92,14 +100,14 @@ export function PipelineHistory(_: PipelineHistoryProps = {}) {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Started</th>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Duration</th>
-                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Sync</th>
-                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Process</th>
-                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Article</th>
-                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Notion</th>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Step / Error</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">{t("sync.history.col.status")}</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">{t("sync.history.col.started")}</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">{t("sync.history.col.duration")}</th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground">{t("sync.history.col.sync")}</th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground">{t("sync.history.col.process")}</th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground">{t("sync.history.col.article")}</th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground">{t("sync.history.col.notion")}</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">{t("sync.history.col.stepError")}</th>
               </tr>
             </thead>
             <tbody>
@@ -110,7 +118,7 @@ export function PipelineHistory(_: PipelineHistoryProps = {}) {
                     <td className="px-3 py-2">
                       <div className={`flex items-center gap-1 font-medium capitalize ${badge.color}`}>
                         {badge.icon}
-                        {item.status}
+                        {statusLabel(item.status, t)}
                       </div>
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
@@ -119,7 +127,7 @@ export function PipelineHistory(_: PipelineHistoryProps = {}) {
                         catch { return item.startedAt; }
                       })()}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{formatDuration(item.durationSec)}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{formatDuration(item.durationSec, t)}</td>
                     <td className="px-3 py-2 text-right text-muted-foreground">{item.syncNew || "—"}</td>
                     <td className="px-3 py-2 text-right text-muted-foreground">{item.processNew || "—"}</td>
                     <td className="px-3 py-2 text-right text-muted-foreground">{item.articleNew || "—"}</td>

@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { BookmarkToolbar } from "./BookmarkToolbar";
 // 统一按产品时区（Asia/Singapore）展示日期
 import { formatDate } from "@/lib/format-date";
+import { useT } from "@/lib/i18n";
 
 interface BookmarkTableProps {
   bookmarks: Bookmark[];
@@ -44,6 +45,7 @@ export function BookmarkTable({
   onUpdateTags,
   onStartRead,
 }: BookmarkTableProps) {
+  const t = useT();
   const [sortField, setSortField] = useState<SortField>("bookmarkedAt");
   const [sortDesc, setSortDesc] = useState(true);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -102,7 +104,7 @@ export function BookmarkTable({
     return (
       <div className="rounded-lg border border-border bg-card p-8 text-center">
         <BookmarkIcon size={32} className="mx-auto text-muted-foreground mb-2" />
-        <p className="text-sm text-muted-foreground">No bookmarks found</p>
+        <p className="text-sm text-muted-foreground">{t("bookmarks.list.empty")}</p>
       </div>
     );
   }
@@ -115,23 +117,28 @@ export function BookmarkTable({
         <thead>
           <tr className="border-b border-border bg-muted/50">
             <th className="px-3 py-2.5 w-8">
-              <button onClick={onSelectAll} className="text-muted-foreground hover:text-foreground">
+              <button
+                onClick={onSelectAll}
+                title={t("bookmarks.table.selectAll")}
+                aria-label={t("bookmarks.table.selectAll")}
+                className="text-muted-foreground hover:text-foreground"
+              >
                 {allSelected ? <CheckSquare size={16} /> : <Square size={16} />}
               </button>
             </th>
-            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Author</th>
-            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Tweet</th>
+            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("bookmarks.table.author")}</th>
+            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("bookmarks.table.tweet")}</th>
             <th
               className="px-3 py-2.5 text-left font-medium text-muted-foreground cursor-pointer hover:text-foreground"
               onClick={() => handleSort("bookmarkedAt")}
             >
               <span className="flex items-center gap-1">
-                Bookmarked <ArrowUpDown size={12} />
+                {t("bookmarks.table.bookmarked")} <ArrowUpDown size={12} />
               </span>
             </th>
-            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Stats</th>
-            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Tags</th>
-            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Lifecycle</th>
+            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("bookmarks.table.stats")}</th>
+            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("bookmarks.table.tags")}</th>
+            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("bookmarks.table.lifecycle")}</th>
           </tr>
         </thead>
         <tbody>
@@ -147,6 +154,7 @@ export function BookmarkTable({
                 <td className="px-3 py-3">
                   <button
                     onClick={() => onToggleSelection(bookmark.id)}
+                    aria-label={t("bookmarks.table.select")}
                     className="text-muted-foreground hover:text-foreground"
                   >
                     {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
@@ -234,6 +242,7 @@ export function BookmarkTable({
 }
 
 function StatusBadge({ status }: { status: BookmarkStatus }) {
+  const t = useT();
   const colors: Record<BookmarkStatus, string> = {
     synced: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
     read: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
@@ -242,8 +251,8 @@ function StatusBadge({ status }: { status: BookmarkStatus }) {
   };
 
   return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${colors[status]}`}>
-      {status}
+    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${colors[status]}`}>
+      {t(`bookmarks.status.${status}`)}
     </span>
   );
 }
@@ -256,6 +265,7 @@ function LifecycleBadge({
   lifecycle?: BookmarkLifecycle;
   status: BookmarkStatus;
 }) {
+  const t = useT();
   if (!lifecycle) {
     return <StatusBadge status={status} />;
   }
@@ -265,17 +275,11 @@ function LifecycleBadge({
     written: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
     uploaded: "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
   };
-  const labels: Record<BookmarkLifecycle, string> = {
-    pending: "待生成",
-    drafted: "已报告",
-    written: "已成文",
-    uploaded: "已 Notion",
-  };
   return (
     <span
       className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${colors[lifecycle]}`}
     >
-      {labels[lifecycle]}
+      {t(`bookmarks.lifecycle.${lifecycle}`)}
     </span>
   );
 }

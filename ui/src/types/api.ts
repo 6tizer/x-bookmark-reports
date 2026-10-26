@@ -605,14 +605,29 @@ export interface NetworkProbe {
 }
 
 export interface NetworkCandidate {
+  /** manual / env_file / saved / system / process_env / local_port / direct → network 词典 source.<source> */
   source: string;
+  /** 中文标签（CLI 日志用；界面按 source + label_params 渲染） */
   label: string;
+  /** process_env: { var }；local_port: { name } */
+  label_params?: Record<string, string>;
   /** null = 直连 */
   proxy: string | null;
   ok: boolean;
+  /** 中文说明（CLI 日志用；界面按 detail_code 渲染） */
   detail: string;
+  /** ok / port_closed / unreachable → network 词典 detail.<code> */
+  detail_code?: "ok" | "port_closed" | "unreachable";
+  /** unreachable 时不可达的探测目标名（x / twimg / notion） */
+  failed?: string[];
   latency_ms: number | null;
   probes: Record<string, NetworkProbe>;
+}
+
+export interface NetworkHintCode {
+  /** chosen_proxy / chosen_direct / offline / env_proxy_stale / app_installed_not_running → network 词典 hint.<code> */
+  code: string;
+  params: Record<string, string | number>;
 }
 
 export interface NetworkProfile {
@@ -623,7 +638,10 @@ export interface NetworkProfile {
   source: string | null;
   label: string | null;
   candidates: NetworkCandidate[];
+  /** 中文提示（CLI 日志用） */
   hints: string[];
+  /** 结构化提示，界面按当前语言渲染；旧档案可能没有此字段，回退 hints */
+  hint_codes?: NetworkHintCode[];
   /** mode=offline 时保留的最近一次可用结果 */
   last_good?: { mode: string; proxy: string | null };
 }

@@ -13,6 +13,7 @@ import { Newspaper, Clock, Search, RefreshCw, PenLine, Play, Layers } from "luci
 import type { Article, ArticleStatus, PaginatedResponse } from "@/types/api";
 // 统一按产品时区（Asia/Singapore）展示日期
 import { formatDate } from "@/lib/format-date";
+import { useT, hasMessage, type MessageKey, type TFunction } from "@/lib/i18n";
 
 const PIPELINE_FILTER_STATUSES: ArticleStatus[] = [
   "draft",
@@ -26,20 +27,25 @@ const PIPELINE_FILTER_STATUSES: ArticleStatus[] = [
 
 const PIPELINE_MODEL_STORAGE = "articlePipelineModel";
 
-function statusLabel(s: ArticleStatus): string {
-  const map: Partial<Record<ArticleStatus, string>> = {
-    draft: "Draft",
-    metadata_done: "Metadata",
-    researched: "Researched",
-    written: "Written",
-    uploaded: "Uploaded",
-    failed: "Failed",
-    skipped: "Skipped",
-  };
-  return map[s] ?? s.replace(/_/g, " ");
+// /api/settings/model-options 返回的下拉选项
+interface ModelOption {
+  value: string;
+  label: string;
+  i18nKey?: "default" | "envCustom" | "deepseekFlash" | "deepseekPro";
+  params?: { model: string };
+}
+
+function modelOptionLabel(o: ModelOption, t: TFunction): string {
+  return o.i18nKey ? t(`articles.model.${o.i18nKey}` as MessageKey, o.params) : o.label;
+}
+
+function statusLabel(s: ArticleStatus, t: TFunction): string {
+  const key = `articles.status.${s}`;
+  return hasMessage(key) ? t(key as MessageKey) : s.replace(/_/g, " ");
 }
 
 export default function ArticlesPage() {
+  const t = useT();
   const [articles, setArticles] = useState<Article[]>([]);
   const [total, setTotal] = useState(0);
   // 页头口径：drafts / finished / failed（与筛选后的 total 解耦）
@@ -53,7 +59,7 @@ export default function ArticlesPage() {
   const [statusFilter, setStatusFilter] = useState<ArticleStatus | undefined>(undefined);
   const [pipelineModel, setPipelineModel] = useState("");
   // 从 API 动态加载模型下拉选项（替代硬编码 MODEL_OPTIONS）
-  const [modelOptions, setModelOptions] = useState<{ value: string; label: string }[]>([]);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
   const [runBusyId, setRunBusyId] = useState<string | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -136,9 +142,9 @@ export default function ArticlesPage() {
         tweetId: article.id,
         model: pipelineModel || undefined,
       });
-      setToast(`Pipeline started for ${article.id.slice(0, 12)}…`);
+      setToast(t("articles.list.toast.runStarted", { id: article.id.slice(0, 12) }));
     } catch (err) {
-      setToast(err instanceof Error ? err.message : "Failed to start pipeline");
+      setToast(err instanceof Error ? err.message : t("articles.list.toast.runFailed"));
     } finally {
       setRunBusyId(null);
     }
@@ -163,9 +169,9 @@ export default function ArticlesPage() {
         model: pipelineModel || undefined,
         resume: true,
       });
-      setToast("Batch pipeline started");
+      setToast(t("articles.list.toast.batchStarted"));
     } catch (err) {
-      setToast(err instanceof Error ? err.message : "Failed to start batch");
+      setToast(err instanceof Error ? err.message : t("articles.list.toast.batchFailed"));
     } finally {
       setBatchBusy(false);
     }
@@ -176,11 +182,11 @@ export default function ArticlesPage() {
       <div className="space-y-4 max-w-5xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-foreground">Articles</h1>
+            <h1 className="text-xl font-bold text-foreground">{t("common.nav.articles")}</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               {listStats
-                ? `${listStats.drafts} drafts · ${listStats.finished} finished · ${listStats.failed} failed`
-                : `${total} article${total === 1 ? "" : "s"}`}
+                ? t("articles.list.stats", listStats)
+                : t(total === 1 ? "articles.list.totalOne" : "articles.list.totalOther", { count: total })}
             </p>
           </div>
 
@@ -191,12 +197,14 @@ export default function ArticlesPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && fetchData(statusFilter, search)}
-                placeholder="Search articles..."
+                placeholder={t("articles.list.searchPlaceholder")}
                 className="h-8 rounded-md border border-border bg-muted px-2.5 text-sm outline-none focus:ring-1 focus:ring-ring w-44"
               />
               <button
                 type="button"
                 onClick={() => fetchData(statusFilter, search)}
+                title={t("common.action.search")}
+                aria-label={t("common.action.search")}
                 className="flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted transition-colors"
               >
                 <Search size={14} />
@@ -212,29 +220,29 @@ export default function ArticlesPage() {
               }}
               className="h-8 rounded-md border border-border bg-muted px-2 text-sm outline-none"
             >
-              <option value="">All pipeline status</option>
+              <option value="">{t("articles.list.allStatus")}</option>
               {PIPELINE_FILTER_STATUSES.map((st) => (
                 <option key={st} value={st}>
-                  {statusLabel(st)}
+                  {statusLabel(st, t)}
                 </option>
               ))}
             </select>
 
-            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Run model</span>
+            <span className="text-[11px] text-muted-foreground whitespace-nowrap">{t("articles.list.runModel")}</span>
             <select
               value={pipelineModel}
               onChange={(e) => persistModel(e.target.value)}
-              title="单条 Run / Batch run 使用的 rewrite 模型"
+              title={t("articles.list.runModelTitle")}
               className="h-8 rounded-md border border-border bg-muted px-2 text-xs outline-none max-w-[140px]"
             >
               {modelOptions.length === 0 ? (
                 <option disabled value="">
-                  Loading...
+                  {t("common.status.loading")}
                 </option>
               ) : (
                 modelOptions.map((o) => (
                   <option key={o.value || "default"} value={o.value}>
-                    {o.label}
+                    {modelOptionLabel(o, t)}
                   </option>
                 ))
               )}
@@ -247,12 +255,14 @@ export default function ArticlesPage() {
               className="flex h-8 items-center gap-1 rounded-md border border-border bg-muted px-2 text-xs font-medium hover:bg-muted/80 disabled:opacity-50"
             >
               <Layers size={14} />
-              {batchBusy ? "Starting…" : "Batch run"}
+              {batchBusy ? t("articles.starting") : t("articles.list.batchRun")}
             </button>
 
             <button
               type="button"
               onClick={() => fetchData(statusFilter, search)}
+              title={t("common.action.refresh")}
+              aria-label={t("common.action.refresh")}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted transition-colors"
             >
               <RefreshCw size={14} />
@@ -284,7 +294,7 @@ export default function ArticlesPage() {
         ) : articles.length === 0 ? (
           <div className="rounded-lg border border-border bg-card p-8 text-center">
             <Newspaper size={32} className="mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">No articles yet</p>
+            <p className="text-sm text-muted-foreground">{t("articles.list.empty")}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -308,7 +318,7 @@ export default function ArticlesPage() {
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap ${statusColors[article.status]}`}
                       >
-                        {statusLabel(article.status)}
+                        {statusLabel(article.status, t)}
                       </span>
                     </div>
                     <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
@@ -316,7 +326,7 @@ export default function ArticlesPage() {
                         <Clock size={11} />
                         {formatDate(article.updatedAt)}
                       </span>
-                      <span>{article.wordCount.toLocaleString()} words</span>
+                      <span>{t("articles.words", { count: article.wordCount.toLocaleString() })}</span>
                       <span className="font-mono text-[10px] opacity-70 truncate max-w-[120px]">
                         {article.id}
                       </span>
@@ -329,7 +339,7 @@ export default function ArticlesPage() {
                     value={pipelineModel}
                     onChange={(e) => persistModel(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
-                    title="本条 Run 使用的模型"
+                    title={t("articles.list.rowModelTitle")}
                     className="h-8 max-w-[110px] rounded-md border border-border bg-background px-1 text-[10px] outline-none"
                   >
                     {modelOptions.length === 0 ? (
@@ -339,14 +349,14 @@ export default function ArticlesPage() {
                     ) : (
                       modelOptions.map((o) => (
                         <option key={`row-${o.value || "default"}`} value={o.value}>
-                          {o.label}
+                          {modelOptionLabel(o, t)}
                         </option>
                       ))
                     )}
                   </select>
                   <button
                   type="button"
-                  title="Run article pipeline for this tweet"
+                  title={t("articles.list.runTitle")}
                   data-run-button
                   data-article-status={article.status}
                   disabled={runBusyId === article.id}
@@ -354,7 +364,7 @@ export default function ArticlesPage() {
                   className="shrink-0 flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted disabled:opacity-50"
                 >
                   <Play size={12} />
-                  {runBusyId === article.id ? "…" : "Run"}
+                  {runBusyId === article.id ? "…" : t("articles.list.run")}
                 </button>
                 </div>
               </div>
@@ -365,7 +375,7 @@ export default function ArticlesPage() {
         {/* 翻页控件 — 列表底部 Previous / Page N / Next */}
         <div className="flex items-center justify-between mt-4">
           <p className="text-xs text-muted-foreground">
-            Showing {articles.length} of {total}
+            {t("articles.list.showing", { count: articles.length, total })}
           </p>
           <div className="flex items-center gap-1">
             <button
@@ -374,16 +384,16 @@ export default function ArticlesPage() {
               disabled={page <= 1}
               className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50 transition-colors"
             >
-              Previous
+              {t("articles.list.prev")}
             </button>
-            <span className="px-2 text-xs text-muted-foreground">Page {page}</span>
+            <span className="px-2 text-xs text-muted-foreground">{t("articles.list.page", { page })}</span>
             <button
               type="button"
               onClick={() => void fetchData(statusFilter, search, page + 1)}
               disabled={!hasMore}
               className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50 transition-colors"
             >
-              Next
+              {t("articles.list.next")}
             </button>
           </div>
         </div>
@@ -401,19 +411,22 @@ export default function ArticlesPage() {
             <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
               <h2 className="text-base font-semibold text-foreground">
                 {confirmingArticle.status === "uploaded"
-                  ? "该文章已上传 Notion"
-                  : "该文章已成文"}
+                  ? t("articles.confirm.titleUploaded")
+                  : t("articles.confirm.titleWritten")}
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                「{confirmingArticle.title.slice(0, 60)}
-                {confirmingArticle.title.length > 60 ? "…" : ""}」
+                {t("articles.confirm.quotedTitle", {
+                  title:
+                    confirmingArticle.title.slice(0, 60) +
+                    (confirmingArticle.title.length > 60 ? "…" : ""),
+                })}
               </p>
               <p className="mt-2 text-sm text-foreground">
-                再次运行 pipeline 会
+                {t("articles.confirm.bodyBefore")}
                 <span className="font-medium text-red-600 dark:text-red-400">
-                  覆盖
+                  {t("articles.confirm.bodyEmphasis")}
                 </span>
-                现有结果。确认继续吗？
+                {t("articles.confirm.bodyAfter")}
               </p>
               <div className="mt-5 flex items-center justify-end gap-2">
                 <button
@@ -421,7 +434,7 @@ export default function ArticlesPage() {
                   onClick={() => setConfirmingArticle(null)}
                   className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors"
                 >
-                  取消
+                  {t("common.action.cancel")}
                 </button>
                 <button
                   type="button"
@@ -432,7 +445,7 @@ export default function ArticlesPage() {
                   }}
                   className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 transition-colors"
                 >
-                  确认运行
+                  {t("articles.confirm.run")}
                 </button>
               </div>
             </div>

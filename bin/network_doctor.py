@@ -127,34 +127,37 @@ def _read_macos_system_proxy() -> Optional[str]:
 
 
 def build_candidates(manual: Optional[str]) -> List[Dict[str, Any]]:
-    """按优先级生成候选列表（按代理地址去重）。"""
-    raw: List[Tuple[str, str, Optional[str]]] = []
+    """按优先级生成候选列表（按代理地址去重）。
+
+    label 为中文（CLI 日志用）；WebUI 按 source + label_params 走 network 词典渲染当前语言。
+    """
+    raw: List[Tuple[str, str, Dict[str, Any], Optional[str]]] = []
     if manual:
-        raw.append(("manual", "手动填写", manual))
+        raw.append(("manual", "手动填写", {}, manual))
     env_proxy = _read_env_file_proxy()
     if env_proxy:
-        raw.append(("env_file", ".env 中的 PROXY", env_proxy))
+        raw.append(("env_file", ".env 中的 PROXY", {}, env_proxy))
     saved = effective_decision(load_profile())
     if saved and saved["mode"] == "proxy":
-        raw.append(("saved", "上次检测可用的代理", saved["proxy"]))
+        raw.append(("saved", "上次检测可用的代理", {}, saved["proxy"]))
     system_proxy = _read_macos_system_proxy()
     if system_proxy:
-        raw.append(("system", "macOS 系统代理", system_proxy))
+        raw.append(("system", "macOS 系统代理", {}, system_proxy))
     for key in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
         if os.environ.get(key):
-            raw.append(("process_env", f"环境变量 {key}", os.environ[key]))
+            raw.append(("process_env", f"环境变量 {key}", {"var": key}, os.environ[key]))
     for port, name in COMMON_LOCAL_PORTS:
-        raw.append(("local_port", f"本机 {name} 端口", f"http://127.0.0.1:{port}"))
+        raw.append(("local_port", f"本机 {name} 端口", {"name": name}, f"http://127.0.0.1:{port}"))
 
     seen = set()
     result: List[Dict[str, Any]] = []
-    for source, label, value in raw:
+    for source, label, label_params, value in raw:
         proxy = _normalize_proxy(value or "")
         if not proxy or proxy in seen:
             continue
         seen.add(proxy)
-        result.append({"source": source, "label": label, "proxy": proxy})
-    result.append({"source": "direct", "label": "直连（不走代理）", "proxy": None})
+        result.append({"source": source, "label": label, "label_params": label_params, "proxy": proxy})
+    result.append({"source": "direct", "label": "直连（不走代理）", "label_params": {}, "proxy": None})
     return result
 
 
@@ -190,7 +193,10 @@ def probe_candidate(candidate: Dict[str, Any]) -> Dict[str, Any]:
     result = dict(candidate)
     proxy = candidate["proxy"]
     if proxy and not _port_open(proxy):
-        result.update(ok=False, detail="端口没有程序在监听", probes={}, latency_ms=None)
+        result.update(
+            ok=False, detail="端口没有程序在监听", detail_code="port_closed", failed=[],
+            probes={}, latency_ms=None,
+        )
         return result
     with ThreadPoolExecutor(max_workers=len(PROBE_URLS)) as pool:
         futures = {name: pool.submit(_probe_url, url, proxy) for name, url in PROBE_URLS}
@@ -200,30 +206,44 @@ def probe_candidate(candidate: Dict[str, Any]) -> Dict[str, Any]:
     result["ok"] = not failed
     result["latency_ms"] = max(p["ms"] for p in probes.values())
     result["detail"] = "全部可达" if not failed else "无法访问：" + "、".join(failed)
+    result["detail_code"] = "ok" if not failed else "unreachable"
+    result["failed"] = failed
     return result
 
 
-def _build_hints(chosen: Optional[Dict[str, Any]], results: List[Dict[str, Any]]) -> List[str]:
+def _build_hints(
+    chosen: Optional[Dict[str, Any]], results: List[Dict[str, Any]]
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """返回 (中文提示, 结构化提示)。结构化提示 {code, params} 供 WebUI 按 network 词典 hint.<code> 渲染。"""
     hints: List[str] = []
+    codes: List[Dict[str, Any]] = []
     env_proxy = _normalize_proxy(_read_env_file_proxy() or "")
     if chosen is None:
         hints.append("直连和所有代理都无法访问 X / Notion：请检查网络，或启动代理软件（Clash Verge / Surge / v2rayN）后再检测一次。")
+        codes.append({"code": "offline", "params": {}})
     elif chosen["source"] == "direct":
         hints.append("当前网络直连即可访问 X / Notion，流水线将不走代理。")
+        codes.append({"code": "chosen_direct", "params": {}})
     else:
         hints.append(f"流水线将使用代理 {chosen['proxy']}（{chosen['label']}）。")
+        codes.append({
+            "code": "chosen_proxy",
+            "params": {"proxy": chosen["proxy"], "source": chosen["source"], **chosen.get("label_params", {})},
+        })
     if env_proxy and chosen and chosen.get("proxy") != env_proxy:
         hints.append(
             f".env 中的 PROXY（{env_proxy}）当前不可用，已自动改用上面的结果；"
             "无需修改 .env，如想固定可在设置页 Proxy URL 中更新。"
         )
+        codes.append({"code": "env_proxy_stale", "params": {"envProxy": env_proxy}})
     probed_ports = {r["proxy"]: r for r in results if r.get("proxy")}
     for app_path, name, port in KNOWN_PROXY_APPS:
         url = f"http://127.0.0.1:{port}"
         r = probed_ports.get(url)
         if os.path.isdir(app_path) and (r is None or not r.get("ok")) and not _port_open(url):
             hints.append(f"检测到已安装 {name}，但本机 {port} 端口未开启；如需走 {name}，打开它后再点一次检测即可自动切换。")
-    return hints
+            codes.append({"code": "app_installed_not_running", "params": {"name": name, "port": port}})
+    return hints, codes
 
 
 def run_detection(manual: Optional[str], probe_all: bool) -> Dict[str, Any]:
@@ -256,7 +276,7 @@ def run_detection(manual: Optional[str], probe_all: bool) -> Dict[str, Any]:
         profile.update(mode="offline", proxy=None, source=None, label=None)
         if last_good:
             profile["last_good"] = last_good
-    profile["hints"] = _build_hints(chosen, results)
+    profile["hints"], profile["hint_codes"] = _build_hints(chosen, results)
     return profile
 
 

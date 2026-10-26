@@ -20,14 +20,15 @@ import {
 import { useBookmarkStore } from "@/store/useBookmarkStore";
 import { mockBookmarks, mockArticles } from "@/db/mock";
 import { cn } from "@/lib/utils";
+import { useT, type MessageKey } from "@/lib/i18n";
 
 // /reports 路由已删除（PR-3 死代码清理），导航条不再展示 Reports
-const pageNavItems = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Bookmarks", href: "/bookmarks", icon: Bookmark },
-  { label: "Sync", href: "/sync", icon: RefreshCw },
-  { label: "Articles", href: "/articles", icon: Newspaper },
-  { label: "Settings", href: "/settings", icon: Settings },
+const pageNavItems: { labelKey: MessageKey; href: string; icon: typeof LayoutDashboard }[] = [
+  { labelKey: "common.nav.dashboard", href: "/", icon: LayoutDashboard },
+  { labelKey: "common.nav.bookmarks", href: "/bookmarks", icon: Bookmark },
+  { labelKey: "common.nav.sync", href: "/sync", icon: RefreshCw },
+  { labelKey: "common.nav.articles", href: "/articles", icon: Newspaper },
+  { labelKey: "common.nav.settings", href: "/settings", icon: Settings },
 ];
 
 export function CommandPalette() {
@@ -35,6 +36,7 @@ export function CommandPalette() {
   const [search, setSearch] = useState("");
   const router = useRouter();
   const bookmarkStore = useBookmarkStore();
+  const t = useT();
 
   // Load mock data into stores if empty
   useEffect(() => {
@@ -102,7 +104,7 @@ export function CommandPalette() {
             <Command.Input
               value={search}
               onValueChange={setSearch}
-              placeholder="Search bookmarks, articles, or navigate..."
+              placeholder={t("layout.palette.placeholder")}
               className="flex-1 h-11 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               autoFocus
             />
@@ -110,13 +112,18 @@ export function CommandPalette() {
 
           <Command.List className="max-h-[60vh] overflow-y-auto p-2">
             <Command.Empty className="py-6 text-center text-sm text-muted-foreground">
-              No results found.
+              {t("layout.palette.empty")}
             </Command.Empty>
 
             {/* Navigation */}
-            <Command.Group heading="Navigation">
+            <Command.Group heading={t("layout.palette.group.navigation")}>
               {pageNavItems
-                .filter((item) => item.label.toLowerCase().includes(search.toLowerCase()))
+                .map((item) => ({ ...item, label: t(item.labelKey) }))
+                .filter((item) => {
+                  // 同时匹配当前语言的名称和路由路径，中文界面下输入英文也能跳转
+                  const q = search.toLowerCase();
+                  return item.label.toLowerCase().includes(q) || item.href.includes(q);
+                })
                 .map((item) => (
                   <Command.Item
                     key={item.href}
@@ -134,7 +141,7 @@ export function CommandPalette() {
 
             {/* Bookmarks */}
             {filteredBookmarks.length > 0 && (
-              <Command.Group heading="Bookmarks">
+              <Command.Group heading={t("layout.palette.group.bookmarks")}>
                 {filteredBookmarks.map((b) => (
                   <Command.Item
                     key={b.id}
@@ -154,7 +161,7 @@ export function CommandPalette() {
 
             {/* Articles */}
             {filteredArticles.length > 0 && (
-              <Command.Group heading="Articles">
+              <Command.Group heading={t("layout.palette.group.articles")}>
                 {filteredArticles.map((a) => (
                   <Command.Item
                     key={a.id}
@@ -174,13 +181,13 @@ export function CommandPalette() {
 
           <div className="flex items-center gap-3 border-t border-border bg-muted px-3 py-1.5 text-[10px] text-muted-foreground">
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-border bg-background px-1">↑↓</kbd> to navigate
+              <kbd className="rounded border border-border bg-background px-1">↑↓</kbd> {t("layout.palette.hint.navigate")}
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-border bg-background px-1">↵</kbd> to select
+              <kbd className="rounded border border-border bg-background px-1">↵</kbd> {t("layout.palette.hint.select")}
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-border bg-background px-1">esc</kbd> to close
+              <kbd className="rounded border border-border bg-background px-1">esc</kbd> {t("layout.palette.hint.close")}
             </span>
           </div>
         </Command>

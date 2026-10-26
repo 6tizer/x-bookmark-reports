@@ -18,6 +18,7 @@ import {
 import type { ApiResponse, LogComponent } from "@/types/api";
 // 下一次触发时刻按产品时区（Asia/Singapore）计算，不依赖 Node 进程所在机器的时区
 import { formatDateTime, localHourMinute } from "@/lib/format-date";
+import healthMessages from "@/lib/i18n/messages/health";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,15 @@ interface HealthData {
   network: { mode: string; proxy: string | null; checkedAt: string | null } | null;
   /** 网络不可用或流水线停摆时为 true，HealthBanner 据此给出「一键修复网络」入口 */
   suggestNetworkFix: boolean;
+  /** 结构化告警，前端按 health 词典 issue.<code> 渲染为当前语言 */
+  issues: HealthIssue[];
+  /** issues 的中文文本版 */
   warnings: string[];
+}
+
+interface HealthIssue {
+  code: string;
+  params: Record<string, string | number>;
 }
 
 // 超过这个时长没有成功运行就告警（每 3h 一次，容忍错过 1 次）
@@ -423,46 +432,49 @@ interface RunSignals {
   hoursSinceSuccess: number | null;
 }
 
-function buildWarnings(
-  data: Omit<HealthData, "healthy" | "warnings" | "suggestNetworkFix">,
+function buildIssues(
+  data: Omit<HealthData, "healthy" | "warnings" | "issues" | "suggestNetworkFix">,
   signals: RunSignals
-): string[] {
-  const warnings: string[] = [];
+): HealthIssue[] {
+  const issues: HealthIssue[] = [];
 
   if (data.recentFailStreak >= 3) {
-    warnings.push(`最近 ${data.recentFailStreak} 次流水线连续失败，请检查日志`);
+    issues.push({ code: "failStreak", params: { count: data.recentFailStreak } });
   }
   if (signals.interrupted) {
-    warnings.push(
-      `上一次自动运行在「${signals.interrupted.step}」步骤中断且没有记录结果（${formatDateTime(signals.interrupted.ts)}），请查看 logs/bookmark-auto.log`
-    );
+    issues.push({
+      code: "interrupted",
+      params: { step: signals.interrupted.step, at: formatDateTime(signals.interrupted.ts) },
+    });
   }
   if (data.launchd.loaded && signals.hoursSinceSuccess !== null && signals.hoursSinceSuccess > STALL_HOURS) {
-    warnings.push(
-      `距上次成功运行已 ${Math.floor(signals.hoursSinceSuccess)} 小时（正常每 3 小时一次），流水线可能已停摆`
-    );
+    issues.push({ code: "stalled", params: { hours: Math.floor(signals.hoursSinceSuccess) } });
   }
   if (data.network?.mode === "offline") {
-    warnings.push("网络诊断显示直连和所有代理都无法访问 X / Notion");
+    issues.push({ code: "networkOffline", params: {} });
   }
   if (data.pendingUploads > 10) {
-    warnings.push(`${data.pendingUploads} 篇文章积压未上传到 Notion`);
+    issues.push({ code: "pendingUploads", params: { count: data.pendingUploads } });
   }
   if (data.apiStatus.searxng === "error") {
-    warnings.push(
-      "SearXNG 实例不可达，研究流量已回退至 Firecrawl / Exa（请检查 SearXNG 容器与网络连接）"
-    );
+    issues.push({ code: "searxngError", params: {} });
   }
   if (data.apiStatus.searxng === "degraded") {
-    warnings.push(
-      "SearXNG 实例可达但搜索返回 0 结果（引擎可能被限流），研究流量将转向 Firecrawl 消耗额度"
-    );
+    issues.push({ code: "searxngDegraded", params: {} });
   }
   if (!data.launchd.loaded) {
-    warnings.push("launchd 调度未加载，流水线不会自动运行");
+    issues.push({ code: "launchdNotLoaded", params: {} });
   }
 
-  return warnings;
+  return issues;
+}
+
+/** 中文文本版告警（curl / 日志可读），文案与前端共用 health 词典 */
+function renderIssueZh(issue: HealthIssue): string {
+  const text = (healthMessages.zh as Record<string, string>)[`issue.${issue.code}`] ?? issue.code;
+  return text.replace(/\{(\w+)\}/g, (m, name: string) =>
+    name in issue.params ? String(issue.params[name]) : m
+  );
 }
 
 export async function GET(): Promise<NextResponse<ApiResponse<HealthData>>> {
@@ -485,7 +497,7 @@ export async function GET(): Promise<NextResponse<ApiResponse<HealthData>>> {
     hoursSinceSuccess: hoursSinceLastSuccess(lines),
   };
 
-  const partial: Omit<HealthData, "healthy" | "warnings" | "suggestNetworkFix"> = {
+  const partial: Omit<HealthData, "healthy" | "warnings" | "issues" | "suggestNetworkFix"> = {
     launchd,
     lastRun,
     recentFailStreak,
@@ -495,7 +507,8 @@ export async function GET(): Promise<NextResponse<ApiResponse<HealthData>>> {
     network,
   };
 
-  const warnings = buildWarnings(partial, signals);
+  const issues = buildIssues(partial, signals);
+  const warnings = issues.map(renderIssueZh);
   const stalled =
     signals.interrupted !== null ||
     (launchd.loaded && signals.hoursSinceSuccess !== null && signals.hoursSinceSuccess > STALL_HOURS);
@@ -503,6 +516,7 @@ export async function GET(): Promise<NextResponse<ApiResponse<HealthData>>> {
   const data: HealthData = {
     ...partial,
     suggestNetworkFix: network?.mode === "offline" || lastFailedAtNetwork || stalled,
+    issues,
     warnings,
     healthy: warnings.length === 0,
   };

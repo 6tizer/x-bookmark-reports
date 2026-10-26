@@ -15,6 +15,9 @@ export const dynamic = "force-dynamic";
 interface ModelOption {
   value: string;
   label: string;
+  /** 界面按 articles 词典 model.<i18nKey> 渲染（参数 {model}）；没有时直接显示 label */
+  i18nKey?: "default" | "envCustom" | "deepseekFlash" | "deepseekPro";
+  params?: { model: string };
 }
 
 /** API 响应数据结构 */
@@ -29,8 +32,8 @@ interface ModelOptionsData {
 // ── 静态白名单（DeepSeek / xAI 已知模型） ──
 
 const DEEPSEEK_WHITELIST: ModelOption[] = [
-  { value: "deepseek-v4-flash", label: "DeepSeek V4 Flash（默认，性价比）" },
-  { value: "deepseek-v4-pro", label: "DeepSeek V4 Pro（长文更稳）" },
+  { value: "deepseek-v4-flash", label: "DeepSeek V4 Flash", i18nKey: "deepseekFlash" },
+  { value: "deepseek-v4-pro", label: "DeepSeek V4 Pro", i18nKey: "deepseekPro" },
 ];
 
 const DEFAULT_DEEPSEEK = "deepseek-v4-flash";
@@ -74,13 +77,23 @@ function parseEnv(): { deepseekModel: string; xaiModel: string } | null {
 /** 组装下拉选项：默认项 + DeepSeek 分组（Run dropdown 仅暴露 DeepSeek，xAI 走 LLMSettings） */
 function buildOptions(current: { deepseek: string; xai: string }): ModelOption[] {
   const options: ModelOption[] = [
-    { value: "", label: `Default (env: ${current.deepseek})` },
+    {
+      value: "",
+      label: `Default (env: ${current.deepseek})`,
+      i18nKey: "default",
+      params: { model: current.deepseek },
+    },
   ];
 
   const deepseekValues = new Set(DEEPSEEK_WHITELIST.map((o) => o.value));
   // env 值不在白名单时，在 DeepSeek 分组顶部插入
   if (!deepseekValues.has(current.deepseek)) {
-    options.push({ value: current.deepseek, label: `${current.deepseek} (env)` });
+    options.push({
+      value: current.deepseek,
+      label: `${current.deepseek} (env)`,
+      i18nKey: "envCustom",
+      params: { model: current.deepseek },
+    });
   }
   options.push(...DEEPSEEK_WHITELIST);
 

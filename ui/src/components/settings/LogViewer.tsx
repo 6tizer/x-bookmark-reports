@@ -16,6 +16,7 @@ import type { LogEntry, LogLevel, LogComponent } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 // 统一按产品时区（Asia/Singapore）展示日期
 import { formatDateTime } from "@/lib/format-date";
+import { useT, type MessageKey } from "@/lib/i18n";
 
 interface LogViewerProps {
   logs: LogEntry[];
@@ -33,6 +34,12 @@ interface LogViewerProps {
 
 const levels: LogLevel[] = ["info", "warn", "error"];
 
+const levelKeys: Record<LogLevel, MessageKey> = {
+  info: "settings.logs.level.info",
+  warn: "settings.logs.level.warn",
+  error: "settings.logs.level.error",
+};
+
 export function LogViewer({
   logs,
   isLoading,
@@ -46,6 +53,7 @@ export function LogViewer({
   onPageChange,
   onRefresh,
 }: LogViewerProps) {
+  const t = useT();
   // 动态 component 列表：从 DB distinct 读取，避免硬编码 dead category
   const [availableComponents, setAvailableComponents] = useState<string[]>([]);
 
@@ -87,7 +95,7 @@ export function LogViewer({
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
             <Filter size={12} />
-            <span>Component:</span>
+            <span>{t("settings.logs.component")}</span>
           </div>
           <button
             onClick={() => onComponentChange(undefined)}
@@ -95,7 +103,7 @@ export function LogViewer({
               !component ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
             }`}
           >
-            All
+            {t("settings.logs.all")}
           </button>
           {availableComponents.map((c) => (
             <button
@@ -113,7 +121,7 @@ export function LogViewer({
         {/* Row 2: Level + Refresh */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-            <span>Level:</span>
+            <span>{t("settings.logs.level")}</span>
           </div>
           <button
             onClick={() => onLevelChange(undefined)}
@@ -121,7 +129,7 @@ export function LogViewer({
               !level ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
             }`}
           >
-            All
+            {t("settings.logs.all")}
           </button>
           {levels.map((l) => (
             <button
@@ -131,7 +139,7 @@ export function LogViewer({
                 level === l ? "bg-twitter-blue text-white border-twitter-blue" : "hover:bg-muted"
               }`}
             >
-              {l}
+              {t(levelKeys[l])}
             </button>
           ))}
 
@@ -140,7 +148,7 @@ export function LogViewer({
             className="ml-auto flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] hover:bg-muted transition-colors"
           >
             <RefreshCw size={11} />
-            Refresh
+            {t("common.action.refresh")}
           </button>
         </div>
       </div>
@@ -150,17 +158,17 @@ export function LogViewer({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-[11px]">Time</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-[11px]">Component</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-[11px]">Level</th>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-[11px]">Message</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-[11px]">{t("settings.logs.col.time")}</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-[11px]">{t("settings.logs.col.component")}</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-[11px]">{t("settings.logs.col.level")}</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-[11px]">{t("settings.logs.col.message")}</th>
             </tr>
           </thead>
           <tbody>
             {logs.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  No logs found
+                  {t("settings.logs.empty")}
                 </td>
               </tr>
             ) : (
@@ -193,7 +201,7 @@ export function LogViewer({
       {/* 翻页控件 — 仿 Articles 页：Showing N of total · Previous / Page N / Next */}
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          Showing {logs.length} of {total}
+          {t("settings.logs.showing", { count: logs.length, total })}
         </p>
         <div className="flex items-center gap-1">
           <button
@@ -202,16 +210,16 @@ export function LogViewer({
             disabled={page <= 1}
             className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50 transition-colors"
           >
-            Previous
+            {t("settings.logs.prev")}
           </button>
-          <span className="px-2 text-xs text-muted-foreground">Page {page}</span>
+          <span className="px-2 text-xs text-muted-foreground">{t("settings.logs.page", { page })}</span>
           <button
             type="button"
             onClick={() => onPageChange(page + 1)}
             disabled={!hasMore}
             className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50 transition-colors"
           >
-            Next
+            {t("settings.logs.next")}
           </button>
         </div>
       </div>
@@ -220,6 +228,7 @@ export function LogViewer({
 }
 
 function LevelBadge({ level }: { level: LogLevel }) {
+  const t = useT();
   const colors: Record<LogLevel, string> = {
     info: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
     warn: "bg-yellow-50 text-yellow-600 dark:bg-yellow-950 dark:text-yellow-400",
@@ -228,7 +237,7 @@ function LevelBadge({ level }: { level: LogLevel }) {
 
   return (
     <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${colors[level]}`}>
-      {level}
+      {levelKeys[level] ? t(levelKeys[level]) : level}
     </span>
   );
 }

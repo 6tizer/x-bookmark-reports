@@ -10,8 +10,10 @@ import { PipelineActions } from "@/components/sync/PipelineActions";
 import { SyncTerminal } from "@/components/sync/SyncTerminal";
 import { PipelineHistory } from "@/components/sync/PipelineHistory";
 import { usePipeline } from "@/hooks/usePipeline";
+import { useT } from "@/lib/i18n";
 
 export default function SyncPage() {
+  const t = useT();
   const {
     currentOperation,
     isRunning,
@@ -26,7 +28,7 @@ export default function SyncPage() {
       <div className="space-y-6 max-w-5xl">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-foreground">
-            Pipeline Control Center
+            {t("sync.title")}
           </h1>
         </div>
 

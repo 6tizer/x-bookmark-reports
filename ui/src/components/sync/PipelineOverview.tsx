@@ -15,20 +15,21 @@ import type { DashboardPipelineFour, PipelineStatus } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 // 统一按产品时区（Asia/Singapore）展示日期
 import { formatDateTime } from "@/lib/format-date";
+import { useT, type MessageKey } from "@/lib/i18n";
 
 type NodeKey = keyof DashboardPipelineFour;
 
 interface PipelineNodeDef {
   key: NodeKey;
-  label: string;
+  labelKey: MessageKey;
   icon: React.ReactNode;
 }
 
 const nodes: PipelineNodeDef[] = [
-  { key: "twitterSync", label: "Twitter Sync", icon: <RefreshCw size={16} /> },
-  { key: "deepReports", label: "Deep Reports", icon: <FileStack size={16} /> },
-  { key: "rewrite", label: "Rewrite", icon: <PenTool size={16} /> },
-  { key: "notionUpload", label: "Notion Upload", icon: <CloudUpload size={16} /> },
+  { key: "twitterSync", labelKey: "sync.node.twitterSync", icon: <RefreshCw size={16} /> },
+  { key: "deepReports", labelKey: "sync.node.deepReports", icon: <FileStack size={16} /> },
+  { key: "rewrite", labelKey: "sync.node.rewrite", icon: <PenTool size={16} /> },
+  { key: "notionUpload", labelKey: "sync.node.notionUpload", icon: <CloudUpload size={16} /> },
 ];
 
 function statusColor(status: PipelineStatus): string {
@@ -62,6 +63,7 @@ function statusBadge(status: PipelineStatus): string {
 }
 
 export function PipelineOverview() {
+  const t = useT();
   const [pipeline, setPipeline] = useState<DashboardPipelineFour | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -81,8 +83,8 @@ export function PipelineOverview() {
 
   useEffect(() => {
     fetchPipeline();
-    const t = setInterval(fetchPipeline, 30_000);
-    return () => clearInterval(t);
+    const timer = setInterval(fetchPipeline, 30_000);
+    return () => clearInterval(timer);
   }, [fetchPipeline]);
 
   if (isLoading || !pipeline) {
@@ -101,13 +103,13 @@ export function PipelineOverview() {
   return (
     <div className="rounded-lg border border-border bg-card p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">Pipeline Status</h2>
+        <h2 className="text-sm font-semibold text-foreground">{t("sync.overview.title")}</h2>
         <button
           type="button"
           onClick={fetchPipeline}
           className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
         >
-          Refresh
+          {t("common.action.refresh")}
         </button>
       </div>
 
@@ -130,16 +132,16 @@ export function PipelineOverview() {
                   {node.icon}
                 </div>
                 <span className="text-xs font-medium text-foreground truncate">
-                  {node.label}
+                  {t(node.labelKey)}
                 </span>
               </div>
 
               <span
-                className={`text-[10px] font-medium capitalize ${statusBadge(
+                className={`text-[10px] font-medium ${statusBadge(
                   data.status
                 )}`}
               >
-                {data.status}
+                {t(`sync.pipelineStatus.${data.status}`)}
               </span>
 
               {data.status === "running" && (

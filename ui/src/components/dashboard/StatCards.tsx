@@ -18,8 +18,9 @@ import type { DashboardStats, RettiwtStatus } from "@/types/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 // 统一按产品时区（Asia/Singapore）展示日期，不跟浏览器时区
 import { formatDate, formatDateTime } from "@/lib/format-date";
+import { useT, type TFunction } from "@/lib/i18n";
 
-function formatDistanceToNowSimple(dateStr: string): string {
+function formatDistanceToNowSimple(dateStr: string, t: TFunction): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -29,10 +30,10 @@ function formatDistanceToNowSimple(dateStr: string): string {
   const diffDay = Math.floor(diffHour / 24);
 
   if (diffDay > 7) return formatDate(date);
-  if (diffDay > 0) return `${diffDay}d ago`;
-  if (diffHour > 0) return `${diffHour}h ago`;
-  if (diffMin > 0) return `${diffMin}m ago`;
-  return "Just now";
+  if (diffDay > 0) return t("dashboard.time.daysAgo", { n: diffDay });
+  if (diffHour > 0) return t("dashboard.time.hoursAgo", { n: diffHour });
+  if (diffMin > 0) return t("dashboard.time.minutesAgo", { n: diffMin });
+  return t("dashboard.time.justNow");
 }
 
 interface StatCardsProps {
@@ -85,6 +86,8 @@ function StatCard({
 }
 
 export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
+  const t = useT();
+
   if (isLoading || !stats) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
@@ -103,8 +106,8 @@ export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
   }
 
   const lastSyncText = stats.lastSyncAt
-    ? formatDistanceToNowSimple(stats.lastSyncAt)
-    : "Never";
+    ? formatDistanceToNowSimple(stats.lastSyncAt, t)
+    : t("dashboard.stat.never");
 
   const showRettiwtAlert =
     rettiwt?.updateAvailable &&
@@ -117,43 +120,43 @@ export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         <StatCard
           icon={<Bookmark size={16} className="text-twitter-blue" />}
-          label="Bookmarks"
+          label={t("dashboard.stat.bookmarks")}
           value={stats.totalBookmarks}
           subtext="bookmarks.json"
           trend="neutral"
         />
         <StatCard
           icon={<FileStack size={16} className="text-green-600" />}
-          label="Deep Drafts"
+          label={t("dashboard.stat.deepDrafts")}
           value={stats.totalDrafts}
-          subtext={`${stats.pendingRewriteGlobal} pending`}
+          subtext={t("dashboard.stat.deepDraftsSub", { count: stats.pendingRewriteGlobal })}
           trend="neutral"
         />
         <StatCard
           icon={<PenLine size={16} className="text-blue-500" />}
-          label="Articles (Local)"
+          label={t("dashboard.stat.articlesLocal")}
           value={stats.totalArticlesLocal}
           subtext="output/article-final/"
           trend="neutral"
         />
         <StatCard
           icon={<CloudUpload size={16} className="text-violet-500" />}
-          label="In Notion DB"
+          label={t("dashboard.stat.inNotion")}
           value={stats.totalArticlesNotion}
           // Notion API 总记录含历史；本管线已上传来自 .notion-finished-state
-          subtext={`Notion 总记录（含历史）· 本管线已上传 ${stats.notionFinishedUploaded}`}
+          subtext={t("dashboard.stat.inNotionSub", { count: stats.notionFinishedUploaded })}
           trend="neutral"
         />
         <StatCard
           icon={<AlertCircle size={16} className="text-orange-500" />}
-          label="Pending Rewrite"
+          label={t("dashboard.stat.pendingRewrite")}
           value={stats.pendingRewriteGlobal}
-          subtext={`Local: ${stats.pendingRewriteLocal}`}
+          subtext={t("dashboard.stat.pendingRewriteSub", { count: stats.pendingRewriteLocal })}
           trend={stats.pendingRewriteGlobal > 0 ? "down" : "neutral"}
         />
         <StatCard
           icon={<Clock size={16} className="text-twitter-blue" />}
-          label="Last Sync"
+          label={t("dashboard.stat.lastSync")}
           value={lastSyncText}
           subtext={
             stats.lastSyncAt
@@ -173,11 +176,12 @@ export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
             />
             <div className="min-w-0">
               <p className="font-medium text-amber-900 dark:text-amber-100">
-                Rettiwt update available
+                {t("dashboard.rettiwt.updateAvailable")}
               </p>
               <p className="text-xs text-amber-800/90 dark:text-amber-200/90 mt-1">
-                Local CLI <code className="text-[11px]">{rettiwt!.localVersion}</code> →
-                latest npm{" "}
+                {t("dashboard.rettiwt.localCli")}{" "}
+                <code className="text-[11px]">{rettiwt!.localVersion}</code> →{" "}
+                {t("dashboard.rettiwt.latestNpm")}{" "}
                 <code className="text-[11px]">{rettiwt!.latestVersion}</code>
               </p>
               <p className="text-[11px] text-amber-900/80 dark:text-amber-200/80 mt-2 font-mono break-all">
@@ -190,7 +194,7 @@ export function StatCards({ stats, isLoading, rettiwt }: StatCardsProps) {
 
       {rettiwt?.error && (
         <p className="text-[11px] text-muted-foreground">
-          Rettiwt check: {rettiwt.error}
+          {t("dashboard.rettiwt.checkError", { error: rettiwt.error })}
         </p>
       )}
     </div>

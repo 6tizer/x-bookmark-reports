@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { BookmarkToolbar } from "./BookmarkToolbar";
 // 统一按产品时区（Asia/Singapore）展示日期
 import { formatDate } from "@/lib/format-date";
+import { useT } from "@/lib/i18n";
 
 interface BookmarkCardProps {
   bookmarks: Bookmark[];
@@ -34,6 +35,7 @@ export function BookmarkCard({
   onUpdateTags,
   onStartRead,
 }: BookmarkCardProps) {
+  const t = useT();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   if (isLoading) {
@@ -60,7 +62,7 @@ export function BookmarkCard({
     return (
       <div className="rounded-lg border border-border bg-card p-8 text-center">
         <BookmarkIcon size={32} className="mx-auto text-muted-foreground mb-2" />
-        <p className="text-sm text-muted-foreground">No bookmarks found</p>
+        <p className="text-sm text-muted-foreground">{t("bookmarks.list.empty")}</p>
       </div>
     );
   }
@@ -147,6 +149,8 @@ export function BookmarkCard({
             href={bookmark.url}
             target="_blank"
             rel="noopener noreferrer"
+            title={t("bookmarks.detail.openOnX")}
+            aria-label={t("bookmarks.detail.openOnX")}
             className="absolute top-3 right-3 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
           >
             <ExternalLink size={14} />
@@ -158,6 +162,7 @@ export function BookmarkCard({
 }
 
 function StatusBadge({ status }: { status: BookmarkStatus }) {
+  const t = useT();
   const colors: Record<BookmarkStatus, string> = {
     synced: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
     read: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
@@ -166,8 +171,8 @@ function StatusBadge({ status }: { status: BookmarkStatus }) {
   };
 
   return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${colors[status]}`}>
-      {status}
+    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${colors[status]}`}>
+      {t(`bookmarks.status.${status}`)}
     </span>
   );
 }
@@ -180,6 +185,7 @@ function LifecycleBadge({
   lifecycle?: BookmarkLifecycle;
   status: BookmarkStatus;
 }) {
+  const t = useT();
   if (!lifecycle) {
     return <StatusBadge status={status} />;
   }
@@ -189,17 +195,11 @@ function LifecycleBadge({
     written: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
     uploaded: "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
   };
-  const labels: Record<BookmarkLifecycle, string> = {
-    pending: "待生成",
-    drafted: "已报告",
-    written: "已成文",
-    uploaded: "已 Notion",
-  };
   return (
     <span
       className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${colors[lifecycle]}`}
     >
-      {labels[lifecycle]}
+      {t(`bookmarks.lifecycle.${lifecycle}`)}
     </span>
   );
 }

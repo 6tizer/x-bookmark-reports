@@ -31,8 +31,10 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useT } from "@/lib/i18n";
 
 export default function BookmarkDetailPage() {
+  const t = useT();
   const params = useParams();
   const id = params.id as string;
   const [bookmark, setBookmark] = useState<BookmarkDetail | null>(null);
@@ -67,9 +69,9 @@ export default function BookmarkDetailPage() {
     return (
       <ClientLayout>
         <div className="max-w-3xl text-center py-12">
-          <p className="text-muted-foreground">Bookmark not found</p>
+          <p className="text-muted-foreground">{t("bookmarks.detail.notFound")}</p>
           <Link href="/bookmarks" className="text-twitter-blue hover:underline text-sm mt-2 inline-block">
-            Back to bookmarks
+            {t("bookmarks.detail.backToList")}
           </Link>
         </div>
       </ClientLayout>
@@ -82,17 +84,17 @@ export default function BookmarkDetailPage() {
     <ClientLayout>
       <div className="max-w-3xl space-y-5">
         {/* 面包屑 */}
-        <nav className="text-xs text-muted-foreground" aria-label="breadcrumb">
+        <nav className="text-xs text-muted-foreground" aria-label={t("bookmarks.detail.breadcrumb")}>
           <ol className="flex items-center gap-1 flex-wrap">
             <li>
               <Link href="/" className="hover:text-foreground transition-colors">
-                Home
+                {t("common.nav.home")}
               </Link>
             </li>
             <li className="opacity-50">›</li>
             <li>
               <Link href="/bookmarks" className="hover:text-foreground transition-colors">
-                Bookmarks
+                {t("common.nav.bookmarks")}
               </Link>
             </li>
             <li className="opacity-50">›</li>
@@ -128,7 +130,7 @@ export default function BookmarkDetailPage() {
               className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-muted transition-colors"
             >
               <ExternalLink size={12} />
-              Open on X
+              {t("bookmarks.detail.openOnX")}
             </a>
             {bookmark.hasArticle && bookmark.tweetId && (
               <Link
@@ -136,16 +138,16 @@ export default function BookmarkDetailPage() {
                 className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-muted transition-colors text-twitter-blue"
               >
                 <BookOpen size={12} />
-                查看成品文章
+                {t("bookmarks.detail.viewArticle")}
               </Link>
             )}
             {bookmark.inNotion && (
               <span
                 className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs text-violet-600 dark:text-violet-400"
-                title="Notion page URL 留 PR-3 接入"
+                title={t("bookmarks.detail.notionLinkPending")}
               >
                 <ExternalLink size={12} />
-                Notion 已上传
+                {t("bookmarks.detail.notionUploaded")}
               </span>
             )}
           </div>
@@ -154,7 +156,7 @@ export default function BookmarkDetailPage() {
         {/* 主推文卡片 — 高亮 */}
         <div className="rounded-lg border-2 border-twitter-blue/30 bg-card p-5 shadow-sm">
           <div className="flex items-center gap-2 text-xs text-twitter-blue font-medium mb-2">
-            <span className="rounded-full bg-twitter-blue/10 px-2 py-0.5">主推文</span>
+            <span className="rounded-full bg-twitter-blue/10 px-2 py-0.5">{t("bookmarks.detail.mainTweet")}</span>
           </div>
           <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
             {bookmark.fullText}
@@ -191,7 +193,7 @@ export default function BookmarkDetailPage() {
 
         {/* 深度报告全文 — 可折叠 */}
         {bookmark.deepDraftBody && (
-          <CollapsibleSection title="深度报告全文" defaultOpen={false}>
+          <CollapsibleSection title={t("bookmarks.detail.deepReport")} defaultOpen={false}>
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{bookmark.deepDraftBody}</ReactMarkdown>
             </div>

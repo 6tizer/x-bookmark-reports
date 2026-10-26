@@ -7,6 +7,8 @@
 import { useState, useEffect } from "react";
 import { Save, Eye, EyeOff } from "lucide-react";
 import type { Settings, UpdateSettingsRequest, ApiKeyName } from "@/types/api";
+import { useT } from "@/lib/i18n";
+import { renderRich } from "@/lib/i18n/rich";
 
 interface LLMSettingsProps {
   settings: Settings | null;
@@ -27,6 +29,7 @@ function ApiKeyField({
   keyName: ApiKeyName;
   onSave: (keyName: ApiKeyName, rawValue: string) => void;
 }) {
+  const t = useT();
   const [showKey, setShowKey] = useState(false);
   const [revealedValue, setRevealedValue] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -88,13 +91,14 @@ function ApiKeyField({
           onChange={(e) => isEditing && setEditValue(e.target.value)}
           onFocus={handleStartEdit}
           readOnly={!isEditing}
-          placeholder="Click to set..."
+          placeholder={t("settings.apiKey.placeholder")}
           className="w-full rounded-md border border-border bg-muted px-3 py-2 pr-8 text-sm font-mono outline-none focus:ring-1 focus:ring-ring"
         />
         <button
           type="button"
           onClick={isEditing ? () => setShowKey(!showKey) : handleToggleReveal}
           disabled={isRevealing}
+          aria-label={showKey ? t("settings.apiKey.hide") : t("settings.apiKey.show")}
           className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
         >
           {isRevealing ? <span className="text-[10px]">...</span> : (showKey ? <EyeOff size={14} /> : <Eye size={14} />)}
@@ -107,13 +111,13 @@ function ApiKeyField({
             disabled={!editValue || editValue.length < 4}
             className="rounded-md bg-primary px-2 py-1 text-[11px] text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            Save Key
+            {t("settings.apiKey.saveKey")}
           </button>
           <button
             onClick={handleCancel}
             className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-muted"
           >
-            Cancel
+            {t("common.action.cancel")}
           </button>
         </div>
       )}
@@ -122,6 +126,7 @@ function ApiKeyField({
 }
 
 export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApiKey }: LLMSettingsProps) {
+  const t = useT();
   const [deepseekBaseUrl, setDeepseekBaseUrl] = useState("https://api.deepseek.com/v1");
   const [deepseekModel, setDeepseekModel] = useState("deepseek-v4-flash");
   const [xaiBaseUrl, setXaiBaseUrl] = useState("https://api.x.ai/v1");
@@ -180,13 +185,13 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <h3 className="text-sm font-semibold text-foreground">DeepSeek</h3>
         <ApiKeyField
-          label="API Key"
+          label={t("settings.llm.apiKey")}
           maskedValue={settings?.deepseekApiKey || "****"}
           keyName="DEEPSEEK_API_KEY"
           onSave={handleApiKeySave}
         />
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Base URL</label>
+          <label className="text-xs font-medium text-muted-foreground">{t("settings.llm.baseUrl")}</label>
           <input
             type="text"
             value={deepseekBaseUrl}
@@ -195,14 +200,18 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
           />
           {/* DeepSeek 双兼容提示：SDK 会自动拼接 /chat/completions */}
           <p className="text-[10px] text-muted-foreground">
-            DeepSeek SDK 双兼容：用 <code>https://api.deepseek.com</code> 或 <code>.../v1</code> 均可；OpenAI SDK 会自动拼接 <code>/chat/completions</code>
+            {renderRich(t("settings.llm.deepseekBaseUrlHint"), {
+              base: <code>https://api.deepseek.com</code>,
+              v1: <code>.../v1</code>,
+              path: <code>/chat/completions</code>,
+            })}
           </p>
         </div>
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">
-            Model
+            {t("settings.llm.model")}
             <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
-              持久化 → <code>.env DEEPSEEK_MODEL</code>，rewrite 步骤使用
+              {renderRich(t("settings.llm.deepseekModelHint"), { env: <code>.env DEEPSEEK_MODEL</code> })}
             </span>
           </label>
           <select
@@ -220,13 +229,13 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <h3 className="text-sm font-semibold text-foreground">xAI (Grok)</h3>
         <ApiKeyField
-          label="API Key"
+          label={t("settings.llm.apiKey")}
           maskedValue={settings?.xaiApiKey || "****"}
           keyName="XAI_API_KEY"
           onSave={handleApiKeySave}
         />
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Base URL</label>
+          <label className="text-xs font-medium text-muted-foreground">{t("settings.llm.baseUrl")}</label>
           <input
             type="text"
             value={xaiBaseUrl}
@@ -236,9 +245,9 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
         </div>
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">
-            Research Model
+            {t("settings.llm.researchModel")}
             <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
-              持久化 → <code>.env XAI_MODEL</code>，研究步骤（responses.create + web_search + x_search）使用
+              {renderRich(t("settings.llm.xaiModelHint"), { env: <code>.env XAI_MODEL</code> })}
             </span>
           </label>
           <input
@@ -253,24 +262,24 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
 
       {/* Search (SearXNG 主 / Firecrawl 备) */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Search (SearXNG / Firecrawl)</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t("settings.llm.searchTitle")}</h3>
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">
             SearXNG Base URL
             <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
-              主搜索，自托管实例，无需 key
+              {t("settings.llm.searxngHint")}
             </span>
           </label>
           <input
             type="text"
             value={searxngBaseUrl}
             onChange={(e) => setSearxngBaseUrl(e.target.value)}
-            placeholder="http://<host>:8888（留空则跳过 SearXNG）"
+            placeholder={t("settings.llm.searxngPlaceholder")}
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
         <ApiKeyField
-          label="Firecrawl API Key（可留空走 Keyless）"
+          label={t("settings.llm.firecrawlApiKey")}
           maskedValue={settings?.firecrawlApiKey || ""}
           keyName="FIRECRAWL_API_KEY"
           onSave={handleApiKeySave}
@@ -279,7 +288,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
           <label className="text-xs font-medium text-muted-foreground">
             Firecrawl Base URL
             <span className="ml-2 text-[10px] text-muted-foreground/70 font-normal">
-              备用搜索：仅 SearXNG 失败或 0 结果时启用
+              {t("settings.llm.firecrawlHint")}
             </span>
           </label>
           <input
@@ -293,15 +302,15 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
 
       {/* Exa */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Exa (可选补充)</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t("settings.llm.exaTitle")}</h3>
         <ApiKeyField
-          label="API Key"
+          label={t("settings.llm.apiKey")}
           maskedValue={settings?.exaApiKey || "****"}
           keyName="EXA_API_KEY"
           onSave={handleApiKeySave}
         />
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Base URL</label>
+          <label className="text-xs font-medium text-muted-foreground">{t("settings.llm.baseUrl")}</label>
           <input
             type="text"
             value={exaBaseUrl}
@@ -315,12 +324,8 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-foreground">
-              Cloudflare Browser Run (Markdown 渲染兜底)
-            </h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              当 Step 2 书签外链为纯前端 SPA 或静态抓取不足 300 字时，调用 Cloudflare 无头浏览器提取干净 Markdown
-            </p>
+            <h3 className="text-sm font-semibold text-foreground">{t("settings.llm.cfTitle")}</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{t("settings.llm.cfDesc")}</p>
           </div>
           <label className="inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
             <input
@@ -329,21 +334,19 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
               onChange={(e) => setCfBrowserEnabled(e.target.checked)}
               className="rounded border-border"
             />
-            <span>{cfBrowserEnabled ? "已启用" : "已禁用"}</span>
+            <span>{cfBrowserEnabled ? t("settings.llm.enabled") : t("settings.llm.disabled")}</span>
           </label>
         </div>
 
         <ApiKeyField
-          label="Browser Run API Token（权限：Browser Run Write / Read）"
+          label={t("settings.llm.cfToken")}
           maskedValue={settings?.cfBrowserApiKey || ""}
           keyName="CF_BROWSER_API_TOKEN"
           onSave={handleApiKeySave}
         />
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">
-            Cloudflare Account ID
-          </label>
+          <label className="text-xs font-medium text-muted-foreground">{t("settings.llm.cfAccountId")}</label>
           <input
             type="text"
             value={cfAccountId}
@@ -354,10 +357,12 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
         </div>
 
         <div className="text-[11px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/60">
-          <span>今日浏览器累计用时（UTC 每日重置）</span>
+          <span>{t("settings.llm.cfUsageToday")}</span>
           <span className="font-mono">
-            {((settings?.cfBrowserDailyUsedMs ?? 0) / 1000).toFixed(1)}s /{" "}
-            {((settings?.cfBrowserDailyBudgetMs ?? 480000) / 1000).toFixed(0)}s 安全预算
+            {t("settings.llm.cfBudget", {
+              used: ((settings?.cfBrowserDailyUsedMs ?? 0) / 1000).toFixed(1),
+              budget: ((settings?.cfBrowserDailyBudgetMs ?? 480000) / 1000).toFixed(0),
+            })}
           </span>
         </div>
       </div>
@@ -370,7 +375,7 @@ export function LLMSettings({ settings, isLoading, isSaving, onSave, onUpdateApi
           className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
           <Save size={14} />
-          {isSaving ? "Saving..." : "Save Changes"}
+          {isSaving ? t("common.action.saving") : t("common.action.saveChanges")}
         </button>
       </div>
     </div>

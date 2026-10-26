@@ -7,6 +7,7 @@
 import { useState, useEffect } from "react";
 import { Save, Eye, EyeOff } from "lucide-react";
 import type { Settings, UpdateSettingsRequest, ApiKeyName } from "@/types/api";
+import { useT } from "@/lib/i18n";
 import { NetworkDoctorCard } from "./NetworkDoctorCard";
 
 interface GeneralSettingsProps {
@@ -28,6 +29,7 @@ function ApiKeyField({
   keyName: ApiKeyName;
   onSave: (keyName: ApiKeyName, rawValue: string) => void;
 }) {
+  const t = useT();
   const [showKey, setShowKey] = useState(false);
   const [revealedValue, setRevealedValue] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -89,13 +91,14 @@ function ApiKeyField({
           onChange={(e) => isEditing && setEditValue(e.target.value)}
           onFocus={handleStartEdit}
           readOnly={!isEditing}
-          placeholder="Click to set..."
+          placeholder={t("settings.apiKey.placeholder")}
           className="w-full rounded-md border border-border bg-muted px-3 py-2 pr-8 text-sm font-mono outline-none focus:ring-1 focus:ring-ring"
         />
         <button
           type="button"
           onClick={isEditing ? () => setShowKey(!showKey) : handleToggleReveal}
           disabled={isRevealing}
+          aria-label={showKey ? t("settings.apiKey.hide") : t("settings.apiKey.show")}
           className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
         >
           {isRevealing ? <span className="text-[10px]">...</span> : (showKey ? <EyeOff size={14} /> : <Eye size={14} />)}
@@ -108,13 +111,13 @@ function ApiKeyField({
             disabled={!editValue || editValue.length < 4}
             className="rounded-md bg-primary px-2 py-1 text-[11px] text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            Save Key
+            {t("settings.apiKey.saveKey")}
           </button>
           <button
             onClick={handleCancel}
             className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-muted"
           >
-            Cancel
+            {t("common.action.cancel")}
           </button>
         </div>
       )}
@@ -165,6 +168,7 @@ function ToggleRow({
 }
 
 export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdateApiKey }: GeneralSettingsProps) {
+  const t = useT();
   const [proxy, setProxy] = useState("");
   const [dataPath, setDataPath] = useState("");
   const [bookmarksPath, setBookmarksPath] = useState("");
@@ -216,24 +220,24 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
     <div className="space-y-6">
       {/* API Keys Section */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">API Keys</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t("settings.general.apiKeys")}</h3>
 
         <ApiKeyField
-          label="Twitter API Key"
+          label={t("settings.general.twitterApiKey")}
           maskedValue={settings?.twitterApiKey || "****"}
           keyName="TWITTER_API_IO_KEY"
           onSave={handleApiKeySave}
         />
 
         <ApiKeyField
-          label="Notion Token"
+          label={t("settings.general.notionToken")}
           maskedValue={settings?.notionToken || "****"}
           keyName="NOTION_TOKEN"
           onSave={handleApiKeySave}
         />
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Notion Database ID</label>
+          <label className="text-xs font-medium text-muted-foreground">{t("settings.general.notionDbId")}</label>
           <input
             type="text"
             value={notionDbId}
@@ -245,8 +249,8 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
 
         {/* Notion Upload Live */}
         <ToggleRow
-          label="Notion Upload Live"
-          description="Actually upload to Notion (vs dry-run)"
+          label={t("settings.general.notionUploadLive")}
+          description={t("settings.general.notionUploadLiveDesc")}
           checked={notionUploadLive}
           onChange={setNotionUploadLive}
         />
@@ -255,12 +259,12 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
       {/* Paths Section */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold text-foreground">Paths</h3>
-          <span className="text-[10px] text-muted-foreground/70">Use absolute path</span>
+          <h3 className="text-sm font-semibold text-foreground">{t("settings.general.paths")}</h3>
+          <span className="text-[10px] text-muted-foreground/70">{t("settings.general.useAbsolutePath")}</span>
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Bookmarks Path</label>
+          <label className="text-xs font-medium text-muted-foreground">{t("settings.general.bookmarksPath")}</label>
           <input
             type="text"
             value={bookmarksPath}
@@ -271,7 +275,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Articles Output Dir</label>
+          <label className="text-xs font-medium text-muted-foreground">{t("settings.general.articlesDir")}</label>
           <input
             type="text"
             value={articlesDir}
@@ -282,7 +286,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Data Directory</label>
+          <label className="text-xs font-medium text-muted-foreground">{t("settings.general.dataDir")}</label>
           <input
             type="text"
             value={dataPath}
@@ -295,10 +299,10 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
 
       {/* Network + Sync */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Network</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t("settings.general.network")}</h3>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Proxy URL</label>
+          <label className="text-xs font-medium text-muted-foreground">{t("settings.general.proxyUrl")}</label>
           <input
             type="text"
             value={proxy}
@@ -306,9 +310,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
             placeholder="http://127.0.0.1:7897"
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
-          <p className="text-[11px] text-muted-foreground">
-            作为首选代理参与下方网络诊断；不可用时流水线会自动改用诊断选出的网络。
-          </p>
+          <p className="text-[11px] text-muted-foreground">{t("settings.general.proxyHint")}</p>
         </div>
       </div>
 
@@ -322,7 +324,7 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
           className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
           <Save size={14} />
-          {isSaving ? "Saving..." : "Save Changes"}
+          {isSaving ? t("common.action.saving") : t("common.action.saveChanges")}
         </button>
       </div>
     </div>

@@ -17,6 +17,7 @@ import type { BatchProgress, DashboardPipelineFour, PipelineStatus } from "@/typ
 import { Skeleton } from "@/components/ui/Skeleton";
 // 统一按产品时区（Asia/Singapore）展示日期
 import { formatDateTime, formatTime } from "@/lib/format-date";
+import { hasMessage, useT, type MessageKey, type TFunction } from "@/lib/i18n";
 
 interface PipelineProps {
   pipeline: DashboardPipelineFour | null;
@@ -29,16 +30,22 @@ type NodeKey = keyof DashboardPipelineFour;
 
 interface PipelineNodeDef {
   key: NodeKey;
-  label: string;
+  labelKey: MessageKey;
   icon: React.ReactNode;
 }
 
 const nodes: PipelineNodeDef[] = [
-  { key: "twitterSync", label: "Twitter Sync", icon: <RefreshCw size={16} /> },
-  { key: "deepReports", label: "Deep Reports", icon: <FileStack size={16} /> },
-  { key: "rewrite", label: "Rewrite", icon: <PenTool size={16} /> },
-  { key: "notionUpload", label: "Notion", icon: <CloudUpload size={16} /> },
+  { key: "twitterSync", labelKey: "dashboard.pipeline.node.twitterSync", icon: <RefreshCw size={16} /> },
+  { key: "deepReports", labelKey: "dashboard.pipeline.node.deepReports", icon: <FileStack size={16} /> },
+  { key: "rewrite", labelKey: "dashboard.pipeline.node.rewrite", icon: <PenTool size={16} /> },
+  { key: "notionUpload", labelKey: "dashboard.pipeline.node.notionUpload", icon: <CloudUpload size={16} /> },
 ];
+
+// 服务端返回的状态/步骤是英文代码，词典里找不到时原样显示
+function translateCode(t: TFunction, prefix: string, code: string): string {
+  const key = `${prefix}.${code}`;
+  return hasMessage(key) ? t(key as MessageKey) : code;
+}
 
 function statusColor(status: PipelineStatus): string {
   switch (status) {
@@ -69,14 +76,14 @@ function lineStyle(status: PipelineStatus): string {
   }
 }
 
-function formatDuration(iso?: string): string {
+function formatDuration(iso: string | undefined, t: TFunction): string {
   if (!iso) return "—";
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "—";
-  const sec = Math.floor((Date.now() - t) / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  return `${Math.floor(sec / 3600)}h ago`;
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return "—";
+  const sec = Math.floor((Date.now() - ts) / 1000);
+  if (sec < 60) return t("dashboard.time.secondsAgo", { n: sec });
+  if (sec < 3600) return t("dashboard.time.minutesAgo", { n: Math.floor(sec / 60) });
+  return t("dashboard.time.hoursAgo", { n: Math.floor(sec / 3600) });
 }
 
 // 单行进度条：label + 百分比 + 横向 progress bar
@@ -106,6 +113,7 @@ export function Pipeline({
 }: PipelineProps) {
   const [selectedNode, setSelectedNode] = useState<NodeKey | null>(null);
   const [progressOpen, setProgressOpen] = useState(true);
+  const t = useT();
 
   if (isLoading || !pipeline) {
     return (
@@ -132,13 +140,13 @@ export function Pipeline({
   return (
     <div className="rounded-lg border border-border bg-card p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">Pipeline</h2>
+        <h2 className="text-sm font-semibold text-foreground">{t("dashboard.pipeline.title")}</h2>
         <button
           type="button"
           onClick={() => setProgressOpen(!progressOpen)}
           className="text-[11px] text-muted-foreground hover:text-foreground"
         >
-          {progressOpen ? "Hide progress" : "Show progress"}
+          {progressOpen ? t("dashboard.pipeline.hideProgress") : t("dashboard.pipeline.showProgress")}
         </button>
       </div>
 
@@ -163,7 +171,7 @@ export function Pipeline({
                   {node.icon}
                 </div>
                 <span className="text-[10px] font-medium text-muted-foreground group-hover:text-foreground transition-colors text-center max-w-[5rem] leading-tight">
-                  {node.label}
+                  {t(node.labelKey)}
                 </span>
               </button>
 
@@ -208,9 +216,9 @@ export function Pipeline({
               const d = pipeline[n.key];
               return (
                 <div key={n.key} className="space-y-1.5">
-                  <p className="font-medium text-foreground">{n.label}</p>
-                  <ProgressBarRow label="本批" progress={d.progress!} />
-                  <ProgressBarRow label="全局" progress={d.progressGlobal!} />
+                  <p className="font-medium text-foreground">{t(n.labelKey)}</p>
+                  <ProgressBarRow label={t("dashboard.pipeline.batch")} progress={d.progress!} />
+                  <ProgressBarRow label={t("dashboard.pipeline.global")} progress={d.progressGlobal!} />
                 </div>
               );
             })}
@@ -229,7 +237,9 @@ export function Pipeline({
             <div className="rounded-md border border-border bg-muted p-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-medium">
-                  {nodes.find((n) => n.key === selectedNode)?.label} — details
+                  {t("dashboard.pipeline.details", {
+                    name: t(nodes.find((n) => n.key === selectedNode)!.labelKey),
+                  })}
                 </p>
                 <button
                   type="button"
@@ -241,28 +251,28 @@ export function Pipeline({
               </div>
               <div className="mt-2 space-y-2 text-[11px] text-muted-foreground">
                 <p>
-                  Status:{" "}
+                  {t("dashboard.pipeline.statusLabel")}{" "}
                   <span className="font-medium text-foreground capitalize">
-                    {pipeline[selectedNode].status}
+                    {translateCode(t, "dashboard.pipeline.status", pipeline[selectedNode].status)}
                   </span>
                 </p>
                 {pipeline[selectedNode].lastRun && (
                   <p>
-                    Last run:{" "}
+                    {t("dashboard.pipeline.lastRun")}{" "}
                     {formatDateTime(pipeline[selectedNode].lastRun!)}
                   </p>
                 )}
                 {pipeline[selectedNode].progress !== undefined && (
                   <div className="space-y-1.5">
                     <ProgressBarRow
-                      label="本批"
+                      label={t("dashboard.pipeline.batch")}
                       progress={pipeline[selectedNode].progress}
                     />
                     {pipeline[selectedNode].progressGlobal !== undefined &&
                       pipeline[selectedNode].progressGlobal !==
                         pipeline[selectedNode].progress && (
                         <ProgressBarRow
-                          label="全局"
+                          label={t("dashboard.pipeline.global")}
                           progress={pipeline[selectedNode].progressGlobal!}
                         />
                       )}
@@ -277,20 +287,24 @@ export function Pipeline({
       {progressOpen && bp && (
         <div className="rounded-md border border-border bg-muted/50 p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-foreground">Article pipeline progress</p>
+            <p className="text-xs font-medium text-foreground">{t("dashboard.progress.title")}</p>
             {onRefreshProgress && (
               <button
                 type="button"
                 onClick={onRefreshProgress}
                 className="text-[11px] text-twitter-blue hover:underline"
               >
-                Refresh
+                {t("common.action.refresh")}
               </button>
             )}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {bp.isRunning ? "Running" : "Idle"} · {bp.completed} done · {bp.failed}{" "}
-            failed · {bp.pending + bp.researching} queued / in-progress
+            {t("dashboard.progress.summary", {
+              state: bp.isRunning ? t("dashboard.progress.running") : t("dashboard.progress.idle"),
+              done: bp.completed,
+              failed: bp.failed,
+              queued: bp.pending + bp.researching,
+            })}
           </p>
           <div className="h-2 rounded-full bg-border overflow-hidden">
             <div
@@ -300,13 +314,18 @@ export function Pipeline({
           </div>
           {bp.isRunning && (
             <p className="text-[11px] text-muted-foreground">
-              Current:{" "}
+              {t("dashboard.progress.current")}{" "}
               <span className="font-mono text-foreground">
                 {bp.currentTweetId?.slice(0, 14)}…
               </span>{" "}
-              · step {bp.currentStep ?? "—"}
+              ·{" "}
+              {t("dashboard.progress.step", {
+                step: bp.currentStep
+                  ? translateCode(t, "dashboard.progress.stepName", bp.currentStep)
+                  : "—",
+              })}
               {bp.estimatedEnd && (
-                <> · est. end {formatTime(bp.estimatedEnd)}</>
+                <> · {t("dashboard.progress.estEnd", { time: formatTime(bp.estimatedEnd) })}</>
               )}
             </p>
           )}
@@ -321,7 +340,8 @@ export function Pipeline({
                   {(it.title || it.tweetId).length > 36 ? "…" : ""}
                 </span>
                 <span className="shrink-0">
-                  {it.status} · {formatDuration(it.updatedAt)}
+                  {translateCode(t, "dashboard.progress.itemStatus", it.status)} ·{" "}
+                  {formatDuration(it.updatedAt, t)}
                 </span>
               </div>
             ))}

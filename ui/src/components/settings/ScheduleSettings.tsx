@@ -9,6 +9,7 @@ import { Clock, Play, Square, Terminal, RefreshCw, CheckCircle, XCircle, Loader2
 import type { Settings, UpdateSettingsRequest } from "@/types/api";
 // 统一按产品时区（Asia/Singapore）展示日期
 import { formatDateTime } from "@/lib/format-date";
+import { useI18n } from "@/lib/i18n";
 
 interface ScheduleSettingsProps {
   settings: Settings | null;
@@ -39,12 +40,12 @@ interface LaunchdScheduleInfo {
 
 /** launchd 调度预设 — 与后端 PUT /api/schedule/launchd 一致 */
 const launchdPresets = [
-  { value: "3h", label: "Every 3 hours", intervals: [{ hour: 0, minute: 0 }, { hour: 3, minute: 0 }, { hour: 6, minute: 0 }, { hour: 9, minute: 0 }, { hour: 12, minute: 0 }, { hour: 15, minute: 0 }, { hour: 18, minute: 0 }, { hour: 21, minute: 0 }] },
-  { value: "6h", label: "Every 6 hours", intervals: [{ hour: 0, minute: 0 }, { hour: 6, minute: 0 }, { hour: 12, minute: 0 }, { hour: 18, minute: 0 }] },
-  { value: "12h", label: "Every 12 hours", intervals: [{ hour: 0, minute: 0 }, { hour: 12, minute: 0 }] },
-  { value: "daily-0", label: "Daily at midnight", intervals: [{ hour: 0, minute: 0 }] },
-  { value: "daily-8", label: "Daily at 8am", intervals: [{ hour: 8, minute: 0 }] },
-  { value: "daily-16", label: "Daily at 4pm", intervals: [{ hour: 16, minute: 0 }] },
+  { value: "3h", labelKey: "settings.schedule.preset.3h", intervals: [{ hour: 0, minute: 0 }, { hour: 3, minute: 0 }, { hour: 6, minute: 0 }, { hour: 9, minute: 0 }, { hour: 12, minute: 0 }, { hour: 15, minute: 0 }, { hour: 18, minute: 0 }, { hour: 21, minute: 0 }] },
+  { value: "6h", labelKey: "settings.schedule.preset.6h", intervals: [{ hour: 0, minute: 0 }, { hour: 6, minute: 0 }, { hour: 12, minute: 0 }, { hour: 18, minute: 0 }] },
+  { value: "12h", labelKey: "settings.schedule.preset.12h", intervals: [{ hour: 0, minute: 0 }, { hour: 12, minute: 0 }] },
+  { value: "daily-0", labelKey: "settings.schedule.preset.daily-0", intervals: [{ hour: 0, minute: 0 }] },
+  { value: "daily-8", labelKey: "settings.schedule.preset.daily-8", intervals: [{ hour: 8, minute: 0 }] },
+  { value: "daily-16", labelKey: "settings.schedule.preset.daily-16", intervals: [{ hour: 16, minute: 0 }] },
 ] as const;
 
 /** 判断某预设是否对应当前 plist 的 intervals（用于高亮） */
@@ -61,6 +62,7 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
   void isSaving;
   void onSave;
 
+  const { t, locale } = useI18n();
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [launchdLoading, setLaunchdLoading] = useState(false);
@@ -120,10 +122,10 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
         setMessage(data.data.message);
         await fetchStatus();
       } else {
-        setMessage(data.error?.message || "launchd operation failed");
+        setMessage(data.error?.message || t("settings.schedule.launchdFailed"));
       }
     } catch {
-      setMessage("Failed to manage launchd");
+      setMessage(t("settings.schedule.launchdManageFailed"));
     } finally {
       setLaunchdLoading(false);
       setTimeout(() => setMessage(null), 4000);
@@ -143,15 +145,22 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
       const data = await res.json();
       if (data.success && data.data) {
         setLaunchdSchedule(data.data);
-        const label = launchdPresets.find((p) => p.value === preset)?.label ?? preset;
-        setPresetMessage(`调度已切换：${label}`);
+        const found = launchdPresets.find((p) => p.value === preset);
+        const label = found ? t(found.labelKey) : preset;
+        setPresetMessage(t("settings.schedule.switched", { label }));
         // 同步刷新 status（loaded 状态可能因 reload 变化）
         void fetchStatus();
       } else {
-        setPresetMessage(`切换失败：${data.error?.message ?? "未知错误"}`);
+        setPresetMessage(
+          t("settings.schedule.switchFailed", { error: data.error?.message ?? t("settings.schedule.unknownError") })
+        );
       }
     } catch (err) {
-      setPresetMessage(`切换异常：${err instanceof Error ? err.message : "unknown"}`);
+      setPresetMessage(
+        t("settings.schedule.switchError", {
+          error: err instanceof Error ? err.message : t("settings.schedule.unknownError"),
+        })
+      );
     } finally {
       setApplyingPreset(null);
       setTimeout(() => setPresetMessage(null), 4000);
@@ -159,17 +168,25 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
   };
 
   const formatTime = (iso: string | null) => {
-    if (!iso) return "Never";
+    if (!iso) return t("settings.schedule.never");
     return formatDateTime(iso, iso);
   };
 
-  /** 将 launchd schedule 格式化为可读中文描述 */
+  /** 上次运行状态：已知状态走通用词典，其余原样显示 */
+  const formatRunStatus = (status: string | null): string => {
+    if (status === "success") return t("common.status.success");
+    if (status === "failed") return t("common.status.failed");
+    if (status === "running") return t("common.status.running");
+    return status || t("settings.schedule.unknown");
+  };
+
+  /** 将 launchd schedule 格式化为当前语言的可读描述 */
   const formatLaunchdSchedule = (info: LaunchdScheduleInfo | null): string => {
-    if (!info) return "加载中…";
+    if (!info) return t("common.status.loading");
     const { schedule } = info;
     if (schedule.type === "interval" && schedule.seconds != null) {
       const hours = (schedule.seconds / 3600).toFixed(1).replace(/\.0$/, "");
-      return `每 ${schedule.seconds} 秒（约 ${hours} 小时）`;
+      return t("settings.schedule.everySeconds", { seconds: schedule.seconds, hours });
     }
     if (schedule.type === "calendar" && schedule.intervals?.length) {
       const points = schedule.intervals.map((iv) => {
@@ -177,9 +194,9 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
         const m = String(iv.minute ?? 0).padStart(2, "0");
         return `${h}:${m}`;
       });
-      return `触发点：${points.join("、")}`;
+      return t("settings.schedule.triggerPoints", { points: points.join(locale === "zh" ? "、" : ", ") });
     }
-    return "未识别的调度配置";
+    return t("settings.schedule.unrecognized");
   };
 
   return (
@@ -189,7 +206,7 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock size={16} className="text-twitter-blue" />
-            <h3 className="text-sm font-semibold text-foreground">Last Run</h3>
+            <h3 className="text-sm font-semibold text-foreground">{t("settings.schedule.lastRun")}</h3>
           </div>
           <button
             onClick={fetchStatus}
@@ -197,18 +214,18 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
             className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
           >
             <RefreshCw size={11} className={loadingStatus ? "animate-spin" : ""} />
-            Refresh
+            {t("common.action.refresh")}
           </button>
         </div>
 
         {scheduleStatus?.lastRun ? (
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div>
-              <p className="text-muted-foreground">Time</p>
+              <p className="text-muted-foreground">{t("settings.schedule.time")}</p>
               <p className="font-mono text-foreground">{formatTime(scheduleStatus.lastRun)}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Status</p>
+              <p className="text-muted-foreground">{t("settings.schedule.status")}</p>
               <div className="flex items-center gap-1">
                 {scheduleStatus.lastRunStatus === "success" ? (
                   <CheckCircle size={12} className="text-green-500" />
@@ -217,24 +234,24 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
                 ) : (
                   <Loader2 size={12} className="text-yellow-500 animate-spin" />
                 )}
-                <span className="capitalize">{scheduleStatus.lastRunStatus || "unknown"}</span>
+                <span className="capitalize">{formatRunStatus(scheduleStatus.lastRunStatus)}</span>
               </div>
             </div>
             {scheduleStatus.lastRunStep && (
               <div>
-                <p className="text-muted-foreground">Step</p>
+                <p className="text-muted-foreground">{t("settings.schedule.step")}</p>
                 <p className="font-mono">{scheduleStatus.lastRunStep}</p>
               </div>
             )}
             {scheduleStatus.lastRunError && (
               <div className="col-span-2">
-                <p className="text-muted-foreground">Error</p>
+                <p className="text-muted-foreground">{t("settings.schedule.error")}</p>
                 <p className="text-red-500 text-[11px] font-mono break-all">{scheduleStatus.lastRunError}</p>
               </div>
             )}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">No previous runs recorded</p>
+          <p className="text-xs text-muted-foreground">{t("settings.schedule.noRuns")}</p>
         )}
       </div>
 
@@ -242,26 +259,26 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div className="flex items-center gap-2">
           <Terminal size={16} className="text-twitter-blue" />
-          <h3 className="text-sm font-semibold text-foreground">macOS launchd 调度</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t("settings.schedule.launchdTitle")}</h3>
         </div>
-        <p className="text-[11px] text-muted-foreground">
-          系统级定时任务，dashboard 关闭时也运行。当前 plist 中配置的触发时间见下表。
-        </p>
+        <p className="text-[11px] text-muted-foreground">{t("settings.schedule.launchdDesc")}</p>
 
         {/* 当前调度（只读） */}
         {(launchdSchedule?.plistPath || scheduleStatus?.launchdPlistPath) && (
           <div className="text-[11px] text-muted-foreground font-mono">
-            Plist: {launchdSchedule?.plistPath ?? scheduleStatus?.launchdPlistPath}
+            {t("settings.schedule.plistPath", {
+              path: launchdSchedule?.plistPath ?? scheduleStatus?.launchdPlistPath ?? "",
+            })}
           </div>
         )}
         <div className="text-[11px]">
-          <span className="text-muted-foreground">当前调度：</span>
+          <span className="text-muted-foreground">{t("settings.schedule.current")}</span>
           <span className="text-foreground">{formatLaunchdSchedule(launchdSchedule)}</span>
         </div>
 
         {/* 6 个预设按钮 — 调用 PUT /api/schedule/launchd 切换调度 */}
         <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">切换调度</p>
+          <p className="text-xs font-medium text-muted-foreground">{t("settings.schedule.switchTitle")}</p>
           <div className="flex flex-wrap gap-2">
             {launchdPresets.map((preset) => {
               const isActive = isPresetActive(launchdSchedule, preset);
@@ -272,7 +289,7 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
                   type="button"
                   disabled={applyingPreset !== null}
                   onClick={() => handleApplyPreset(preset.value)}
-                  title={`切换到 ${preset.label}`}
+                  title={t("settings.schedule.switchTo", { label: t(preset.labelKey) })}
                   className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] transition-colors disabled:opacity-50 ${
                     isActive
                       ? "bg-twitter-blue text-white border-twitter-blue"
@@ -280,7 +297,7 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
                   }`}
                 >
                   {isApplyingThis && <Loader2 size={10} className="animate-spin" />}
-                  {isApplyingThis ? "应用中…" : preset.label}
+                  {isApplyingThis ? t("settings.schedule.applying") : t(preset.labelKey)}
                 </button>
               );
             })}
@@ -293,9 +310,9 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
         {/* Status + Load/Unload */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-muted-foreground">Status:</span>
+            <span className="text-muted-foreground">{t("settings.schedule.launchdStatus")}</span>
             <span className={scheduleStatus?.launchdLoaded ? "text-green-500" : "text-muted-foreground"}>
-              {scheduleStatus?.launchdLoaded ? "Loaded" : "Not loaded"}
+              {scheduleStatus?.launchdLoaded ? t("settings.schedule.loaded") : t("settings.schedule.notLoaded")}
             </span>
           </div>
           <div className="flex gap-2">
@@ -305,7 +322,7 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
               className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[11px] hover:bg-muted disabled:opacity-50 transition-colors"
             >
               <Play size={10} />
-              Load
+              {t("settings.schedule.load")}
             </button>
             <button
               onClick={() => handleLaunchd("unload")}
@@ -313,19 +330,19 @@ export function ScheduleSettings({ settings, isSaving, onSave }: ScheduleSetting
               className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[11px] hover:bg-muted disabled:opacity-50 transition-colors"
             >
               <Square size={10} />
-              Unload
+              {t("settings.schedule.unload")}
             </button>
           </div>
         </div>
 
         {/* Pipeline Steps — 与 auto_run.sh 实际执行顺序保持一致 */}
         <div className="rounded-md bg-muted p-3">
-          <p className="text-[10px] text-muted-foreground mb-2 font-medium">Pipeline steps executed (auto_run.sh):</p>
+          <p className="text-[10px] text-muted-foreground mb-2 font-medium">{t("settings.schedule.pipelineSteps")}</p>
           <ol className="text-[11px] text-muted-foreground space-y-1 font-mono">
-            <li>1. sync_bookmarks.sh // 拉取新的 Twitter 书签</li>
-            <li>2. coordinator.py --deep-batch // 生成深度报告</li>
-            <li>3. article_pipeline.py run-batch --resume // 报告改写为成品文章</li>
-            <li>4. upload_to_notion.py --mode finished --live // 上传到 Notion</li>
+            <li>1. sync_bookmarks.sh // {t("settings.schedule.pipeline.sync")}</li>
+            <li>2. coordinator.py --deep-batch // {t("settings.schedule.pipeline.deep")}</li>
+            <li>3. article_pipeline.py run-batch --resume // {t("settings.schedule.pipeline.article")}</li>
+            <li>4. upload_to_notion.py --mode finished --live // {t("settings.schedule.pipeline.upload")}</li>
           </ol>
         </div>
       </div>

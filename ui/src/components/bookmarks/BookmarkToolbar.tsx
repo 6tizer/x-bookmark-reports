@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { BookOpen, Sparkles, Tag, MoreHorizontal, Trash2 } from "lucide-react";
 import type { BookmarkStatus } from "@/types/api";
+import { useT } from "@/lib/i18n";
 
 interface BookmarkToolbarProps {
   bookmarkId: string;
@@ -25,12 +26,13 @@ export function BookmarkToolbar({
   onUpdateStatus,
   onUpdateTags,
 }: BookmarkToolbarProps) {
+  const t = useT();
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagValue, setTagValue] = useState("");
 
   const handleTagSubmit = () => {
     if (tagValue.trim()) {
-      onUpdateTags(bookmarkId, tagValue.split(",").map((t) => t.trim()));
+      onUpdateTags(bookmarkId, tagValue.split(",").map((tag) => tag.trim()));
       setTagValue("");
       setShowTagInput(false);
     }
@@ -41,14 +43,16 @@ export function BookmarkToolbar({
       <button
         onClick={onRead}
         className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-        title="Read"
+        title={t("bookmarks.toolbar.read")}
+        aria-label={t("bookmarks.toolbar.read")}
       >
         <BookOpen size={14} />
       </button>
       <button
         onClick={onEnhancedRead}
         className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-        title="Enhanced Read"
+        title={t("bookmarks.toolbar.enhancedRead")}
+        aria-label={t("bookmarks.toolbar.enhancedRead")}
       >
         <Sparkles size={14} />
       </button>
@@ -56,7 +60,8 @@ export function BookmarkToolbar({
         <button
           onClick={() => setShowTagInput(!showTagInput)}
           className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-          title="Tags"
+          title={t("bookmarks.toolbar.tags")}
+          aria-label={t("bookmarks.toolbar.tags")}
         >
           <Tag size={14} />
         </button>
@@ -66,7 +71,7 @@ export function BookmarkToolbar({
               value={tagValue}
               onChange={(e) => setTagValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleTagSubmit()}
-              placeholder="tag1, tag2, ..."
+              placeholder={t("bookmarks.toolbar.tagPlaceholder")}
               className="w-full rounded border border-border bg-muted px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-ring"
               autoFocus
             />
@@ -75,13 +80,13 @@ export function BookmarkToolbar({
                 onClick={handleTagSubmit}
                 className="rounded bg-primary px-2 py-0.5 text-[10px] text-primary-foreground"
               >
-                Save
+                {t("common.action.save")}
               </button>
               <button
                 onClick={() => setShowTagInput(false)}
                 className="rounded border border-border px-2 py-0.5 text-[10px]"
               >
-                Cancel
+                {t("common.action.cancel")}
               </button>
             </div>
           </div>
@@ -100,14 +105,16 @@ export function BookmarkToolbar({
           onUpdateStatus(bookmarkId, next);
         }}
         className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-        title="Toggle Status"
+        title={t("bookmarks.toolbar.toggleStatus")}
+        aria-label={t("bookmarks.toolbar.toggleStatus")}
       >
         <MoreHorizontal size={14} />
       </button>
       <button
         onClick={() => {}}
         className="flex h-7 w-7 items-center justify-center rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
-        title="Delete"
+        title={t("common.action.delete")}
+        aria-label={t("common.action.delete")}
       >
         <Trash2 size={14} />
       </button>

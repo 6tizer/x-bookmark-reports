@@ -15,18 +15,20 @@ import { useSettings } from "@/hooks/useSettings";
 import { useLogs } from "@/hooks/useLogs";
 import { Settings as SettingsIcon, Cpu, Calendar, FileText, Database } from "lucide-react";
 import type { ApiKeyName } from "@/types/api";
+import { useT, type MessageKey } from "@/lib/i18n";
 
 type TabKey = "general" | "llm" | "schedule" | "logs" | "data";
 
-const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-  { key: "general", label: "General", icon: <SettingsIcon size={14} /> },
-  { key: "llm", label: "LLM & Web Search", icon: <Cpu size={14} /> },
-  { key: "schedule", label: "Schedule", icon: <Calendar size={14} /> },
-  { key: "logs", label: "Logs", icon: <FileText size={14} /> },
-  { key: "data", label: "Data", icon: <Database size={14} /> },
+const tabs: { key: TabKey; labelKey: MessageKey; icon: React.ReactNode }[] = [
+  { key: "general", labelKey: "settings.tab.general", icon: <SettingsIcon size={14} /> },
+  { key: "llm", labelKey: "settings.tab.llm", icon: <Cpu size={14} /> },
+  { key: "schedule", labelKey: "settings.tab.schedule", icon: <Calendar size={14} /> },
+  { key: "logs", labelKey: "settings.tab.logs", icon: <FileText size={14} /> },
+  { key: "data", labelKey: "settings.tab.data", icon: <Database size={14} /> },
 ];
 
 export default function SettingsPage() {
+  const t = useT();
   const [activeTab, setActiveTab] = useState<TabKey>("general");
   const { settings, isLoading, isSaving, update, updateKey } = useSettings();
   const {
@@ -50,7 +52,7 @@ export default function SettingsPage() {
   return (
     <ClientLayout>
       <div className="space-y-6 max-w-4xl">
-        <h1 className="text-xl font-bold text-foreground">Settings</h1>
+        <h1 className="text-xl font-bold text-foreground">{t("common.nav.settings")}</h1>
 
         {/* Tabs */}
         <div className="flex items-center gap-0 border-b border-border">
@@ -65,7 +67,7 @@ export default function SettingsPage() {
               }`}
             >
               {tab.icon}
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>

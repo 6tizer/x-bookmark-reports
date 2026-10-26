@@ -32,25 +32,31 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { Article, ArticleStatus, ArticleVersion } from "@/types/api";
+import { useT, hasMessage, type MessageKey, type TFunction } from "@/lib/i18n";
 
 const ReactMarkdown = dynamic(() => import("react-markdown"), { ssr: false });
 
 const PIPELINE_MODEL_STORAGE = "articlePipelineModel";
 
-function statusLabel(s: ArticleStatus): string {
-  const map: Partial<Record<ArticleStatus, string>> = {
-    draft: "Draft",
-    metadata_done: "Metadata",
-    researched: "Researched",
-    written: "Written",
-    uploaded: "Uploaded",
-    failed: "Failed",
-    skipped: "Skipped",
-  };
-  return map[s] ?? s.replace(/_/g, " ");
+// /api/settings/model-options 返回的下拉选项
+interface ModelOption {
+  value: string;
+  label: string;
+  i18nKey?: "default" | "envCustom" | "deepseekFlash" | "deepseekPro";
+  params?: { model: string };
+}
+
+function modelOptionLabel(o: ModelOption, t: TFunction): string {
+  return o.i18nKey ? t(`articles.model.${o.i18nKey}` as MessageKey, o.params) : o.label;
+}
+
+function statusLabel(s: ArticleStatus, t: TFunction): string {
+  const key = `articles.status.${s}`;
+  return hasMessage(key) ? t(key as MessageKey) : s.replace(/_/g, " ");
 }
 
 export default function ArticleDetailPage() {
+  const t = useT();
   const params = useParams();
   const id = params.id as string;
   const [article, setArticle] = useState<Article | null>(null);
@@ -63,7 +69,7 @@ export default function ArticleDetailPage() {
   const [showVersions, setShowVersions] = useState(false);
   const [pipelineModel, setPipelineModel] = useState("");
   // 从 API 动态加载模型下拉选项（替代硬编码 MODEL_OPTIONS）
-  const [modelOptions, setModelOptions] = useState<{ value: string; label: string }[]>([]);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
   const [pipelineBusy, setPipelineBusy] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -138,10 +144,10 @@ export default function ArticleDetailPage() {
     setToast(null);
     try {
       await publishArticle(id, "markdown");
-      setToast("Notion upload started (see server logs)");
+      setToast(t("articles.detail.toast.uploadStarted"));
       await load();
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Upload failed");
+      setToast(e instanceof Error ? e.message : t("articles.detail.toast.uploadFailed"));
     } finally {
       setPublishBusy(false);
     }
@@ -155,9 +161,9 @@ export default function ArticleDetailPage() {
         tweetId: id,
         model: pipelineModel || undefined,
       });
-      setToast("Pipeline started for this article");
+      setToast(t("articles.detail.toast.pipelineStarted"));
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Pipeline failed to start");
+      setToast(e instanceof Error ? e.message : t("articles.detail.toast.pipelineFailed"));
     } finally {
       setPipelineBusy(false);
     }
@@ -178,9 +184,9 @@ export default function ArticleDetailPage() {
     return (
       <ClientLayout>
         <div className="max-w-5xl text-center py-12">
-          <p className="text-muted-foreground">Article not found</p>
+          <p className="text-muted-foreground">{t("articles.detail.notFound")}</p>
           <Link href="/articles" className="text-twitter-blue hover:underline text-sm mt-2 inline-block">
-            Back to articles
+            {t("articles.detail.backToList")}
           </Link>
         </div>
       </ClientLayout>
@@ -195,14 +201,14 @@ export default function ArticleDetailPage() {
     <ClientLayout>
       <div className="h-[calc(100vh-6rem)] max-w-5xl">
         {/* Stage 4：面包屑导航 Home › Articles › {title} */}
-        <nav className="text-xs text-muted-foreground mb-3" aria-label="breadcrumb">
+        <nav className="text-xs text-muted-foreground mb-3" aria-label={t("articles.detail.breadcrumb")}>
           <ol className="flex items-center gap-1 flex-wrap">
             <li>
-              <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
+              <Link href="/" className="hover:text-foreground transition-colors">{t("common.nav.home")}</Link>
             </li>
             <li className="opacity-50">›</li>
             <li>
-              <Link href="/articles" className="hover:text-foreground transition-colors">Articles</Link>
+              <Link href="/articles" className="hover:text-foreground transition-colors">{t("common.nav.articles")}</Link>
             </li>
             <li className="opacity-50">›</li>
             <li className="text-foreground font-medium truncate max-w-md">
@@ -219,8 +225,8 @@ export default function ArticleDetailPage() {
 
         <div className="rounded-lg border border-border bg-card p-3 mb-3 text-xs space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-muted-foreground">Status</span>
-            <span className="rounded-full bg-muted px-2 py-0.5 font-medium">{statusLabel(article.status)}</span>
+            <span className="text-muted-foreground">{t("articles.detail.status")}</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 font-medium">{statusLabel(article.status, t)}</span>
             {article.author && (
               <>
                 <span className="text-muted-foreground">·</span>
@@ -230,15 +236,17 @@ export default function ArticleDetailPage() {
             {article.generatedAt && (
               <>
                 <span className="text-muted-foreground">·</span>
-                <span className="text-muted-foreground">Generated {formatDateTime(article.generatedAt)}</span>
+                <span className="text-muted-foreground">
+                  {t("articles.detail.generated", { time: formatDateTime(article.generatedAt) })}
+                </span>
               </>
             )}
           </div>
           {article.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {article.tags.map((t) => (
-                <span key={t} className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                  {t}
+              {article.tags.map((tag) => (
+                <span key={tag} className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+                  {tag}
                 </span>
               ))}
             </div>
@@ -250,12 +258,12 @@ export default function ArticleDetailPage() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-twitter-blue hover:underline"
             >
-              <ExternalLink size={12} /> Source tweet
+              <ExternalLink size={12} /> {t("articles.detail.sourceTweet")}
             </a>
           )}
           {article.notionIcon && (
             <p className="text-muted-foreground">
-              Notion icon:{" "}
+              {t("articles.detail.notionIcon")}{" "}
               <span className="font-mono text-[10px] break-all">{article.notionIcon}</span>
             </p>
           )}
@@ -272,11 +280,11 @@ export default function ArticleDetailPage() {
               className="h-7 rounded-md border border-border bg-background px-2 text-[11px] outline-none"
             >
               {modelOptions.length === 0 ? (
-                <option disabled value="">Loading...</option>
+                <option disabled value="">{t("common.status.loading")}</option>
               ) : (
                 modelOptions.map((o) => (
                   <option key={o.value || "default"} value={o.value}>
-                    {o.label}
+                    {modelOptionLabel(o, t)}
                   </option>
                 ))
               )}
@@ -288,7 +296,7 @@ export default function ArticleDetailPage() {
               className="flex h-7 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted disabled:opacity-50"
             >
               <Play size={12} />
-              {pipelineBusy ? "Starting…" : "Re-run pipeline"}
+              {pipelineBusy ? t("articles.starting") : t("articles.detail.rerun")}
             </button>
           </div>
         </div>
@@ -300,7 +308,7 @@ export default function ArticleDetailPage() {
               href="/articles"
               className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              <ArrowLeft size={14} /> Articles
+              <ArrowLeft size={14} /> {t("common.nav.articles")}
             </Link>
             <input
               value={title}
@@ -312,34 +320,35 @@ export default function ArticleDetailPage() {
           <div className="flex items-center gap-1 flex-wrap justify-end">
             {/* View 组：编辑视图切换 + 历史版本 */}
             <div className="flex items-center gap-1">
-              <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">View</span>
+              <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">{t("articles.detail.group.view")}</span>
               <div className="flex items-center rounded-md border border-border overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setViewMode("edit")}
                   className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "edit" ? "bg-muted font-medium" : ""}`}
                 >
-                  Edit
+                  {t("articles.detail.view.edit")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("split")}
                   className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "split" ? "bg-muted font-medium" : ""}`}
                 >
-                  Split
+                  {t("articles.detail.view.split")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("preview")}
                   className={`flex h-7 items-center gap-1 px-2 text-[11px] ${viewMode === "preview" ? "bg-muted font-medium" : ""}`}
                 >
-                  <Eye size={12} /> Preview
+                  <Eye size={12} /> {t("articles.detail.view.preview")}
                 </button>
               </div>
 
               <button
                 type="button"
                 onClick={() => setShowVersions(!showVersions)}
+                title={t("articles.detail.versionHistory")}
                 className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] hover:bg-muted transition-colors"
               >
                 <History size={12} />
@@ -351,16 +360,16 @@ export default function ArticleDetailPage() {
             {/* Article 组：文章修改操作 */}
             <div className="flex items-center gap-1">
               <span aria-hidden className="mx-1 h-5 w-px bg-border" />
-              <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">Article</span>
+              <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">{t("articles.detail.group.article")}</span>
               <button
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving || !canEditFinal}
-                title={!canEditFinal ? "Save available when article-final exists (written/uploaded)" : undefined}
+                title={!canEditFinal ? t("articles.detail.saveDisabledTitle") : undefined}
                 className="flex h-7 items-center gap-1 rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
               >
                 <Save size={12} />
-                {isSaving ? "Saving..." : "Save"}
+                {isSaving ? t("common.action.saving") : t("common.action.save")}
               </button>
             </div>
 
@@ -368,14 +377,14 @@ export default function ArticleDetailPage() {
             {showNotion && (
               <div className="flex items-center gap-1">
                 <span aria-hidden className="mx-1 h-5 w-px bg-border" />
-                <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">Pipeline</span>
+                <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mr-0.5">{t("articles.detail.group.pipeline")}</span>
                 <button
                   type="button"
                   onClick={() => void handleNotionUpload()}
                   disabled={publishBusy}
                   className="flex h-7 items-center gap-1 rounded-md bg-green-600 px-2 text-[11px] font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
                 >
-                  <Send size={12} /> {publishBusy ? "…" : "Upload to Notion"}
+                  <Send size={12} /> {publishBusy ? "…" : t("articles.detail.uploadNotion")}
                 </button>
               </div>
             )}
@@ -384,14 +393,14 @@ export default function ArticleDetailPage() {
 
         {showVersions && versions.length > 0 && (
           <div className="mb-3 rounded-lg border border-border bg-card p-3">
-            <p className="text-xs font-medium text-foreground mb-2">Version History</p>
+            <p className="text-xs font-medium text-foreground mb-2">{t("articles.detail.versionHistory")}</p>
             <div className="space-y-1.5">
               {versions.map((v) => (
                 <div key={v.id} className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">
                     {v.title} — {formatDate(v.createdAt)}
                   </span>
-                  <span className="text-muted-foreground">{v.wordCount} words</span>
+                  <span className="text-muted-foreground">{t("articles.words", { count: v.wordCount })}</span>
                 </div>
               ))}
             </div>

@@ -17,6 +17,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT, type MessageKey } from "@/lib/i18n";
 
 /** `articles` is wired to `DashboardStats.totalArticlesLocal` (output/article-final count).
  *  `bookmarks` accepts string form like "1584/642" (totalBookmarks/totalDrafts). */
@@ -27,32 +28,33 @@ export interface SidebarCounts {
 
 interface NavItem {
   href: string;
-  label: string;
+  labelKey: MessageKey;
   icon: React.ReactNode;
   badgeFrom?: keyof SidebarCounts;
 }
 
 const navItems: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
+  { href: "/", labelKey: "common.nav.dashboard", icon: <LayoutDashboard size={18} /> },
   {
     href: "/bookmarks",
-    label: "Bookmarks",
+    labelKey: "common.nav.bookmarks",
     icon: <Bookmark size={18} />,
     badgeFrom: "bookmarks",
   },
-  { href: "/sync", label: "Sync", icon: <RefreshCw size={18} /> },
+  { href: "/sync", labelKey: "common.nav.sync", icon: <RefreshCw size={18} /> },
   {
     href: "/articles",
-    label: "Articles",
+    labelKey: "common.nav.articles",
     icon: <Newspaper size={18} />,
     badgeFrom: "articles",
   },
-  { href: "/settings", label: "Settings", icon: <Settings size={18} /> },
+  { href: "/settings", labelKey: "common.nav.settings", icon: <Settings size={18} /> },
 ];
 
 export function Sidebar({ counts }: { counts?: SidebarCounts }) {
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const pathname = usePathname();
+  const t = useT();
 
   return (
     <aside
@@ -68,7 +70,7 @@ export function Sidebar({ counts }: { counts?: SidebarCounts }) {
               X
             </div>
             <span className="text-sm font-semibold text-notion-text truncate">
-              Bookmarks
+              {t("layout.sidebar.brand")}
             </span>
           </>
         )}
@@ -78,7 +80,7 @@ export function Sidebar({ counts }: { counts?: SidebarCounts }) {
             "ml-auto flex h-6 w-6 items-center justify-center rounded hover:bg-notion-hover dark:hover:bg-notion-hover-dark transition-colors",
             !sidebarOpen && "mx-auto"
           )}
-          aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+          aria-label={sidebarOpen ? t("layout.sidebar.collapse") : t("layout.sidebar.expand")}
         >
           {sidebarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </button>
@@ -93,6 +95,7 @@ export function Sidebar({ counts }: { counts?: SidebarCounts }) {
               item.badgeFrom && counts?.[item.badgeFrom] !== undefined
                 ? counts[item.badgeFrom]
                 : undefined;
+            const label = t(item.labelKey);
             return (
               <li key={item.href}>
                 <Link
@@ -103,14 +106,14 @@ export function Sidebar({ counts }: { counts?: SidebarCounts }) {
                       ? "bg-notion-hover dark:bg-notion-hover-dark text-notion-text dark:text-notion-text-dark font-medium"
                       : "text-notion-text/70 dark:text-notion-text-dark/70 hover:bg-notion-hover dark:hover:bg-notion-hover-dark hover:text-notion-text dark:hover:text-notion-text-dark"
                   )}
-                  title={item.label}
+                  title={label}
                 >
                   <span className={cn("shrink-0", isActive && "text-twitter-blue")}>
                     {item.icon}
                   </span>
                   {sidebarOpen && (
                     <>
-                      <span className="flex-1 truncate">{item.label}</span>
+                      <span className="flex-1 truncate">{label}</span>
                       {badge !== undefined && (
                         <span className="ml-auto rounded-md bg-notion-hover dark:bg-notion-hover-dark px-1.5 py-0.5 text-[10px] font-medium text-notion-text-muted">
                           {badge}
