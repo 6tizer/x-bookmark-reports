@@ -3,14 +3,14 @@
 # 书签自动化流水线：同步新书签 → 生成深度报告 → 撰写成品文章 → 上传到 Notion
 #
 # 用法:
-#   bash auto_run.sh          # 正常运行（代理检测 + 增量同步 + 深度报告 + 成品文章 + Notion 上传）
-#   bash auto_run.sh --force  # 跳过代理检测，直接运行
+#   bash auto_run.sh          # 正常运行（网络检测 + 增量同步 + 深度报告 + 成品文章 + Notion 上传）
+#   bash auto_run.sh --force  # 跳过网络检测，沿用 cache/network_profile.json 上次结果
 #
 # 被 launchd 定时调用。运行状态写入 output/auto_run_state.json，日志写入 logs/bookmark-auto.log。
 # 单实例锁（B-AUTO-RUN-NO-LOCK）：output/auto_run.lock；第二实例立即 SKIP 退出，不改 auto_run_state.json。
 #
 # 新管线流程（5 步 + 可选对账）:
-#   Step 0: 代理检测
+#   Step 0: network_doctor.py      — 自动选择代理或直连，写入 cache/network_profile.json
 #   Step 1: sync_bookmarks.sh      — 从 Twitter 拉取新书签
 #   Step 1.5: reconcile_official_bookmarks.py — 官方 API 探测漏抓（默认关）
 #   Step 2: coordinator.py         — 生成深度草稿（deep reports）
@@ -26,14 +26,12 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STATE_FILE="$SCRIPT_DIR/output/auto_run_state.json"
 LOG_FILE="$SCRIPT_DIR/logs/bookmark-auto.log"
 SYNC_LOG="$PROJECT_ROOT/twitter_data/sync_log.txt"
-PROXY_URL="http://127.0.0.1:7897"
+# 代理不再写死：Step 0 由 bin/network_doctor.py 检测后决定（空串 = 直连），见 apply_proxy_env
+PROXY_URL=""
 PYTHON3="/usr/bin/python3"
+NETWORK_DOCTOR="$SCRIPT_DIR/bin/network_doctor.py"
 
-# 让 Node 原生 fetch（rettiwt 的 x-client-transaction-id）走同一代理；否则 launchd
-# 环境无 HTTPS_PROXY 时同步会静默返回 {}。详见 sync_bookmarks.sh 注释。
-export HTTP_PROXY="$PROXY_URL"
-export HTTPS_PROXY="$PROXY_URL"
-export ALL_PROXY="$PROXY_URL"
+# 让 Node 原生 fetch（rettiwt 的 x-client-transaction-id）读取 HTTPS_PROXY；详见 sync_bookmarks.sh 注释
 export NODE_USE_ENV_PROXY=1
 # 无条件追加 Tailscale 内网网段与 .env 中配置的 SEARXNG 主机到 NO_PROXY/no_proxy
 # （launchd plist 的默认 NO_PROXY 会覆盖 :- 默认值语法），防止内网 SearXNG 请求被送进代理返回 502
@@ -65,6 +63,9 @@ write_state() {
     local error_msg="${7:-}"
 
     mkdir -p "$(dirname "$STATE_FILE")"
+    if [ "$status" != "running" ]; then
+        FINAL_STATE_WRITTEN=1
+    fi
 
     "$PYTHON3" - "$status" "$step" "$sync_new" "$process_new" "$article_new" "$upload_new" "$error_msg" "$STATE_FILE" "$LOG_FILE" <<'PYEOF'
 import sys, json, datetime
@@ -89,7 +90,7 @@ log() {
     local ts
     ts="$(date '+%Y-%m-%d %H:%M:%S')"
     # 当 launchd StandardOutPath 已指向 LOG_FILE 时，直接 echo 即可，避免 tee 造成每行重复写两遍（修复 B-LOG-DUPLICATE-NOISE）
-    if [ /dev/stdout -ef "$LOG_FILE" ]; then
+    if [ "$STDOUT_IS_LOG" = 1 ]; then
         echo "[$ts] $*"
     else
         echo "[$ts] $*" | tee -a "$LOG_FILE"
@@ -147,6 +148,20 @@ PYEOF
     fi
 }
 
+# ========== 代理环境 ==========
+apply_proxy_env() {
+    # apply_proxy_env PROXY_URL —— 非空则导出给 curl / Node / Python，空串则清掉所有代理变量走直连。
+    # PROXY 也一并导出：python-dotenv 不覆盖已存在的环境变量，可压住 .env 里过期的 PROXY。
+    local proxy="$1"
+    if [ -n "$proxy" ]; then
+        export HTTP_PROXY="$proxy" HTTPS_PROXY="$proxy" ALL_PROXY="$proxy"
+        export http_proxy="$proxy" https_proxy="$proxy" all_proxy="$proxy"
+    else
+        unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+    fi
+    export PROXY="$proxy"
+}
+
 # ========== 单实例锁（B-AUTO-RUN-NO-LOCK）==========
 # macOS 无 flock(1)，用 mkdir 原子建目录。锁必须在 write_state running 之前拿，
 # 否则第二实例会把「running/init」盖掉正在跑的那份（09-01 18:00 事故）。
@@ -200,10 +215,36 @@ acquire_lock() {
 
 # 确保日志目录存在
 mkdir -p "$(dirname "$LOG_FILE")"
+# macOS 上 /dev/stdout 的设备号来自 devfs，[ /dev/stdout -ef 文件 ] 恒为假，只能比 inode；
+# $(...) 里的 stdout 是捕获管道，先把真正的 stdout 复制到 fd 3 再 stat
+STDOUT_IS_LOG=0
+exec 3>&1
+_STDOUT_INODE="$(stat -L -f %i /dev/fd/3 2>/dev/null || true)"
+exec 3>&-
+if [ -n "$_STDOUT_INODE" ] && [ "$_STDOUT_INODE" = "$(stat -L -f %i "$LOG_FILE" 2>/dev/null || true)" ]; then
+    STDOUT_IS_LOG=1
+fi
 # 记录开始时间用于历史 duration（PR-3 Commit 5）；SKIP 路径也要用
 START_TS=$(date +%s)
+# 当前所处步骤与「是否已写终态」：脚本意外退出时 on_exit 据此补写 failed，避免 state 永远停在 running
+CURRENT_STEP="init"
+FINAL_STATE_WRITTEN=0
 
-trap release_lock EXIT
+on_exit() {
+    local rc=$?
+    if [ "$LOCK_HELD" = 1 ] && [ "$FINAL_STATE_WRITTEN" != 1 ]; then
+        local reason="exit=${rc}"
+        # 被信号终止时 EXIT trap 里的 $? 为 0
+        [ "$rc" -eq 0 ] && reason="被中断"
+        local err="auto_run.sh 在 ${CURRENT_STEP} 步骤意外退出（${reason}），查看日志: ${LOG_FILE}"
+        log "ERROR: ${err}" || true
+        write_state "failed" "$CURRENT_STEP" 0 0 0 0 "$err" || true
+        append_history "failed" "$CURRENT_STEP" 0 0 0 0 "$err" || true
+    fi
+    release_lock
+}
+
+trap on_exit EXIT
 
 if ! acquire_lock; then
     # 不调用 write_state：避免把正在跑的那份 running 状态盖成 skipped
@@ -227,28 +268,32 @@ if [ "${1:-}" = "--force" ]; then
     FORCE_MODE=true
 fi
 
+CURRENT_STEP="proxy_check"
 if [ "$FORCE_MODE" = false ]; then
-    log "Step 0: 检测代理 $PROXY_URL ..."
-    PROBE_OK=false
-    for PROBE_URL in "https://x.com" "https://api.notion.com" "https://httpbin.org/get"; do
-        if curl -s --max-time 8 --proxy "$PROXY_URL" "$PROBE_URL" -o /dev/null 2>&1; then
-            PROBE_OK=true
-            break
-        fi
-    done
-    if [ "$PROBE_OK" = false ]; then
-        ERR="代理不可达（$PROXY_URL），请确认 Clash Verge 已启动后手动执行"
-        log "ERROR: $ERR"
+    log "Step 0: 检测网络环境（.env 代理 → 上次可用 → 系统代理 → 本机常见代理端口 → 直连）..."
+    NET_RC=0
+    PROXY_URL="$("$PYTHON3" "$NETWORK_DOCTOR" --apply --print-proxy 2>>"$LOG_FILE")" || NET_RC=$?
+    if [ "$NET_RC" -ne 0 ]; then
+        ERR="网络不可用：直连和所有代理都无法访问 X / Notion，可在 Dashboard 设置页点「一键检测并修复网络」"
+        log "ERROR: ${ERR}"
         write_state "failed" "proxy_check" 0 0 0 0 "$ERR"
         append_history "failed" "proxy_check" 0 0 0 0 "$ERR"
         exit 1
     fi
-    log "Step 0: 代理正常"
 else
-    log "Step 0: 已跳过代理检测（--force 模式）"
+    # --force：不探测，沿用上次检测结果（没有档案则直连）
+    PROXY_URL="$("$PYTHON3" "$NETWORK_DOCTOR" --cached --print-proxy 2>>"$LOG_FILE" || true)"
+    log "Step 0: 已跳过网络检测（--force 模式），沿用上次结果"
+fi
+apply_proxy_env "$PROXY_URL"
+if [ -n "$PROXY_URL" ]; then
+    log "Step 0: 网络正常，使用代理 ${PROXY_URL}"
+else
+    log "Step 0: 网络正常，直连"
 fi
 
 # ========== Step 1: 同步新书签 ==========
+CURRENT_STEP="sync"
 log "Step 1: 同步新书签..."
 
 # 记录同步前 sync_log.txt 末行，用于对比新增数
@@ -261,7 +306,7 @@ if ! bash "$PROJECT_ROOT/sync_bookmarks.sh" >> "$LOG_FILE" 2>&1; then
     ERR="sync_bookmarks.sh 执行失败，查看日志: $LOG_FILE"
     log "ERROR: $ERR"
     write_state "failed" "sync" 0 0 0 0 "$ERR"
-    append_history "failed" "sync" "$SYNC_NEW" 0 0 0 "$ERR"
+    append_history "failed" "sync" 0 0 0 0 "$ERR"
     exit 1
 fi
 
@@ -300,6 +345,7 @@ else
 fi
 
 # ========== Step 2: 批量生成深度报告 ==========
+CURRENT_STEP="process"
 log "Step 2: 批量生成深度报告..."
 
 # 记录处理前已完成报告数
@@ -342,6 +388,7 @@ PROCESS_NEW=$((COMPLETED_AFTER - COMPLETED_BEFORE))
 log "Step 2: 处理完成，本次新增 $PROCESS_NEW 篇报告"
 
 # ========== Step 3: 撰写成品文章（article pipeline）==========
+CURRENT_STEP="article"
 log "Step 3: 运行 Article Pipeline（研究 + 撰写成品文章）..."
 
 ARTICLE_STATE="$SCRIPT_DIR/output/.article-pipeline-state.json"
@@ -364,7 +411,7 @@ ARTICLE_EXIT=0
 "$VENV_PYTHON3" bin/article_pipeline.py run-batch >> "$LOG_FILE" 2>&1 || ARTICLE_EXIT=$?
 
 if [ "$ARTICLE_EXIT" -ne 0 ]; then
-    WARN="article_pipeline.py run-batch 失败（exit=$ARTICLE_EXIT），继续 Step 4 上传已 written 文章"
+    WARN="article_pipeline.py run-batch 失败（exit=${ARTICLE_EXIT}），继续 Step 4 上传已 written 文章"
     log "WARN: $WARN"
 fi
 
@@ -385,6 +432,7 @@ ARTICLE_NEW=$((ARTICLE_WRITTEN_AFTER - ARTICLE_WRITTEN_BEFORE))
 log "Step 3: Article Pipeline 完成，本次新增 $ARTICLE_NEW 篇成品文章"
 
 # ========== Step 4: 上传成品文章到 Notion ==========
+CURRENT_STEP="upload"
 log "Step 4: 上传成品文章到 Notion（finished 模式）..."
 
 UPLOAD_OUTPUT=""
@@ -403,7 +451,7 @@ UPLOAD_ERRORS="$(echo "$UPLOAD_OUTPUT" | grep -oE 'errors: [0-9]+' | grep -oE '[
 [ -z "$UPLOAD_ERRORS" ] && UPLOAD_ERRORS=0
 
 if [ "$UPLOAD_EXIT" -ne 0 ] && [ "$UPLOAD_NEW" -eq 0 ]; then
-    ERR="upload_to_notion.py 全部失败（errors: $UPLOAD_ERRORS），查看日志: $LOG_FILE"
+    ERR="upload_to_notion.py 全部失败（errors: ${UPLOAD_ERRORS}），查看日志: $LOG_FILE"
     log "ERROR: $ERR"
     write_state "failed" "upload" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" 0 "$ERR"
     append_history "failed" "upload" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" 0 "$ERR"
@@ -421,7 +469,7 @@ log "Step 4: Notion 上传完成，本次新增 $UPLOAD_NEW 篇"
 
 # ========== 写入成功状态 ==========
 if [ "$ARTICLE_EXIT" -ne 0 ]; then
-    WARN="article 步骤部分失败（exit=$ARTICLE_EXIT），但 Notion 上传成功"
+    WARN="article 步骤部分失败（exit=${ARTICLE_EXIT}），但 Notion 上传成功"
     write_state "partial" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" "$WARN"
     append_history "partial" "done" "$SYNC_NEW" "$PROCESS_NEW" "$ARTICLE_NEW" "$UPLOAD_NEW" "$WARN"
     log "===== 流水线完成（同步 +$SYNC_NEW 条，报告 +$PROCESS_NEW 篇，成品 +$ARTICLE_NEW 篇，Notion +$UPLOAD_NEW 篇；article 步骤有失败）====="

@@ -593,3 +593,38 @@ export interface PipelineOperation {
   component?: LogComponent;
 }
 
+// ============================================================
+// 网络档案（bin/network_doctor.py 写入 cache/network_profile.json）
+// ============================================================
+
+export interface NetworkProbe {
+  ok: boolean;
+  status: number | null;
+  error: string | null;
+  ms: number;
+}
+
+export interface NetworkCandidate {
+  source: string;
+  label: string;
+  /** null = 直连 */
+  proxy: string | null;
+  ok: boolean;
+  detail: string;
+  latency_ms: number | null;
+  probes: Record<string, NetworkProbe>;
+}
+
+export interface NetworkProfile {
+  version: number;
+  checked_at: string;
+  mode: "proxy" | "direct" | "offline";
+  proxy: string | null;
+  source: string | null;
+  label: string | null;
+  candidates: NetworkCandidate[];
+  hints: string[];
+  /** mode=offline 时保留的最近一次可用结果 */
+  last_good?: { mode: string; proxy: string | null };
+}
+

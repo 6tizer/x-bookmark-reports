@@ -7,6 +7,7 @@
 import { useState, useEffect } from "react";
 import { Save, Eye, EyeOff } from "lucide-react";
 import type { Settings, UpdateSettingsRequest, ApiKeyName } from "@/types/api";
+import { NetworkDoctorCard } from "./NetworkDoctorCard";
 
 interface GeneralSettingsProps {
   settings: Settings | null;
@@ -305,8 +306,13 @@ export function GeneralSettings({ settings, isLoading, isSaving, onSave, onUpdat
             placeholder="http://127.0.0.1:7897"
             className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           />
+          <p className="text-[11px] text-muted-foreground">
+            作为首选代理参与下方网络诊断；不可用时流水线会自动改用诊断选出的网络。
+          </p>
         </div>
       </div>
+
+      <NetworkDoctorCard />
 
       <div className="flex items-center gap-2">
         <button

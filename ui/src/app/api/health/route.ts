@@ -17,7 +17,7 @@ import {
 } from "@/lib/fs-data";
 import type { ApiResponse, LogComponent } from "@/types/api";
 // 下一次触发时刻按产品时区（Asia/Singapore）计算，不依赖 Node 进程所在机器的时区
-import { localHourMinute } from "@/lib/format-date";
+import { formatDateTime, localHourMinute } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -46,8 +46,15 @@ interface HealthData {
     exa: KeyStatus;
     cfBrowser: CfBrowserStatus;
   };
+  /** cache/network_profile.json 摘要；null = 从未检测 */
+  network: { mode: string; proxy: string | null; checkedAt: string | null } | null;
+  /** 网络不可用或流水线停摆时为 true，HealthBanner 据此给出「一键修复网络」入口 */
+  suggestNetworkFix: boolean;
   warnings: string[];
 }
+
+// 超过这个时长没有成功运行就告警（每 3h 一次，容忍错过 1 次）
+const STALL_HOURS = 7;
 
 interface PlistCalendarInterval {
   Hour?: number;
@@ -209,6 +216,66 @@ function computeRecentFailStreak(lines: string[]): number {
   return streak;
 }
 
+/** 距最近一次 success / partial 的小时数；没有记录返回 null */
+function hoursSinceLastSuccess(lines: string[]): number | null {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const d = JSON.parse(lines[i]) as Record<string, unknown>;
+      if ((d.status === "success" || d.status === "partial") && typeof d.last_run === "string") {
+        return (Date.now() - new Date(d.last_run).getTime()) / 3600_000;
+      }
+    } catch {
+      /* skip malformed lines */
+    }
+  }
+  return null;
+}
+
+/**
+ * auto_run_state.json 停在 running，但锁持有进程已不在 → 上一次运行被强杀或崩溃，没来得及写终态。
+ * 返回中断时的步骤与时间，正常时返回 null。
+ */
+function detectInterruptedRun(): { step: string; ts: string } | null {
+  try {
+    const repoRoot = getRepoRoot();
+    const statePath = path.join(repoRoot, "output", "auto_run_state.json");
+    if (!fs.existsSync(statePath)) return null;
+    const state = JSON.parse(fs.readFileSync(statePath, "utf-8")) as Record<string, unknown>;
+    if (state.status !== "running") return null;
+
+    const pidPath = path.join(repoRoot, "output", "auto_run.lock", "pid");
+    if (fs.existsSync(pidPath)) {
+      const pid = parseInt(fs.readFileSync(pidPath, "utf-8").trim(), 10);
+      if (pid > 0) {
+        try {
+          process.kill(pid, 0);
+          return null;
+        } catch {
+          /* 进程已不存在 */
+        }
+      }
+    }
+    return { step: String(state.step || "unknown"), ts: String(state.last_run || "") };
+  } catch {
+    return null;
+  }
+}
+
+function readNetworkSummary(): HealthData["network"] {
+  try {
+    const p = path.join(getRepoRoot(), "cache", "network_profile.json");
+    if (!fs.existsSync(p)) return null;
+    const d = JSON.parse(fs.readFileSync(p, "utf-8")) as Record<string, unknown>;
+    return {
+      mode: typeof d.mode === "string" ? d.mode : "unknown",
+      proxy: typeof d.proxy === "string" ? d.proxy : null,
+      checkedAt: typeof d.checked_at === "string" ? d.checked_at : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function countPendingUploads(): number {
   try {
     const articles = readPipelineArticles();
@@ -351,11 +418,32 @@ function checkCfBrowserStatus(): CfBrowserStatus {
   return usage.exhausted ? "exhausted" : "ok";
 }
 
-function buildWarnings(data: Omit<HealthData, "healthy" | "warnings">): string[] {
+interface RunSignals {
+  interrupted: { step: string; ts: string } | null;
+  hoursSinceSuccess: number | null;
+}
+
+function buildWarnings(
+  data: Omit<HealthData, "healthy" | "warnings" | "suggestNetworkFix">,
+  signals: RunSignals
+): string[] {
   const warnings: string[] = [];
 
   if (data.recentFailStreak >= 3) {
     warnings.push(`最近 ${data.recentFailStreak} 次流水线连续失败，请检查日志`);
+  }
+  if (signals.interrupted) {
+    warnings.push(
+      `上一次自动运行在「${signals.interrupted.step}」步骤中断且没有记录结果（${formatDateTime(signals.interrupted.ts)}），请查看 logs/bookmark-auto.log`
+    );
+  }
+  if (data.launchd.loaded && signals.hoursSinceSuccess !== null && signals.hoursSinceSuccess > STALL_HOURS) {
+    warnings.push(
+      `距上次成功运行已 ${Math.floor(signals.hoursSinceSuccess)} 小时（正常每 3 小时一次），流水线可能已停摆`
+    );
+  }
+  if (data.network?.mode === "offline") {
+    warnings.push("网络诊断显示直连和所有代理都无法访问 X / Notion");
   }
   if (data.pendingUploads > 10) {
     warnings.push(`${data.pendingUploads} 篇文章积压未上传到 Notion`);
@@ -391,18 +479,30 @@ export async function GET(): Promise<NextResponse<ApiResponse<HealthData>>> {
   const exa = checkExaStatus();
   const cfBrowser = checkCfBrowserStatus();
 
-  const partial: Omit<HealthData, "healthy" | "warnings"> = {
+  const network = readNetworkSummary();
+  const signals: RunSignals = {
+    interrupted: detectInterruptedRun(),
+    hoursSinceSuccess: hoursSinceLastSuccess(lines),
+  };
+
+  const partial: Omit<HealthData, "healthy" | "warnings" | "suggestNetworkFix"> = {
     launchd,
     lastRun,
     recentFailStreak,
     pendingUploads,
     pendingArticles,
     apiStatus: { xai, searxng, firecrawl, exa, cfBrowser },
+    network,
   };
 
-  const warnings = buildWarnings(partial);
+  const warnings = buildWarnings(partial, signals);
+  const stalled =
+    signals.interrupted !== null ||
+    (launchd.loaded && signals.hoursSinceSuccess !== null && signals.hoursSinceSuccess > STALL_HOURS);
+  const lastFailedAtNetwork = lastRun?.status === "failed" && lastRun.step === "proxy_check";
   const data: HealthData = {
     ...partial,
+    suggestNetworkFix: network?.mode === "offline" || lastFailedAtNetwork || stalled,
     warnings,
     healthy: warnings.length === 0,
   };

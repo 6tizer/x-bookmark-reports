@@ -57,6 +57,11 @@ except ImportError:
                     if _k and _k not in os.environ:
                         os.environ[_k] = _v
 
+# 代理以 cache/network_profile.json 为准（直连时为空串），_build_opener 读的就是这里
+from lib.net_profile import resolve_proxy  # noqa: E402
+
+os.environ["PROXY"] = resolve_proxy(os.environ.get("PROXY", ""))
+
 import urllib.request
 import urllib.error
 

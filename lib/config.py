@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+from lib.net_profile import resolve_proxy
 
 # Project root directory
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -64,7 +67,10 @@ def get_gh_username() -> str:
 
 # Twitter Auth API (original from .env.twitter; optional for Python reports)
 API_KEY = _optional_env("API_KEY", "")
-PROXY = _optional_env("PROXY", "")
+# 代理以 cache/network_profile.json 为准（直连时为空串），.env 的 PROXY 仅在没有网络档案时兜底；
+# 回写 os.environ，让直接读 os.getenv("PROXY") 的模块（cf_browser_client 等）与此保持一致
+PROXY = resolve_proxy(_optional_env("PROXY", ""))
+os.environ["PROXY"] = PROXY
 
 # TwitterAPI.io API Configuration
 TWITTER_API_IO_KEY = _require_env("TWITTER_API_IO_KEY")

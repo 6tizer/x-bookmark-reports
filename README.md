@@ -43,7 +43,7 @@
 ```mermaid
 flowchart TB
     subgraph Trigger["⏰ 触发层 (每 3 小时自动 / UI 手动)"]
-        L["macOS launchd<br/>com.x-bookmark-reports.auto-run"] --> AR["auto_run.sh<br/>(目录原子锁 + 代理环境探测)"]
+        L["macOS launchd<br/>com.x-bookmark-reports.auto-run"] --> AR["auto_run.sh<br/>(目录原子锁 + network_doctor 网络自适应)"]
         UI["Next.js 14 Dashboard (:3001)<br/>Sync / Articles / Settings / Health"] -.->|"手动触发 / SSE 实时日志"| AR
     end
 
@@ -206,7 +206,7 @@ x-bookmark-reports/
 # ==========================================
 TWITTER_API_IO_KEY=your_twitterapi_io_key
 BOOKMARKS_PATH=../twitter_data/bookmarks.json
-PROXY=http://127.0.0.1:7897
+PROXY=http://127.0.0.1:7897   # 首选代理；不可用时自动改用网络诊断结果，见「网络自适应」
 APP_TIMEZONE=Asia/Singapore
 
 NOTION_TOKEN=ntn_xxxxxxxxxxxx
@@ -315,6 +315,23 @@ python3 bin/reconcile_official_bookmarks.py --dry-run
 
 # 实盘回填（默认拉 1 页 × 50 条，Owned Reads 成本约 $0.001/条）
 python3 bin/reconcile_official_bookmarks.py --max-pages 1
+```
+
+---
+
+## 🌐 网络自适应（代理 / 直连自动切换）
+
+`.env` 的 `PROXY` 只是**首选候选**，实际走哪条路由 `bin/network_doctor.py` 检测决定，结果写入 `cache/network_profile.json`；`auto_run.sh`、`sync_bookmarks.sh`、`lib/config.py`、`bin/upload_to_notion.py` 统一读取它。
+
+- **检测顺序**：WebUI 手填代理 → `.env` 的 `PROXY` → 上次可用的代理 → macOS 系统代理 → 进程环境变量 `HTTPS_PROXY` → 本机常见端口（Clash Verge 7897、Clash/mihomo 7890、Surge 6152、v2rayN 10809、ShadowsocksX-NG 1087）→ 直连。
+- **判定标准**：`x.com`、`abs.twimg.com`、`api.notion.com` 都能拿到 HTTP 响应。
+- **自动执行**：`auto_run.sh` 每次 Step 0 都会重新检测；全部不可用时记 `failed / proxy_check` 并在 Dashboard 告警。
+- **一键修复**：Dashboard → Settings → General →「网络诊断」→「一键检测并修复网络」。换网络、开关 Clash 之类代理软件后点一次即可切换，无需改 `.env`。
+
+```bash
+python3 bin/network_doctor.py --all           # 只检测、不落盘，查看每个候选的结果
+python3 bin/network_doctor.py --apply         # 检测并写入网络档案
+python3 bin/network_doctor.py --cached --print-proxy   # 查看当前生效的代理（空行 = 直连）
 ```
 
 ---

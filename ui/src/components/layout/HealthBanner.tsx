@@ -6,17 +6,20 @@
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, X } from "lucide-react";
 
 interface HealthResp {
   healthy: boolean;
   recentFailStreak: number;
+  suggestNetworkFix?: boolean;
   warnings: string[];
 }
 
 export function HealthBanner() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [failStreak, setFailStreak] = useState(0);
+  const [suggestNetworkFix, setSuggestNetworkFix] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -28,6 +31,7 @@ export function HealthBanner() {
         if (!cancelled && json.success && json.data) {
           setWarnings(json.data.warnings ?? []);
           setFailStreak(json.data.recentFailStreak ?? 0);
+          setSuggestNetworkFix(json.data.suggestNetworkFix ?? false);
         }
       } catch { /* 静默，不因 health 端点失败打扰用户 */ }
     };
@@ -38,8 +42,8 @@ export function HealthBanner() {
 
   if (dismissed || warnings.length === 0) return null;
 
-  // failStreak >= 3 红色，否则黄色
-  const isCritical = failStreak >= 3;
+  // 连续失败 ≥3 次或流水线停摆/网络不可用时红色，否则黄色
+  const isCritical = failStreak >= 3 || suggestNetworkFix;
 
   return (
     <div className={`flex items-start gap-2 px-4 py-2 text-xs ${
@@ -52,6 +56,13 @@ export function HealthBanner() {
         {warnings.map((w, i) => (
           <p key={i}>{w}</p>
         ))}
+        {suggestNetworkFix && (
+          <p>
+            <Link href="/settings" className="font-medium underline underline-offset-2">
+              去设置页「一键检测并修复网络」→
+            </Link>
+          </p>
+        )}
       </div>
       <button type="button" onClick={() => setDismissed(true)} className="shrink-0 opacity-60 hover:opacity-100" title="本次会话内忽略">
         <X size={14} />
